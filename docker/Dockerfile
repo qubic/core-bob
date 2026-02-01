@@ -21,24 +21,8 @@ RUN mkdir -p build && cd build && \
     cmake -DCMAKE_BUILD_TYPE=Release .. && \
     make -j$(nproc)
 
-# Build stage for kvrocks
-FROM ubuntu:24.04 AS kvrocks-builder
-
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    cmake \
-    git \
-    libsnappy-dev \
-    autoconf \
-    python3 \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /build
-RUN git clone --depth 1 --branch v2.9.0 https://github.com/apache/kvrocks.git && \
-    cd kvrocks && \
-    ./x.py build -DPORTABLE=haswell -j$(nproc)
+# Pull pre-built kvrocks binary from official image
+FROM apache/kvrocks:2.9.0 AS kvrocks-bin
 
 # Runtime stage - standalone with Redis and Kvrocks
 FROM ubuntu:24.04
@@ -63,7 +47,7 @@ WORKDIR /app
 
 # Copy built binaries
 COPY --from=bob-builder /app/build/bob /app/bob
-COPY --from=kvrocks-builder /build/kvrocks/build/kvrocks /usr/local/bin/kvrocks
+COPY --from=kvrocks-bin /bin/kvrocks /usr/local/bin/kvrocks
 
 # Create directories for persistent data
 RUN mkdir -p /data/redis /data/kvrocks /data/bob /app/logs /etc/kvrocks
