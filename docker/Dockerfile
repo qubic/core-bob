@@ -41,6 +41,7 @@ RUN apt-get update && apt-get install -y \
     unzip \
     supervisor \
     redis-server \
+    jq \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -57,6 +58,8 @@ COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/redis.conf /etc/redis/redis.conf
 COPY docker/kvrocks.conf /etc/kvrocks/kvrocks.conf
 COPY docker/bob.json /app/bob.json
+COPY docker/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 # Expose ports
 # 21842 - bob server port
@@ -66,4 +69,5 @@ EXPOSE 21842 40420
 # Data volumes for persistence
 VOLUME ["/data/redis", "/data/kvrocks", "/data/bob"]
 
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

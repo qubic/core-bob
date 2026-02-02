@@ -1,5 +1,35 @@
 # Docker Compose for Qubic Bob (includes Redis and Kvrocks)
 # Image: qubiccore/bob:latest
+#
+# Configuration can be done in two ways:
+#   1. Mount a custom bob.json file (see volume mount below)
+#   2. Use environment variables (env vars override values in bob.json)
+#
+# Supported environment variables:
+#   NODE_SEED              - 55-char lowercase seed for node identity (a-z only)
+#   P2P_NODES              - Comma-separated peer list, e.g. "1:1.2.3.4:21841,2:5.6.7.8:21841"
+#   LOG_LEVEL              - debug | info | warn | error
+#   RPC_PORT               - REST API port (default: 40420)
+#   SERVER_PORT            - P2P server port (default: 21842)
+#   RUN_SERVER             - Enable P2P serving: true | false
+#   IS_TESTNET             - Testnet mode: true | false
+#   ARBITRATOR_IDENTITY    - 60-char uppercase arbitrator identity
+#   NODE_ALIAS             - Display name for this node
+#   TICK_STORAGE_MODE      - lastNTick | kvrocks | free
+#   TX_STORAGE_MODE        - lastNTick | kvrocks | free
+#   MAX_THREAD             - Max worker threads (0 = auto)
+#   SPAM_QU_THRESHOLD      - Min QU amount to index transfers
+#   TX_TICK_TO_LIVE        - Ticks to keep tx data in RAM
+#   LAST_N_TICK_STORAGE    - Number of ticks to keep (lastNTick mode)
+#   KVROCKS_TTL            - Data expiration in seconds (0 = no expiration)
+#   REQUEST_CYCLE_MS       - Tick data request interval in ms
+#   REQUEST_LOGGING_CYCLE_MS - Logging event request interval in ms
+#   FUTURE_OFFSET          - How many ticks ahead to request
+#   KEYDB_URL              - Redis/KeyDB connection URL
+#   KVROCKS_URL            - KVRocks connection URL
+#   ENABLE_ADMIN_ENDPOINTS - Enable admin RPC methods: true | false
+#   ALLOW_CHECK_IN_QUBIC_GLOBAL - Allow check-in with qubic.global: true | false
+#   ALLOW_RECEIVE_LOG_FROM_INCOMING - Accept logging from incoming connections: true | false
 
 services:
   qubic-bob:
@@ -9,9 +39,15 @@ services:
     ports:
       - "21842:21842"
       - "40420:40420"
+    environment:
+      - NODE_SEED=your_55_character_lowercase_seed_here_aaaaaaaaaaaa
+      # - LOG_LEVEL=info
+      # - P2P_NODES=1:1.2.3.4:21841,2:5.6.7.8:21841
+      # - RUN_SERVER=true
+      # - IS_TESTNET=false
     volumes:
-      # - ./bob.json:/app/bob.json:ro # if needed you can use a custom configuration
-      # - ./redis.conf:/etc/redis/redis.conf:ro # custom Redis config (e.g., to increase maxmemory beyond default 4GB)
+      # - ./bob.json:/app/bob.json:ro # custom config file (env vars still override it)
+      # - ./redis.conf:/etc/redis/redis.conf:ro # custom Redis config
       - qubic-bob-redis:/data/redis
       - qubic-bob-kvrocks:/data/kvrocks
       - qubic-bob-data:/data/bob
