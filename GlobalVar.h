@@ -73,7 +73,8 @@ struct GlobalState {
 
     int gNumBMConnection = 0;
 
-    long long gKvrocksTTL = 1814400;
+    long long gKvrocksTTL = 1209600;
+    long long gTimeToWaitEpochEnd = 1800;
 
     unsigned gRpcPort = 40420;
     bool gEnableAdminEndpoints = false;  // Admin endpoints disabled by default

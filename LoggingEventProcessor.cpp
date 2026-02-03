@@ -849,7 +849,7 @@ verifyNodeStateDigest:
         // exit all requesters
         // serve slower nodes 30 more minutes before officially switching epoch
         Logger::get()->info("Received END_EPOCH message. Serving 30 minutes and then closing BOB");
-        SLEEP(1000ULL * 60 * 30); // 30 minutes - TODO: configurable
+        SLEEP(1000ULL * gTimeToWaitEpochEnd); // 30 minutes
         gStopFlag.store(true);
         // the endTick tick is a virtual tick, we need to migrate its data to new keys:
         uint32_t endTick = lastQuorumTick + 1; // the system just "borrow" this tick index

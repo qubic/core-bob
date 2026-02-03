@@ -47,6 +47,7 @@ struct AppConfig {
     // time to live (data expiration) for records in kvrocks engine (default 3 weeks - 1209600 seconds) (0 => no expiration)
     long long kvrocks_ttl = 1209600;
 
+    long long wait_at_epoch_end = 1800; // time to wait at epoch end before switching to new epoch- 30mins (1800s) by default
     // RPC/REST API port (default 40420)
     unsigned rpc_port = 40420;
     // Enable admin endpoints (default false for security)

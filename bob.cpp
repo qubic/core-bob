@@ -92,11 +92,12 @@ int runBob(int argc, char *argv[])
     gSpamThreshold = cfg.spam_qu_threshold;
     gMaxThreads = cfg.max_thread;
     gKvrocksTTL = cfg.kvrocks_ttl;
+    gTimeToWaitEpochEnd = cfg.wait_at_epoch_end;
     gRpcPort = cfg.rpc_port;
     gEnableAdminEndpoints = cfg.enable_admin_endpoints;
     gNodeAlias = cfg.nodeAlias;
-    using namespace std::chrono;
-    gStartTimeUnix = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+    gStartTimeUnix = std::chrono::duration_cast<std::chrono::seconds>
+            (std::chrono::system_clock::now().time_since_epoch()).count();
     gAllowCheckInQubicGlobal = cfg.allow_check_in_qubic_global;
     gAllowReceiveLogFromIncomingConnection = cfg.allow_receive_log_from_incoming_connections;
 

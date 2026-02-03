@@ -320,6 +320,19 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
         }
     }
 
+    if (root.isMember("wait_at_epoch_end")) {
+        const auto& v = root["wait_at_epoch_end"];
+        if (v.isNumeric())
+        {
+            out.wait_at_epoch_end = v.asInt64();
+        }
+        else
+        {
+            error = "Invalid type: unsigned integer required for key 'wait_at_epoch_end'";
+            return false;
+        }
+    }
+
     if (root.isMember("allow-check-in-qubic-global")) {
         if (!root["allow-check-in-qubic-global"].isBool()) {
             error = "Invalid type: boolean required for key 'allow-check-in-qubic-global'";

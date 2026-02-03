@@ -50,6 +50,7 @@
 #define gNumBMConnection (GS().gNumBMConnection)
 
 #define gKvrocksTTL (GS().gKvrocksTTL)
+#define gTimeToWaitEpochEnd (GS().gTimeToWaitEpochEnd)
 
 #define gRpcPort (GS().gRpcPort)
 #define gEnableAdminEndpoints (GS().gEnableAdminEndpoints)
