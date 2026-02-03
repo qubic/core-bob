@@ -600,8 +600,10 @@ gatherAllLoggingEvents:
                         }
                         break;
                     case BURNING:
+                    {
                         processQuBurn(le);
                         break;
+                    }
                     case CONTRACT_ERROR_MESSAGE:
                     case CONTRACT_WARNING_MESSAGE:
                     case CONTRACT_INFORMATION_MESSAGE:
