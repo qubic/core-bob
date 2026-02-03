@@ -1,5 +1,5 @@
-#include "K12AndKeyUtil.h"
-//#include "XKCP/KangarooTwelve.h"
+#include "src/core/k12_and_key_util.h"
+// #include "XKCP/KangarooTwelve.h"
 #include <gtest/gtest.h>
 #include <chrono>
 #include <vector>

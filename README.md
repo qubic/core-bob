@@ -91,9 +91,9 @@ sudo apt install -y vim net-tools tmux cmake git libjsoncpp-dev \
 
 #### 2. Install KeyDB
 
-KeyDB is a Redis-compatible database required by Bob. Follow the [KeyDB installation guide](KEYDB_INSTALL.md).
+KeyDB is a Redis-compatible database required by Bob. Follow the [KeyDB installation guide](doc/KEYDB_INSTALL.md).
 
-Optionally, install KVRocks for additional disk-based persistence: [KVRocks installation guide](KVROCKS_INSTALL.MD).
+Optionally, install KVRocks for additional disk-based persistence: [KVRocks installation guide](doc/KVROCKS_INSTALL.MD).
 
 #### 3. Build Bob
 
@@ -181,13 +181,13 @@ curl -s -X POST http://localhost:40420/qubic \
 ## Useful Resources
 
 ### Using Bob
-- [Ethereum-like JSON-RPC (HTTP/WS)](QUBIC_JSON_RPC.md)
-- [REST API Endpoints](REST_API.md)
-- [What is a Logging Event in Qubic?](LOGGING_IN_QUBIC.MD)
-- [Mastering the findlog Method](FINDLOG.MD)
-- [Dealing with Transactions and Logging](DEAL_WITH_TX.MD)
-- [Improve Stability via Kernel Buffer Size](KERN_BUF_SIZE.MD)
+- [Ethereum-like JSON-RPC (HTTP/WS)](doc/QUBIC_JSON_RPC.md)
+- [REST API Endpoints](doc/REST_API.md)
+- [What is a Logging Event in Qubic?](doc/LOGGING_IN_QUBIC.MD)
+- [Mastering the findlog Method](doc/FINDLOG.MD)
+- [Dealing with Transactions and Logging](doc/DEAL_WITH_TX.MD)
+- [Improve Stability via Kernel Buffer Size](doc/KERN_BUF_SIZE.MD)
 
 ### Inside Bob
-- [Anatomy of Bob](ANATOMY_OF_BOB.MD)
-- [How the Indexer Indexes Qubic Data](INDEXER_INDEXING_DATA.MD)
+- [Anatomy of Bob](doc/ANATOMY_OF_BOB.MD)
+- [How the Indexer Indexes Qubic Data](doc/INDEXER_INDEXING_DATA.MD)
