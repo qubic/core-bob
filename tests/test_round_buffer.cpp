@@ -167,18 +167,17 @@ TEST_F(MutexRoundBufferTest, SingleProducerSingleConsumer) {
             buffer.EnqueuePacket(packet.data());
         }
     });
+    producer.join();
 
     std::thread consumer([&]() {
-        for (int i = 0; i < num_packets; ++i) {
-            std::vector<uint8_t> out(BUFFER_CAPACITY);
-            uint32_t outSize = 0;
-            buffer.TryGetPacket(out.data(), outSize);
-            out.resize(outSize);
-            received_packets.push_back(out);
-        }
+      for (int i = 0; i < num_packets; ++i) {
+        std::vector<uint8_t> out(BUFFER_CAPACITY);
+        uint32_t outSize = 0;
+        buffer.TryGetPacket(out.data(), outSize);
+        out.resize(outSize);
+        received_packets.push_back(out);
+      }
     });
-
-    producer.join();
     consumer.join();
 
     ASSERT_EQ(sent_packets.size(), num_packets);
@@ -205,6 +204,10 @@ TEST_F(MutexRoundBufferTest, MultipleProducersSingleConsumer) {
         });
     }
 
+    for (auto &p : producers) {
+      p.join();
+    }
+
     std::vector<std::vector<uint8_t>> received_packets;
     std::thread consumer([&]() {
         for (int i = 0; i < total_packets; ++i) {
@@ -216,9 +219,6 @@ TEST_F(MutexRoundBufferTest, MultipleProducersSingleConsumer) {
         }
     });
 
-    for (auto& p : producers) {
-        p.join();
-    }
     consumer.join();
 
     ASSERT_EQ(received_packets.size(), total_packets);
