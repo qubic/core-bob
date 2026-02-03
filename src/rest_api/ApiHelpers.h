@@ -1,5 +1,7 @@
 #pragma once
 
+#include "src/core/m256i.h"
+
 #include <cstdint>
 #include <cstring>
 #include <string>
