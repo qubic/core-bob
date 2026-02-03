@@ -1,5 +1,5 @@
-#include <cstdint>
 #include "log_event.h"
+#include <cstdint>
 
 Json::Value LogEvent::parseToJson() const
 {

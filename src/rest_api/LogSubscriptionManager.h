@@ -9,7 +9,7 @@
 #include <chrono>
 #include <functional>
 
-#include "src/processors/logging/log_event.h"
+#include "src/core/log_event/log_event.h"
 #include "drogon/WebSocketConnection.h"
 
 // Subscription key: (scIndex, logType) pair

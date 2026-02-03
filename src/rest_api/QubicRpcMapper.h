@@ -2,7 +2,7 @@
 
 #include "src/core/m256i.h"
 #include "src/core/structs.h"
-#include "src/processors/logging/log_event.h"
+#include "src/core/log_event/log_event.h"
 
 #include <json/json.h>
 #include <string>
