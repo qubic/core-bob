@@ -30,7 +30,7 @@ BreakConstructorInitializers: AfterColon
 BreakConstructorInitializersBeforeComma: false
 ColumnLimit: 0
 ConstructorInitializerAllOnOneLineOrOnePerLine: false
-ContinuationIndentWidth: 8
+ContinuationIndentWidth: 0
 IncludeCategories: 
   - Regex: '^<.*'
     Priority: 1
@@ -56,4 +56,7 @@ SpacesInCStyleCastParentheses: false
 SpacesInParentheses: false
 TabWidth: 4
 PointerAlignment: Right
+AlignAfterOpenBracket: DontAlign
+AllowShortLambdasOnASingleLine: None
+BinPackArguments: false
 ...
