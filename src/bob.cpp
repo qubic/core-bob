@@ -16,8 +16,8 @@
 #include <limits>    // std::numeric_limits
 #include <pthread.h> // thread naming on POSIX
 #include <random>    // std::random_device, std::mt19937
-void IOVerifyThread();
-void IORequestThread(ConnectionPool& conn_pool, std::chrono::milliseconds requestCycle, uint32_t futureOffset);
+void TickingVerifyThread();
+void TickingDataRequestThread(ConnectionPool& conn_pool, std::chrono::milliseconds requestCycle, uint32_t futureOffset);
 void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd, std::chrono::milliseconds request_logging_cycle_ms);
 void connReceiver(QCPtr conn, const bool isTrustedNode);
 void DataProcessorThread();
@@ -210,7 +210,7 @@ int runBob(int argc, char *argv[])
     auto request_thread = std::thread(
             [&](){
                 set_this_thread_name("io-req");
-                IORequestThread(
+                TickingDataRequestThread(
                         std::ref(connPool),
                         std::chrono::milliseconds(request_cycle_ms),
                         static_cast<uint32_t>(future_offset)
@@ -219,7 +219,7 @@ int runBob(int argc, char *argv[])
     );
     auto verify_thread = std::thread([&](){
         set_this_thread_name("verify");
-        IOVerifyThread();
+        TickingVerifyThread();
     });
     auto log_request_trusted_nodes_thread = std::thread([&](){
         set_this_thread_name("trusted-log-req");
