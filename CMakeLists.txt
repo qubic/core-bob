@@ -125,51 +125,38 @@ if (NOT COMPILER_SUPPORTS_AVX2)
 	message(WARNING "AVX2 not supported by the compiler")
 endif ()
 
-# --- Project Sources ---
-SET(FILES
-		${CMAKE_SOURCE_DIR}/connection/connection.cpp
-		${CMAKE_SOURCE_DIR}/connection/connectionPool.cpp
-		${CMAKE_SOURCE_DIR}/connection/NodeIntroducer.cpp
-        ${CMAKE_SOURCE_DIR}/database/db.cpp
-		${CMAKE_SOURCE_DIR}/database/garbageCleaner.cpp
-		${CMAKE_SOURCE_DIR}/Logger.cpp
-		${CMAKE_SOURCE_DIR}/DataProcessors.cpp
-		${CMAKE_SOURCE_DIR}/IOProcessor.cpp
-		${CMAKE_SOURCE_DIR}/LoggingEventProcessor.cpp
-		${CMAKE_SOURCE_DIR}/QubicServer.cpp
-		${CMAKE_SOURCE_DIR}/QubicIndexer.cpp
-		${CMAKE_SOURCE_DIR}/Config.cpp
-		${CMAKE_SOURCE_DIR}/bob.cpp
-		${CMAKE_SOURCE_DIR}/GlobalVar.cpp
-		${CMAKE_SOURCE_DIR}/LogEvent.cpp
-		${CMAKE_SOURCE_DIR}/RESTAPI/bobAPI.cpp
-		${CMAKE_SOURCE_DIR}/RESTAPI/ApiHelpers.cpp
-		${CMAKE_SOURCE_DIR}/RESTAPI/querySmartContract.cpp
-		${CMAKE_SOURCE_DIR}/RESTAPI/RESTServer.cpp
-		${CMAKE_SOURCE_DIR}/RESTAPI/LogSubscriptionManager.cpp
-		${CMAKE_SOURCE_DIR}/RESTAPI/LogWebSocket.cpp
-		${CMAKE_SOURCE_DIR}/RESTAPI/QubicRpcMapper.cpp
-		${CMAKE_SOURCE_DIR}/RESTAPI/QubicRpcWebSocket.cpp
-		${CMAKE_SOURCE_DIR}/RESTAPI/QubicRpcMethods.cpp
-		${CMAKE_SOURCE_DIR}/RESTAPI/QubicSubscriptionManager.cpp
-		${CMAKE_SOURCE_DIR}/RESTAPI/QubicRpcHandler.cpp
-)
+# --- Collect sources from src/ and exclude executables/tools ---
+file(GLOB_RECURSE ALL_SRC CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/*.c ${CMAKE_SOURCE_DIR}/src/*.cpp)
 
-add_library(XKCP_avx2 STATIC XKCP/KangarooTwelve.c
-		XKCP/KeccakP-1600-AVX2.s
-		XKCP/KeccakP-1600-times4-AVX2.c
-		                     XKCP/TurboSHAKE.c
+set(LIB_SOURCES)
+foreach(_f IN LISTS ALL_SRC)
+	# exclude main executables and optional single-file tools
+	if(_f MATCHES "/main\\.cpp$" OR _f MATCHES "/pop10\\.cpp$" OR _f MATCHES "/migrator\\.cpp$")
+		continue()
+	endif()
+	list(APPEND LIB_SOURCES ${_f})
+endforeach()
+
+# Fallback: if explicit sources are required, ensure at least some files exist
+if(NOT LIB_SOURCES)
+	message(FATAL_ERROR "No library sources found under src/.")
+endif()
+
+add_library(XKCP_avx2 STATIC external/XKCP/KangarooTwelve.c
+        external/XKCP/KeccakP-1600-AVX2.s
+        external/XKCP/KeccakP-1600-times4-AVX2.c
+        external/XKCP/TurboSHAKE.c
 )
 
 # Create a library from the source files to be shared between the main executable and tests
-add_library(bob_lib STATIC ${FILES})
+add_library(bob_lib STATIC ${LIB_SOURCES})
 target_link_libraries(bob_lib PRIVATE redis++_static hiredis spdlog::spdlog cxxopts::cxxopts
 		${ZSTD_TARGET} XKCP_avx2 drogon ${JSONCPP_TARGET})
 
 
 # --- Executable and Linking ---
-ADD_EXECUTABLE(bob main.cpp)
-ADD_EXECUTABLE(pop10 pop10.cpp)
+ADD_EXECUTABLE(bob src/main.cpp)
+ADD_EXECUTABLE(pop10 src/pop10.cpp)
 target_link_libraries(bob PRIVATE bob_lib)
 target_link_libraries(pop10 PRIVATE bob_lib)
 
@@ -196,6 +183,6 @@ add_custom_command(
 add_custom_command(
 		TARGET bob POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different
-		${CMAKE_SOURCE_DIR}/RESTAPI/openapi.json
+		${CMAKE_SOURCE_DIR}/src/rest_api/openapi.json
 		${CMAKE_BINARY_DIR}/openapi.json
 )

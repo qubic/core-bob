@@ -4,8 +4,8 @@
 #include <numeric>
 #include <algorithm>
 // Include the headers for the code under test
+#include "../src/special_buffer_structs.h"
 #include "structs.h"
-#include "SpecialBufferStructs.h"
 
 // Provide a definition for the extern variable to allow linking.
 // This instance won't be used in the tests; we'll create local instances.
