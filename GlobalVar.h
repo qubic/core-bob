@@ -116,6 +116,8 @@ GlobalState& GS();
 #define CUSTOM_MESSAGE_OP_START_EPOCH 4850183582582395987ULL // STA_EPOC
 #define CUSTOM_MESSAGE_OP_END_EPOCH 4850183582582591045ULL //END_EPOC
 
+#define QUTIL_STMB_LOG_TYPE 100001
+
 // the chunk size that has signature from trusted entity in bob
 static constexpr long long BOB_LOG_EVENT_CHUNK_SIZE = 128; // do not edit
 

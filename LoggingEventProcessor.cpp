@@ -123,14 +123,12 @@ m256i getUniverseDigest(const uint32_t tickStart, const uint32_t tickEnd)
     return assetDigests[(ASSETS_CAPACITY * 2 - 1) - 1];
 }
 
-void processQuTransfer(LogEvent& le)
+void processQuTransfer(const QuTransfer& qt, uint32_t tick)
 {
-    QuTransfer qt;
-    memcpy((void*)&qt, le.getLogBodyPtr(), sizeof(QuTransfer));
     auto src_idx = spectrumIndex(qt.sourcePublicKey);
     if (src_idx != -1)
     {
-        if (!decreaseEnergy(src_idx, qt.amount, le.getTick()))
+        if (!decreaseEnergy(src_idx, qt.amount, tick))
         {
             Logger::get()->critical("QUs transfer: Failed to decrease energy");
         }
@@ -141,7 +139,110 @@ void processQuTransfer(LogEvent& le)
             Logger::get()->critical("QUs transfer has invalid source index");
         }
     }
-    increaseEnergy(qt.destinationPublicKey, qt.amount, le.getTick());
+    increaseEnergy(qt.destinationPublicKey, qt.amount, tick);
+}
+
+void processQuTransfer(LogEvent& le)
+{
+    QuTransfer qt;
+    memcpy((void*)&qt, le.getLogBodyPtr(), sizeof(QuTransfer));
+    processQuTransfer(qt, le.getTick());
+}
+
+static m256i qpi_next_id(const m256i& currentId)
+{
+    int index = spectrumIndex(currentId);
+    while (++index < SPECTRUM_CAPACITY)
+    {
+        const m256i& nextId = spectrum[index].publicKey;
+        if (!isZero(nextId))
+        {
+            return nextId;
+        }
+    }
+
+    return m256i::zero();
+}
+
+static m256i qpi_prev_id(const m256i& currentId)
+{
+    int index = spectrumIndex(currentId);
+    while (--index >= 0)
+    {
+        const m256i& prevId = spectrum[index].publicKey;
+        if (!isZero(prevId))
+        {
+            return prevId;
+        }
+    }
+
+    return m256i::zero();
+}
+
+bool processSendToManyBenchmark(LogEvent& le)
+{
+    struct QUTILSendToManyBenchmarkLog
+    {
+        uint32_t contractId; // to distinguish bw SCs
+        uint32_t logType;
+        m256i startId;
+        int64_t dstCount;
+        int64_t numTransfersEach;
+        int8_t _terminator; // Only data before "_terminator" are logged
+    };
+    auto s = (QUTILSendToManyBenchmarkLog*)le.getLogBodyPtr();
+    struct
+    {
+        int64_t dstCount;
+        int64_t total;
+    } output;
+    struct
+    {
+        int64_t dstCount;
+        int64_t numTransfersEach;
+    } input;
+    struct
+    {
+        m256i currentId;
+        uint64_t useNext;
+        int t;
+    } locals;
+    memset(&output, 0, sizeof(output));
+    memset(&input, 0, sizeof(input));
+    memset(&locals, 0, sizeof(locals));
+
+    input.dstCount = s->dstCount;
+    input.numTransfersEach = s->numTransfersEach;
+
+    locals.currentId = s->startId;
+    locals.useNext = 1;
+
+    while (output.dstCount < input.dstCount)
+    {
+        if (locals.useNext == 1)
+            locals.currentId = qpi_next_id(locals.currentId);
+        else
+            locals.currentId = qpi_prev_id(locals.currentId);
+        if (locals.currentId == m256i::zero())
+        {
+            locals.currentId = s->startId;
+            locals.useNext = 1 - locals.useNext;
+            continue;
+        }
+
+        output.dstCount++;
+        for (locals.t = 0; locals.t < input.numTransfersEach; locals.t++)
+        {
+            //qpi.transfer(locals.currentId, 1);
+            // simulate this with QU_TRANSFER qt
+            QuTransfer qt{};
+            qt.sourcePublicKey = m256i(0,0,0,4);
+            qt.destinationPublicKey = locals.currentId;
+            qt.amount = 1;
+            processQuTransfer(qt, le.getTick());
+            output.total += 1;
+        }
+    }
 }
 
 bool processDistributeDividends(std::vector<LogEvent>& vle)
@@ -608,12 +709,30 @@ gatherAllLoggingEvents:
                     case CONTRACT_WARNING_MESSAGE:
                     case CONTRACT_INFORMATION_MESSAGE:
                     case CONTRACT_DEBUG_MESSAGE:
+                    {
+                        auto data = le.getLogBodyPtr();
+                        if (le.getLogSize() >= 8)
+                        {
+                            uint32_t scIndex, logType;
+                            memcpy(&scIndex, data, 4);
+                            memcpy(&logType, data + 4, 4);
+                            if (scIndex == 4 && logType == QUTIL_STMB_LOG_TYPE)
+                            {
+                                // send to many benchmark, need to simulate
+                                processSendToManyBenchmark(le);
+                            }
+                        }
+                    }
                     case SPECTRUM_STATS:
+                    {
                         // nothing to do
                         break;
+                    }
                     case DUST_BURNING:
+                    {
                         // TODO: simulate and implement this
                         break;
+                    }
                     case CUSTOM_MESSAGE:
                     {
                         uint64_t msg = le.getCustomMessage();
