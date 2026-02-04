@@ -875,7 +875,8 @@ verifyNodeStateDigest:
                 db_delete_logs(gCurrentProcessingEpoch, fromId, endId);
                 Logger::get()->info("Deleted all potential malformed data. Setting last fetched logging to {}", processFromTick-1);
                 db_update_latest_event_tick_and_epoch(processFromTick-1, gCurrentProcessingEpoch);
-                break;
+                Logger::get()->warn("Forcing bob to exit");
+                exit(1); // force exit because this is critical situation
             }
             else
             {
