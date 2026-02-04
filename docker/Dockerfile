@@ -59,7 +59,8 @@ COPY docker/redis.conf /etc/redis/redis.conf
 COPY docker/kvrocks.conf /etc/kvrocks/kvrocks.conf
 COPY docker/bob.json /app/bob.json
 COPY docker/entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
+COPY docker/cleanup.sh /app/cleanup.sh
+RUN chmod +x /app/entrypoint.sh /app/cleanup.sh
 
 # Expose ports
 # 21842 - bob server port
