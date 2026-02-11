@@ -224,6 +224,21 @@ bool _db_get_log_ranges(uint32_t tick, LogRangesPerTxInTick &logRange) {
         if (!val) {
             return false;
         }
+        if (sizeof(LogRangesPerTxInTick) - val->size() == 16) // oracle machine logging mismatches
+        {
+            struct {
+                long long fromLogId[1024+5];
+                long long length[1024+5];
+            } old_struct;
+            memcpy(&old_struct, val->data(), val->size());
+            memset(&logRange, 0, sizeof(logRange));
+            for (int i = 0; i < 1024+5; i++)
+            {
+                logRange.fromLogId[i] = old_struct.fromLogId[i];
+                logRange.length[i] = old_struct.length[i];
+            }
+            return true;
+        }
         if (val->size() != sizeof(LogRangesPerTxInTick)) {
             Logger::get()->warn("LogRange size mismatch for key {}: got {}, expected {}",
                                 key.c_str(), val->size(), sizeof(LogRangesPerTxInTick));
@@ -1509,7 +1524,21 @@ bool db_get_cLogRange_from_kvrocks(uint32_t tick, LogRangesPerTxInTick& outLogRa
                                  ZSTD_getErrorName(dSize));
             return false;
         }
-
+        if (dstSize - dSize == 16) // oracle machine logging mismatches
+        {
+            struct {
+                long long fromLogId[1024+5];
+                long long length[1024+5];
+            } old_struct;
+            memcpy(&old_struct, &outLogRange, dSize);
+            memset(&outLogRange, 0, sizeof(outLogRange));
+            for (int i = 0; i < 1024+5; i++)
+            {
+                outLogRange.fromLogId[i] = old_struct.fromLogId[i];
+                outLogRange.length[i] = old_struct.length[i];
+            }
+            return true;
+        }
         if (dSize != dstSize) {
             Logger::get()->warn("Decompressed ResponseAllLogIdRangesFromTick size mismatch for key {}: got {}, expected {}",
                                 key.c_str(), dSize, dstSize);
