@@ -225,11 +225,12 @@ Json::Value LogEvent::parseToJsonValueWithExtraData(const TickData& td, const in
         {
             txHash = td.transactionDigests[txIndex].toQubicHash();
         }
-        else if (txIndex <= SC_END_EPOCH_TX)
+        else if (txIndex <= LOG_TX_PER_TICK)
         {
             if (txIndex == SC_INITIALIZE_TX) txHash = ("SC_INITIALIZE_TX_" + std::to_string(td.tick));
             if (txIndex == SC_BEGIN_EPOCH_TX) txHash = ("SC_BEGIN_EPOCH_TX_" + std::to_string(td.tick));
             if (txIndex == SC_BEGIN_TICK_TX) txHash = ("SC_BEGIN_TICK_TX_" + std::to_string(td.tick));
+            if (txIndex == SC_NOTIFICATION_TX) txHash = ("SC_NOTIFICATION_TX" + std::to_string(td.tick));
             if (txIndex == SC_END_TICK_TX) txHash = ("SC_END_TICK_TX_" + std::to_string(td.tick));
             if (txIndex == SC_END_EPOCH_TX) txHash = ("SC_END_EPOCH_TX_" + std::to_string(td.tick));
         }

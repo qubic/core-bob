@@ -594,6 +594,7 @@ std::string getQuTransfersForIdentity(uint32_t fromTick, uint32_t toTick, const 
                             if (i == SC_INITIALIZE_TX) outArray.append("SC_INITIALIZE_TX_" + std::to_string(tick));
                             if (i == SC_BEGIN_EPOCH_TX) outArray.append("SC_BEGIN_EPOCH_TX_" + std::to_string(tick));
                             if (i == SC_BEGIN_TICK_TX) outArray.append("SC_BEGIN_TICK_TX_" + std::to_string(tick));
+                            if (i == SC_NOTIFICATION_TX) outArray.append("SC_NOTIFICATION_TX_" + std::to_string(tick));
                             if (i == SC_END_TICK_TX) outArray.append("SC_END_TICK_TX_" + std::to_string(tick));
                             if (i == SC_END_EPOCH_TX) outArray.append("SC_END_EPOCH_TX_" + std::to_string(tick));
                         }
@@ -632,6 +633,7 @@ std::string getQuTransfersForIdentity(uint32_t fromTick, uint32_t toTick, const 
                             if (i == SC_INITIALIZE_TX) inArray.append("SC_INITIALIZE_TX_" + std::to_string(tick));
                             if (i == SC_BEGIN_EPOCH_TX) inArray.append("SC_BEGIN_EPOCH_TX_" + std::to_string(tick));
                             if (i == SC_BEGIN_TICK_TX) inArray.append("SC_BEGIN_TICK_TX_" + std::to_string(tick));
+                            if (i == SC_NOTIFICATION_TX) inArray.append("SC_NOTIFICATION_TX_" + std::to_string(tick));
                             if (i == SC_END_TICK_TX) inArray.append("SC_END_TICK_TX_" + std::to_string(tick));
                             if (i == SC_END_EPOCH_TX) inArray.append("SC_END_EPOCH_TX_" + std::to_string(tick));
                         }
@@ -723,6 +725,7 @@ std::string getAssetTransfersForIdentity(uint32_t fromTick, uint32_t toTick, con
                             if (i == SC_INITIALIZE_TX) outArray.append("SC_INITIALIZE_TX_" + std::to_string(tick));
                             if (i == SC_BEGIN_EPOCH_TX) outArray.append("SC_BEGIN_EPOCH_TX_" + std::to_string(tick));
                             if (i == SC_BEGIN_TICK_TX) outArray.append("SC_BEGIN_TICK_TX_" + std::to_string(tick));
+                            if (i == SC_NOTIFICATION_TX) outArray.append("SC_NOTIFICATION_TX_" + std::to_string(tick));
                             if (i == SC_END_TICK_TX) outArray.append("SC_END_TICK_TX_" + std::to_string(tick));
                             if (i == SC_END_EPOCH_TX) outArray.append("SC_END_EPOCH_TX_" + std::to_string(tick));
                         }
@@ -763,6 +766,7 @@ std::string getAssetTransfersForIdentity(uint32_t fromTick, uint32_t toTick, con
                             if (i == SC_INITIALIZE_TX) inArray.append("SC_INITIALIZE_TX_" + std::to_string(tick));
                             if (i == SC_BEGIN_EPOCH_TX) inArray.append("SC_BEGIN_EPOCH_TX_" + std::to_string(tick));
                             if (i == SC_BEGIN_TICK_TX) inArray.append("SC_BEGIN_TICK_TX_" + std::to_string(tick));
+                            if (i == SC_NOTIFICATION_TX) inArray.append("SC_NOTIFICATION_TX_" + std::to_string(tick));
                             if (i == SC_END_TICK_TX) inArray.append("SC_END_TICK_TX_" + std::to_string(tick));
                             if (i == SC_END_EPOCH_TX) inArray.append("SC_END_EPOCH_TX_" + std::to_string(tick));
                         }
@@ -845,6 +849,7 @@ std::string getAllAssetTransfers(uint32_t fromTick, uint32_t toTick, const std::
                             if (i == SC_INITIALIZE_TX) outArray.append("SC_INITIALIZE_TX_" + std::to_string(tick));
                             if (i == SC_BEGIN_EPOCH_TX) outArray.append("SC_BEGIN_EPOCH_TX_" + std::to_string(tick));
                             if (i == SC_BEGIN_TICK_TX) outArray.append("SC_BEGIN_TICK_TX_" + std::to_string(tick));
+                            if (i == SC_NOTIFICATION_TX) outArray.append("SC_NOTIFICATION_TX_" + std::to_string(tick));
                             if (i == SC_END_TICK_TX) outArray.append("SC_END_TICK_TX_" + std::to_string(tick));
                             if (i == SC_END_EPOCH_TX) outArray.append("SC_END_EPOCH_TX_" + std::to_string(tick));
                         }

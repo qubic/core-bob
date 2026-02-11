@@ -271,8 +271,7 @@ struct RequestAllLogIdRangesFromTick
     }
 };
 
-#define LOG_TX_NUMBER_OF_SPECIAL_EVENT 5
-#define LOG_TX_PER_TICK (NUMBER_OF_TRANSACTIONS_PER_TICK + LOG_TX_NUMBER_OF_SPECIAL_EVENT)// +5 special events
+#define LOG_TX_PER_TICK (NUMBER_OF_TRANSACTIONS_PER_TICK + NUMBER_OF_SPECIAL_EVENT_PER_TICK)// +6 special events
 // Response logid ranges of all txs from a tick
 struct LogRangesPerTxInTick
 {
@@ -294,6 +293,7 @@ struct LogRangesPerTxInTick
         {
             if (fromLogId[i] != -1) logTxOrder.push_back(i);
         }
+        if (fromLogId[SC_NOTIFICATION_TX] != -1) logTxOrder.push_back(SC_NOTIFICATION_TX);
         if (fromLogId[SC_END_TICK_TX] != -1) logTxOrder.push_back(SC_END_TICK_TX);
         if (fromLogId[SC_END_EPOCH_TX] != -1) logTxOrder.push_back(SC_END_EPOCH_TX);
         return logTxOrder;
