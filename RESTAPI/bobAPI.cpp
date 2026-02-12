@@ -214,17 +214,17 @@ std::string bobGetLog(uint16_t epoch, int64_t start, int64_t end)
                         result.push_back(']');
                         return result; // solve seamless transition case
                     }
-                    db_try_get_log_ranges(log.getTick(), lr);
-                    logTxOrderIndex = 0;
-                    logTxOrder = lr.sort();
-                    // scan to find the first cursor
-                    logTxOrderIndex = lr.scanTxId(logTxOrder, 0, log.getLogId());
-                    if (logTxOrderIndex == -1)
-                    {
-                        result.push_back(']');
-                        return result;
-                    }
                 }
+            }
+            db_try_get_log_ranges(log.getTick(), lr);
+            logTxOrderIndex = 0;
+            logTxOrder = lr.sort();
+            // scan to find the first cursor
+            logTxOrderIndex = lr.scanTxId(logTxOrder, 0, log.getLogId());
+            if (logTxOrderIndex == -1)
+            {
+                result.push_back(']');
+                return result;
             }
             int txIndex = logTxOrder[logTxOrderIndex];
             auto s = lr.fromLogId[txIndex];
