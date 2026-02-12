@@ -169,7 +169,7 @@ Json::Value LogEvent::parseToJson() const
             if (bodySize == 8) {
                 uint64_t v;
                 memcpy(&v, body_ptr, sizeof(v));
-                body["customMessage"] = Json::UInt64(v);
+                body["customMessage"] = std::to_string(v);
                 filled = true;
             }
             break;
