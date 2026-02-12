@@ -394,6 +394,20 @@ std::vector<LogEvent> db_get_logs_by_tick_range(uint16_t epoch, uint32_t start_t
  */
 bool db_get_tick_data(uint32_t tick, TickData& data);
 
+
+/**
+ * Get the quorum unix timestamp from votes for a given tick.
+ *
+ * Parameters:
+ * - tick: The tick to get the quorum timestamp for
+ *
+ * Return Value:
+ * - Unix timestamp if a date time has at least 451 votes
+ * - 0 if no quorum is reached or on error
+ */
+uint64_t db_get_quorum_unixtime_from_votes(uint32_t tick);
+
+
 /**
  * Retrieve the raw binary data of a transaction by
  */

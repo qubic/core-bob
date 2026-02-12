@@ -916,6 +916,51 @@ std::vector<TickVote> db_try_to_get_votes(uint32_t tick) {
     return votes;
 }
 
+uint64_t db_get_quorum_unixtime_from_votes(uint32_t tick) {
+    // Get all votes for the tick
+    auto votes = db_try_to_get_votes(tick);
+
+    if (votes.empty()) {
+        return 0;
+    }
+
+    // Map to count occurrences of each unique datetime
+    std::map<uint64_t, int> datetimeCount;
+
+    // Helper lambda to convert datetime fields to unix timestamp
+    auto toUnixTimestamp = [](uint16_t year, uint16_t month, uint16_t day,
+                              uint16_t hour, uint16_t minute, uint16_t second) -> uint64_t {
+        std::tm timeinfo = {};
+        timeinfo.tm_year = int(year) + 2000 - 1900;  // Convert from 2-digit year to years since 1900
+        timeinfo.tm_mon = month - 1;    // Month (0-11)
+        timeinfo.tm_mday = day;
+        timeinfo.tm_hour = hour;
+        timeinfo.tm_min = minute;
+        timeinfo.tm_sec = second;
+        timeinfo.tm_isdst = -1;
+        time_t t = timegm(&timeinfo);
+        return (t != -1) ? static_cast<uint64_t>(t) : 0;
+    };
+
+    // Count votes for each unique datetime
+    for (const auto& vote : votes) {
+        uint64_t timestamp = toUnixTimestamp(vote.year, vote.month, vote.day,
+                                             vote.hour, vote.minute, vote.second);
+        if (timestamp > 0) {
+            datetimeCount[timestamp]++;
+        }
+    }
+
+    // Find datetime with at least 451 votes
+    for (const auto& pair : datetimeCount) {
+        if (pair.second >= 451) {
+            return pair.first;  // Return the unix timestamp
+        }
+    }
+
+    return 0;  // No quorum reached
+}
+
 // Store the whole Computors struct per epoch; key = "computor:<epoch>"
 bool db_insert_computors(const Computors& comps) {
     if (!g_redis) return false;

@@ -1,4 +1,5 @@
 #include "LogEvent.h"
+#include "database/db.h"
 
 Json::Value LogEvent::parseToJson() const
 {
@@ -211,12 +212,22 @@ std::string LogEvent::parseToJsonStr() const
 Json::Value LogEvent::parseToJsonValueWithExtraData(const TickData& td, const int txIndex) const
 {
     auto root = parseToJson();
+    if (td.tick == getTick())
+    {
+        std::tm timeinfo = {};
+        timeinfo.tm_year = int(td.year) + 2000 - 1900;  // Convert from 2-digit year to years since 1900
+        timeinfo.tm_mon = td.month - 1;    // Month (0-11)
+        timeinfo.tm_mday = td.day;
+        timeinfo.tm_hour = td.hour;
+        timeinfo.tm_min = td.minute;
+        timeinfo.tm_sec = td.second;
+        timeinfo.tm_isdst = -1;
+        time_t t = timegm(&timeinfo);
+        root["timestamp"] = Json::Int64(t);
+    } else {
+        root["timestamp"] = db_get_quorum_unixtime_from_votes(getTick());
+    }
 
-    char timestampBuffer[20];
-    snprintf(timestampBuffer, sizeof(timestampBuffer), "%02d-%02d-%02d %02d:%02d:%02d",
-             td.year, td.month, td.day, td.hour, td.minute, td.second);
-    std::string timestamp(timestampBuffer);
-    root["timestamp"] = timestamp;
 
     if (txIndex >= 0)
     {
@@ -227,12 +238,12 @@ Json::Value LogEvent::parseToJsonValueWithExtraData(const TickData& td, const in
         }
         else if (txIndex <= LOG_TX_PER_TICK)
         {
-            if (txIndex == SC_INITIALIZE_TX) txHash = ("SC_INITIALIZE_TX_" + std::to_string(td.tick));
-            if (txIndex == SC_BEGIN_EPOCH_TX) txHash = ("SC_BEGIN_EPOCH_TX_" + std::to_string(td.tick));
-            if (txIndex == SC_BEGIN_TICK_TX) txHash = ("SC_BEGIN_TICK_TX_" + std::to_string(td.tick));
-            if (txIndex == SC_NOTIFICATION_TX) txHash = ("SC_NOTIFICATION_TX" + std::to_string(td.tick));
-            if (txIndex == SC_END_TICK_TX) txHash = ("SC_END_TICK_TX_" + std::to_string(td.tick));
-            if (txIndex == SC_END_EPOCH_TX) txHash = ("SC_END_EPOCH_TX_" + std::to_string(td.tick));
+            if (txIndex == SC_INITIALIZE_TX) txHash = ("SC_INITIALIZE_TX_" + std::to_string(getTick()));
+            if (txIndex == SC_BEGIN_EPOCH_TX) txHash = ("SC_BEGIN_EPOCH_TX_" + std::to_string(getTick()));
+            if (txIndex == SC_BEGIN_TICK_TX) txHash = ("SC_BEGIN_TICK_TX_" + std::to_string(getTick()));
+            if (txIndex == SC_NOTIFICATION_TX) txHash = ("SC_NOTIFICATION_TX" + std::to_string(getTick()));
+            if (txIndex == SC_END_TICK_TX) txHash = ("SC_END_TICK_TX_" + std::to_string(getTick()));
+            if (txIndex == SC_END_EPOCH_TX) txHash = ("SC_END_EPOCH_TX_" + std::to_string(getTick()));
         }
         root["txHash"] = txHash;
         return root;
