@@ -176,16 +176,15 @@ std::string bobGetLog(uint16_t epoch, int64_t start, int64_t end)
     for (int64_t id = start; id <= end; ++id) {
         LogEvent log;
         if (db_try_get_log(epoch, static_cast<uint64_t>(id), log)) {
-            if (log.getTick() != td.tick || log.getEpoch() != td.epoch)
+            if (log.getTick() != gInitialTick)
             {
                 db_try_get_tick_data(log.getTick(), td);
-                if (td.epoch != epoch)
+                if (td.epoch == 0)
                 {
                     Json::Value err(Json::objectValue);
                     err["ok"] = false;
-                    err["error"] = "This tick is owned by epoch" + std::to_string(td.epoch)
-                            + ", if you want to query log from epoch " + std::to_string(epoch)
-                            + " use endpoint /getEndEpochLog instead";
+                    err["error"] = "Missing tick data " + std::to_string(log.getTick())
+                                   + ". Cannot process logging events";
                     err["epoch"] = epoch;
                     err["logId"] = Json::UInt64(static_cast<uint64_t>(id));
                     Json::StreamWriterBuilder wb;
@@ -194,17 +193,37 @@ std::string bobGetLog(uint16_t epoch, int64_t start, int64_t end)
                     if (!first) result.push_back(',');
                     result += js;
                     result.push_back(']');
-                    return result; // solve seamless transition case
-                }
-                db_try_get_log_ranges(log.getTick(), lr);
-                logTxOrderIndex = 0;
-                logTxOrder = lr.sort();
-                // scan to find the first cursor
-                logTxOrderIndex = lr.scanTxId(logTxOrder, 0, log.getLogId());
-                if (logTxOrderIndex == -1)
-                {
-                    result.push_back(']');
                     return result;
+                }
+                if (log.getTick() != td.tick || log.getEpoch() != td.epoch)
+                {
+                    if (td.epoch != epoch)
+                    {
+                        Json::Value err(Json::objectValue);
+                        err["ok"] = false;
+                        err["error"] = "This tick is owned by epoch" + std::to_string(td.epoch)
+                                       + ", if you want to query log from epoch " + std::to_string(epoch)
+                                       + " use endpoint /getEndEpochLog instead";
+                        err["epoch"] = epoch;
+                        err["logId"] = Json::UInt64(static_cast<uint64_t>(id));
+                        Json::StreamWriterBuilder wb;
+                        wb["indentation"] = "";
+                        std::string js = Json::writeString(wb, err);
+                        if (!first) result.push_back(',');
+                        result += js;
+                        result.push_back(']');
+                        return result; // solve seamless transition case
+                    }
+                    db_try_get_log_ranges(log.getTick(), lr);
+                    logTxOrderIndex = 0;
+                    logTxOrder = lr.sort();
+                    // scan to find the first cursor
+                    logTxOrderIndex = lr.scanTxId(logTxOrder, 0, log.getLogId());
+                    if (logTxOrderIndex == -1)
+                    {
+                        result.push_back(']');
+                        return result;
+                    }
                 }
             }
             int txIndex = logTxOrder[logTxOrderIndex];
