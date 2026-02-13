@@ -225,7 +225,7 @@ Json::Value LogEvent::parseToJsonValueWithExtraData(const TickData& td, const in
         timeinfo.tm_sec = td.second;
         timeinfo.tm_isdst = -1;
         time_t t = timegm(&timeinfo);
-        root["timestamp"] = Json::Int64(t);
+        root["timestamp"] = Json::UInt64(t);
     } else {
         root["timestamp"] = db_get_quorum_unixtime_from_votes(getTick());
     }

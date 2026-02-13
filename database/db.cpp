@@ -1137,7 +1137,7 @@ bool db_get_indexed_tx(const char* tx_hash,
         executed     = data.isExecuted;
         from_log_id  = static_cast<long long>(data.from_log_id);
         to_log_id    = static_cast<long long>(data.to_log_id);
-        timestamp    = static_cast<uint64_t>(data.timestamp);
+        timestamp    = static_cast<uint64_t>(data.timestamp) / 1000; // note: we store it in millisec in DB
         return true;
     } catch (const sw::redis::Error& e) {
         Logger::get()->error("Redis error in db_get_indexed_tx: {}", e.what());
