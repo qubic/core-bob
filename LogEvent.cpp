@@ -108,6 +108,7 @@ Json::Value LogEvent::parseToJson() const
                 root["logTypename"] = "ASSET_OWNERSHIP_CHANGE";
                 body["sourcePublicKey"] = a->sourcePublicKey.toQubicHashUpperCase();
                 body["destinationPublicKey"] = a->destinationPublicKey.toQubicHashUpperCase();
+                body["issuerPublicKey"] = a->issuerPublicKey.toQubicHashUpperCase();
                 body["assetName"] = trim_zero_bytes(a->name, 7);
                 body["numberOfShares"] = Json::Int64(a->numberOfShares);
                 filled = true;
@@ -125,6 +126,7 @@ Json::Value LogEvent::parseToJson() const
                 root["logTypename"] = "ASSET_POSSESSION_CHANGE";
                 body["sourcePublicKey"] = a->sourcePublicKey.toQubicHashUpperCase();
                 body["destinationPublicKey"] = a->destinationPublicKey.toQubicHashUpperCase();
+                body["issuerPublicKey"] = a->issuerPublicKey.toQubicHashUpperCase();
                 body["assetName"] = trim_zero_bytes(a->name, 7);
                 body["numberOfShares"] = Json::Int64(a->numberOfShares);
                 filled = true;
