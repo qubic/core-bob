@@ -978,6 +978,10 @@ void QubicSubscriptionManager::performCatchUp(
                     it->second.catchUpInProgress = false;
                     Logger::get()->info("TickStream catch-up {} complete (drained {} pending ticks)",
                                        subId, 0);
+                    lock.unlock();
+                    Json::Value complete(Json::objectValue);
+                    complete["catchUpComplete"] = true;
+                    sendSubscriptionMessage(conn, subId, complete);
                     break;
                 }
 
@@ -1126,12 +1130,21 @@ void QubicSubscriptionManager::performCatchUp(
 
         // Final check to mark complete if we exited early
         {
-            std::unique_lock lock(mutex_);
-            auto it = subscriptions_.find(subId);
-            if (it != subscriptions_.end() && it->second.catchUpInProgress) {
-                it->second.catchUpInProgress = false;
-                it->second.pendingTicks.clear();
-                Logger::get()->info("TickStream catch-up {} complete", subId);
+            bool wasCatchingUp = false;
+            {
+                std::unique_lock lock(mutex_);
+                auto it = subscriptions_.find(subId);
+                if (it != subscriptions_.end() && it->second.catchUpInProgress) {
+                    it->second.catchUpInProgress = false;
+                    it->second.pendingTicks.clear();
+                    wasCatchingUp = true;
+                    Logger::get()->info("TickStream catch-up {} complete", subId);
+                }
+            }
+            if (wasCatchingUp) {
+                Json::Value complete(Json::objectValue);
+                complete["catchUpComplete"] = true;
+                sendSubscriptionMessage(conn, subId, complete);
             }
         }
     }).detach();
@@ -1338,6 +1351,10 @@ void QubicSubscriptionManager::performLogsCatchUp(
                     it->second.catchUpInProgress = false;
                     it->second.lastLogId = -1;
                     Logger::get()->info("Logs catch-up {} complete", subId);
+                    lock.unlock();
+                    Json::Value complete(Json::objectValue);
+                    complete["catchUpComplete"] = true;
+                    sendSubscriptionMessage(conn, subId, complete);
                     return;
                 }
             }
@@ -1387,13 +1404,22 @@ void QubicSubscriptionManager::performLogsCatchUp(
 
         // Final cleanup
         {
-            std::unique_lock lock(mutex_);
-            auto it = subscriptions_.find(subId);
-            if (it != subscriptions_.end() && it->second.catchUpInProgress) {
-                it->second.catchUpInProgress = false;
-                it->second.pendingLogs.clear();
-                it->second.lastLogId = -1;
-                Logger::get()->info("Logs catch-up {} complete", subId);
+            bool wasCatchingUp = false;
+            {
+                std::unique_lock lock(mutex_);
+                auto it = subscriptions_.find(subId);
+                if (it != subscriptions_.end() && it->second.catchUpInProgress) {
+                    it->second.catchUpInProgress = false;
+                    it->second.pendingLogs.clear();
+                    it->second.lastLogId = -1;
+                    wasCatchingUp = true;
+                    Logger::get()->info("Logs catch-up {} complete", subId);
+                }
+            }
+            if (wasCatchingUp) {
+                Json::Value complete(Json::objectValue);
+                complete["catchUpComplete"] = true;
+                sendSubscriptionMessage(conn, subId, complete);
             }
         }
     }).detach();

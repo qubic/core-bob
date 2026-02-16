@@ -578,6 +578,22 @@
           }
         }
       }
+    },
+    "/ws/qubic": {
+      "get": {
+        "tags": ["WebSocket"],
+        "summary": "Qubic JSON-RPC WebSocket (subscriptions)",
+        "description": "**WebSocket endpoint** for Qubic JSON-RPC 2.0 subscriptions.\n\nConnect using a WebSocket client (e.g., `wscat -c ws://localhost:40420/ws/qubic`).\n\n## Protocol\n\nAll messages follow the JSON-RPC 2.0 format.\n\n### Client → Server: Subscribe\n\n**Subscribe to new ticks:**\n```json\n{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"qubic_subscribe\", \"params\": [\"newTicks\"]}\n```\n\n**Subscribe to logs (with optional filters and catch-up):**\n```json\n{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"qubic_subscribe\", \"params\": [\"logs\", {\n  \"identity\": \"BZBQ...\",\n  \"logType\": [0, 1],\n  \"startLogId\": 12345,\n  \"startEpoch\": 152\n}]}\n```\n\n**Subscribe to QU transfers (with optional catch-up):**\n```json\n{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"qubic_subscribe\", \"params\": [\"transfers\", {\n  \"identity\": \"BZBQ...\",\n  \"startLogId\": 12345,\n  \"startEpoch\": 152\n}]}\n```\n\n**Subscribe to tick stream (with optional filters and catch-up):**\n```json\n{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"qubic_subscribe\", \"params\": [\"tickStream\", {\n  \"startTick\": 12345678,\n  \"skipEmptyTicks\": true,\n  \"includeInputData\": true,\n  \"txFilters\": [{\"from\": \"BZBQ...\", \"to\": \"AABB...\", \"minAmount\": 1000, \"inputType\": 0}],\n  \"logFilters\": [{\"scIndex\": 0, \"logType\": 0, \"transferMinAmount\": 100}]\n}]}\n```\n\n### Client → Server: Unsubscribe\n\n```json\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"qubic_unsubscribe\", \"params\": [\"qubic_sub_1\"]}\n```\n\n### Server → Client: Subscribe Response\n\nReturns the subscription ID:\n```json\n{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": \"qubic_sub_1\"}\n```\n\n### Server → Client: Subscription Event\n\n```json\n{\"jsonrpc\": \"2.0\", \"method\": \"qubic_subscription\", \"params\": {\"subscription\": \"qubic_sub_1\", \"result\": {...}}}\n```\n\n### Server → Client: Catch-Up Complete\n\nWhen a subscription with catch-up (startLogId or startTick) finishes replaying historical data, a completion notification is sent:\n```json\n{\"jsonrpc\": \"2.0\", \"method\": \"qubic_subscription\", \"params\": {\"subscription\": \"qubic_sub_1\", \"result\": {\"catchUpComplete\": true}}}\n```\nAfter this message, all subsequent events are real-time.\n\n## Subscription Types\n\n| Type | Description |\n|------|-------------|\n| `newTicks` | Receive tick data as new ticks are verified |\n| `logs` | Receive log events matching filter criteria |\n| `transfers` | Receive QU transfer events (logType=0) with optional identity filter |\n| `tickStream` | Receive full tick data with filtered transactions and logs |\n\n## Catch-Up Behavior\n\nSubscriptions that specify `startLogId` (for logs/transfers) or `startTick` (for tickStream) will replay historical data before switching to real-time. During catch-up:\n- Log/transfer events include `\"isCatchUp\": true`\n- TickStream events include `\"isCatchUp\": true` in each tick object\n- A `catchUpComplete` notification is sent when all historical data has been delivered\n- Events that arrive during catch-up are queued and delivered in order before switching to real-time",
+        "operationId": "wsQubic",
+        "responses": {
+          "101": {
+            "description": "Switching Protocols - WebSocket connection established"
+          },
+          "400": {
+            "description": "Bad Request - Not a WebSocket upgrade request"
+          }
+        }
+      }
     }
   },
   "components": {

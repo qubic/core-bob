@@ -1528,6 +1528,8 @@ Monitor QU transfers for specific identities. This is a specialized log subscrip
 | `body` | object | Parsed log body (from, to, amount for QU_TRANSFER) |
 | `isCatchUp` | boolean | `true` if this is historical data from catch-up |
 
+> **Catch-Up:** When `startLogId` is specified, historical events are replayed with `isCatchUp: true`. A `catchUpComplete` notification is sent when all historical data has been delivered (see [Subscribe to Logs](#subscribe-to-logs) for details).
+
 | Ethereum Equivalent |
 |---------------------|
 | `eth_subscribe` with `"logs"` and Transfer event filter |
@@ -1618,7 +1620,22 @@ When `startLogId` is specified:
 1. The subscription is created immediately
 2. Historical logs from `startLogId` to current are sent with `isCatchUp: true`
 3. Real-time logs that arrive during catch-up are queued (up to 10,000 logs)
-4. After catch-up completes, queued logs are delivered, then real-time continues with `isCatchUp: false`
+4. After catch-up completes, queued logs are delivered, then a `catchUpComplete` notification is sent
+5. All subsequent events are real-time with `isCatchUp: false`
+
+**Catch-Up Complete Notification:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "qubic_subscription",
+  "params": {
+    "subscription": "qubic_sub_2",
+    "result": {
+      "catchUpComplete": true
+    }
+  }
+}
+```
 
 **Queue Mode:**
 - If the client is more than 10,000 logs behind, real-time logs are skipped (not queued) to prevent memory exhaustion
@@ -1881,7 +1898,23 @@ This is ideal for:
 When `startTick` is specified and is less than the current tick:
 1. The subscription is created immediately
 2. Historical ticks from `startTick` to current are sent with `isCatchUp: true`
-3. After catch-up completes, real-time ticks continue with `isCatchUp: false`
+3. Real-time ticks that arrive during catch-up are queued and delivered in order
+4. After catch-up completes, a `catchUpComplete` notification is sent
+5. All subsequent ticks are real-time with `isCatchUp: false`
+
+**Catch-Up Complete Notification:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "qubic_subscription",
+  "params": {
+    "subscription": "qubic_sub_3",
+    "result": {
+      "catchUpComplete": true
+    }
+  }
+}
+```
 
 **Heartbeat Ticks:**
 
