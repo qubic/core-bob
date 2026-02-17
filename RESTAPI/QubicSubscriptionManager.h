@@ -119,7 +119,7 @@ public:
     bool unsubscribe(const drogon::WebSocketConnectionPtr& conn,
                      const std::string& subscriptionId);
 
-    // Event distribution (called from LogSubscriptionManager)
+    // Event distribution (called from LoggingEventProcessor)
     void onNewTick(uint32_t tick, const TickData& td);
     void onNewLogs(uint32_t tick, const std::vector<LogEvent>& logs, const TickData& td);
     void onVerifiedTick(uint32_t tick, uint16_t epoch,

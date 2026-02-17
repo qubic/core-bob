@@ -216,7 +216,7 @@ void QubicSubscriptionManager::onNewLogs(uint32_t tick, const std::vector<LogEve
                 }
             }
 
-            // Convert to log format (same as LogSubscriptionManager)
+            // Convert to log format
             Json::Value qubicLog = const_cast<LogEvent&>(log).parseToJsonValueWithExtraData(td, txIndex);
 
             // Get source/destination identities for filtering (from body.from/to)
@@ -1266,7 +1266,7 @@ void QubicSubscriptionManager::performLogsCatchUp(
                     }
                 }
 
-                // Convert to log format (same as LogSubscriptionManager)
+                // Convert to log format
                 Json::Value qubicLog = log.parseToJsonValueWithExtraData(td, txIndex);
 
                 // Get source/destination identities for filtering (from body.from/to)
@@ -1388,7 +1388,7 @@ void QubicSubscriptionManager::performLogsCatchUp(
                 }
             }
 
-            // Convert to log format (same as LogSubscriptionManager)
+            // Convert to log format
             Json::Value qubicLog = pendingLog->log.parseToJsonValueWithExtraData(pendingTd, txIndex);
             // No isCatchUp field for real-time logs
 

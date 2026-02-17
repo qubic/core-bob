@@ -146,8 +146,6 @@ SET(FILES
 		${CMAKE_SOURCE_DIR}/RESTAPI/ApiHelpers.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/querySmartContract.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/RESTServer.cpp
-		${CMAKE_SOURCE_DIR}/RESTAPI/LogSubscriptionManager.cpp
-		${CMAKE_SOURCE_DIR}/RESTAPI/LogWebSocket.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/QubicRpcMapper.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/QubicRpcWebSocket.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/QubicRpcMethods.cpp

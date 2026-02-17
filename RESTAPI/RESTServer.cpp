@@ -3,8 +3,7 @@
 #include "drogon/HttpResponse.h"
 #include "drogon/utils/Utilities.h"
 
-// Include WebSocket controllers to trigger auto-registration
-#include "LogWebSocket.h"
+// Include WebSocket controller to trigger auto-registration
 #include "QubicRpcWebSocket.h"
 #include "QubicRpcHandler.h"
 #include "QubicSubscriptionManager.h"

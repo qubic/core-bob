@@ -15,22 +15,6 @@
     }
   ],
   "paths": {
-    "/ws/logs": {
-      "get": {
-        "tags": ["WebSocket"],
-        "summary": "Log event subscription (WebSocket)",
-        "description": "**WebSocket endpoint** for real-time log event subscriptions.\n\nConnect using a WebSocket client (e.g., `wscat -c ws://localhost:40420/ws/logs`).\n\n## Protocol\n\n### Client → Server Messages\n\n**Subscribe to log events:**\n```json\n{\"action\": \"subscribe\", \"scIndex\": 1, \"logType\": 100001}\n```\n\n**Subscribe with catch-up (receive historical events from lastTick):**\n```json\n{\"action\": \"subscribe\", \"scIndex\": 1, \"logType\": 100001, \"lastTick\": 12345678}\n```\n\n**Batch subscribe:**\n```json\n{\"action\": \"subscribe\", \"subscriptions\": [{\"scIndex\": 1, \"logType\": 100001}, {\"scIndex\": 2, \"logType\": 100002}], \"lastTick\": 12345678}\n```\n\n**Unsubscribe:**\n```json\n{\"action\": \"unsubscribe\", \"scIndex\": 1, \"logType\": 100001}\n```\n\n**Unsubscribe from all:**\n```json\n{\"action\": \"unsubscribeAll\"}\n```\n\n**Ping (keep-alive):**\n```json\n{\"action\": \"ping\"}\n```\n\n### Server → Client Messages\n\n**Welcome (on connect):**\n```json\n{\"type\": \"welcome\", \"currentVerifiedTick\": 12345678, \"currentEpoch\": 152}\n```\n\n**Log event:**\n```json\n{\"type\": \"log\", \"scIndex\": 1, \"logType\": 100001, \"isCatchUp\": false, \"message\": {...}}\n```\n\n**Catch-up complete:**\n```json\n{\"type\": \"catchUpComplete\", \"fromTick\": 12345678, \"toTick\": 12345700, \"logsDelivered\": 42}\n```\n\n**Acknowledgment:**\n```json\n{\"type\": \"ack\", \"action\": \"subscribe\", \"success\": true}\n```\n\n**Pong:**\n```json\n{\"type\": \"pong\", \"serverTick\": 12345678, \"serverEpoch\": 152}\n```\n\n**Error:**\n```json\n{\"type\": \"error\", \"message\": \"...\", \"code\": \"ERROR_CODE\"}\n```\n\n## Subscription Keys\n\n- **scIndex**: Smart contract index (0 for core events like QU_TRANSFER)\n- **logType**: Log type ID (0=QU_TRANSFER, 1=ASSET_ISSUANCE, 2=ASSET_OWNERSHIP_CHANGE, etc., or custom types ≥100000)\n\n## Core Event Types (scIndex=0)\n\n| logType | Description |\n|---------|-------------|\n| 0 | QU_TRANSFER |\n| 1 | ASSET_ISSUANCE |\n| 2 | ASSET_OWNERSHIP_CHANGE |\n| 3 | ASSET_POSSESSION_CHANGE |\n| 8 | BURNING |\n| 11 | ASSET_OWNERSHIP_MANAGING_CONTRACT_CHANGE |\n| 12 | ASSET_POSSESSION_MANAGING_CONTRACT_CHANGE |",
-        "operationId": "wsLogs",
-        "responses": {
-          "101": {
-            "description": "Switching Protocols - WebSocket connection established"
-          },
-          "400": {
-            "description": "Bad Request - Not a WebSocket upgrade request"
-          }
-        }
-      }
-    },
     "/status": {
       "get": {
         "tags": ["System"],
@@ -1003,71 +987,10 @@
           }
         }
       },
-      "WebSocketSubscribeMessage": {
-        "type": "object",
-        "description": "WebSocket subscribe message format (connect to /ws/logs)",
-        "properties": {
-          "action": {
-            "type": "string",
-            "enum": ["subscribe", "unsubscribe", "unsubscribeAll", "ping"]
-          },
-          "scIndex": {
-            "type": "integer",
-            "format": "uint32"
-          },
-          "logType": {
-            "type": "integer",
-            "format": "uint32"
-          },
-          "lastTick": {
-            "type": "integer",
-            "format": "uint32",
-            "description": "Optional: specify to catch up from this tick. If omitted, only receives new events."
-          },
-          "subscriptions": {
-            "type": "array",
-            "description": "For batch subscriptions",
-            "items": {
-              "type": "object",
-              "properties": {
-                "scIndex": {
-                  "type": "integer"
-                },
-                "logType": {
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        }
-      },
-      "WebSocketLogMessage": {
-        "type": "object",
-        "description": "WebSocket log event pushed to subscribers",
-        "properties": {
-          "type": {
-            "type": "string",
-            "example": "log"
-          },
-          "scIndex": {
-            "type": "integer"
-          },
-          "logType": {
-            "type": "integer"
-          },
-          "isCatchUp": {
-            "type": "boolean"
-          },
-          "message": {
-            "type": "object",
-            "description": "Parsed log event (same format as REST API)"
-          }
-        }
-      }
     }
   },
   "tags": [
-    {"name": "WebSocket", "description": "Real-time WebSocket subscriptions for log events"},
+    {"name": "WebSocket", "description": "Real-time WebSocket subscriptions (JSON-RPC 2.0)"},
     {"name": "System", "description": "System status and health"},
     {"name": "Account", "description": "Account balance operations"},
     {"name": "Asset", "description": "Asset information"},

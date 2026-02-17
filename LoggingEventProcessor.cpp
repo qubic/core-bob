@@ -19,7 +19,6 @@
 #include "Profiler.h"
 #include "shim.h"
 #include <future>
-#include "RESTAPI/LogSubscriptionManager.h"
 #include "RESTAPI/QubicSubscriptionManager.h"
 
 using namespace std::chrono_literals;
@@ -897,10 +896,7 @@ verifyNodeStateDigest:
             // Push verified logs to WebSocket subscribers (for logs/transfers subscriptions)
             // Note: tickStream subscriptions are notified from QubicIndexer after indexing
             // Wrapped in try-catch to ensure log verification continues even if notification fails
-            bool hasLogSubClients = LogSubscriptionManager::instance().getClientCount() > 0;
-            bool hasQubicSubClients = QubicSubscriptionManager::instance().getClientCount() > 0;
-
-            if (hasLogSubClients || hasQubicSubClients) {
+            if (QubicSubscriptionManager::instance().getClientCount() > 0) {
                 try {
                     if (!vle.empty()) {
                         // Group logs by tick for proper ordering
@@ -909,18 +905,25 @@ verifyNodeStateDigest:
                         for (const auto& log : vle) {
                             uint32_t logTick = log.getTick();
                             if (logTick != currentTick && !tickLogs.empty()) {
-                                LogSubscriptionManager::instance().pushVerifiedLogs(currentTick, gCurrentProcessingEpoch, tickLogs);
+                                TickData td{0};
+                                if (db_try_get_tick_data(currentTick, td)) {
+                                    QubicSubscriptionManager::instance().onNewTick(currentTick, td);
+                                    QubicSubscriptionManager::instance().onNewLogs(currentTick, tickLogs, td);
+                                }
                                 tickLogs.clear();
                             }
                             currentTick = logTick;
                             tickLogs.push_back(log);
                         }
                         if (!tickLogs.empty()) {
-                            LogSubscriptionManager::instance().pushVerifiedLogs(currentTick, gCurrentProcessingEpoch, tickLogs);
+                            TickData td{0};
+                            if (db_try_get_tick_data(currentTick, td)) {
+                                QubicSubscriptionManager::instance().onNewTick(currentTick, td);
+                                QubicSubscriptionManager::instance().onNewLogs(currentTick, tickLogs, td);
+                            }
                         }
-                    } else if (hasQubicSubClients) {
+                    } else {
                         // No logs but we still need to notify newTicks subscribers
-                        // Call with empty logs for processToTick
                         TickData td{0};
                         if (db_try_get_tick_data(processToTick, td)) {
                             QubicSubscriptionManager::instance().onNewTick(processToTick, td);

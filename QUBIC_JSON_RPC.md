@@ -1509,8 +1509,6 @@ Monitor QU transfers for specific identities. This is a specialized log subscrip
 }
 ```
 
-> **Note:** The log format is identical to the `/ws/log` WebSocket endpoint format, making it easy to migrate between endpoints.
-
 **Result Fields:**
 
 | Field | Type | Description |
@@ -1611,8 +1609,6 @@ Subscribe to log events with optional filters. Supports catch-up from a specific
   }
 }
 ```
-
-> **Note:** The log format is identical to the `/ws/log` WebSocket endpoint format, making it easy to migrate between endpoints.
 
 **Catch-Up Behavior:**
 
