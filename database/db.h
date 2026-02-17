@@ -516,3 +516,6 @@ bool db_delete_transaction(std::string hash);
 bool db_delete_logs(uint16_t epoch, long long start, long long end);
 
 bool db_get_endepoch_log_range_info(const uint16_t epoch, long long &start, long long &length, LogRangesPerTxInTick &lr);
+
+bool db_copy(const std::string &key1, const std::string &key2);
+bool db_hcopy(const std::string &key1, const std::string &key2);

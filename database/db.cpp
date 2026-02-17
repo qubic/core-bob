@@ -1267,6 +1267,34 @@ bool db_rename(const std::string &key1, const std::string &key2) {
     }
 }
 
+bool db_copy(const std::string &key1, const std::string &key2) {
+    if (!g_redis) return false;
+    try {
+        auto val = g_redis->get(key1);
+        if (!val) return false;
+        g_redis->set(key2, *val);
+        return true;
+    } catch (const sw::redis::Error &e) {
+        Logger::get()->error("Redis error in db_copy: {}\n", e.what());
+        return false;
+    }
+}
+
+bool db_hcopy(const std::string &key1, const std::string &key2) {
+    if (!g_redis) return false;
+    try {
+        std::unordered_map<std::string, std::string> fields;
+        g_redis->hgetall(key1, std::inserter(fields, fields.begin()));
+        if (!fields.empty()) {
+            g_redis->hmset(key2, fields.begin(), fields.end());
+        }
+        return true;
+    } catch (const sw::redis::Error &e) {
+        Logger::get()->error("Redis error in db_hcopy: {}\n", e.what());
+        return false;
+    }
+}
+
 bool db_insert_u32(const std::string key, uint32_t value) {
     if (!g_redis) return false;
     try {

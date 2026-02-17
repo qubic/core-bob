@@ -971,20 +971,26 @@ verifyNodeStateDigest:
         // exit all requesters
         // serve slower nodes 30 more minutes before officially switching epoch
         Logger::get()->info("Received END_EPOCH message. Serving 30 minutes and then closing BOB");
-        SLEEP(1000ULL * gTimeToWaitEpochEnd); // 30 minutes
-        gStopFlag.store(true);
-        // the endTick tick is a virtual tick, we need to migrate its data to new keys:
-        uint32_t endTick = lastQuorumTick + 1; // the system just "borrow" this tick index
 
-        db_rename("tick_log_range:" + std::to_string(endTick),
-                      "end_epoch:tick_log_range:"+std::to_string(gCurrentProcessingEpoch));
-        db_rename("log_ranges:" + std::to_string(endTick),
-                      "end_epoch:log_ranges:"+std::to_string(gCurrentProcessingEpoch));
         std::string key = "end_epoch_tick:" + std::to_string(gCurrentProcessingEpoch);
+        uint32_t endTick = lastQuorumTick + 1; // the system just "borrow" this tick index
         db_insert_u32(key, endTick);
+        // copy log range struct
+        db_copy("log_ranges:" + std::to_string(endTick), "end_epoch:log_ranges:"+std::to_string(gCurrentProcessingEpoch));
+        // copy log range meta data per tick
+        db_hcopy("tick_log_range:" + std::to_string(endTick), "end_epoch:tick_log_range:"+std::to_string(gCurrentProcessingEpoch));
         // end epoch tick is a virtual tick for logging, we set it back to lastQuorumTick
         db_update_field("db_status", "latest_event_tick", std::to_string(lastQuorumTick));
         db_insert_u32("verified_history:" + std::to_string(gCurrentProcessingEpoch), lastQuorumTick); // update historical tracker
+        SLEEP(1000ULL * gTimeToWaitEpochEnd); // default: 30 minutes
+        gStopFlag.store(true);
+        // the endTick tick is a virtual tick, we need to migrate its data to new keys:
+        // these operation are needed when it does seamless transition because in new epoch
+        // the init tick will be the same as this end epoch tick
+        db_rename("tick_log_range:" + std::to_string(endTick),
+                  "backup_end_epoch:tick_log_range:"+std::to_string(gCurrentProcessingEpoch));
+        db_rename("log_ranges:" + std::to_string(endTick),
+                  "backup_end_epoch:log_ranges:"+std::to_string(gCurrentProcessingEpoch));
     }
     Logger::get()->info("verifyLoggingEvent stopping gracefully.");
 }
