@@ -171,8 +171,6 @@ ADD_EXECUTABLE(pop10 pop10.cpp)
 target_link_libraries(bob PRIVATE bob_lib)
 target_link_libraries(pop10 PRIVATE bob_lib)
 
-# ADD_EXECUTABLE(migrator migrator/migrator.cpp)
-# target_link_libraries(migrator PRIVATE bob_lib)
 # --- Testing with Google Test ---
 enable_testing()
 include(GoogleTest)
