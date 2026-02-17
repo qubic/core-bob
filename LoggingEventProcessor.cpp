@@ -1030,7 +1030,15 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
                 connPoolWithPwd.sendWithPasscodeToRandom((uint8_t*)&ralr, 0, sizeof(RequestAllLogIdRangesFromTick), RequestAllLogIdRangesFromTick::type(), true);
             } else {
                 long long fromId, length;
-                if (!db_try_get_log_range_for_tick(gCurrentFetchingLogTick, fromId, length)) continue;
+                if (!db_try_get_log_range_for_tick(gCurrentFetchingLogTick, fromId, length))
+                {
+                    // unexpected exit may lead here: have logRange struct but the metadata for tick.
+                    // => regenerate the tick_log_range:tick
+                    LogRangesPerTxInTick logRange{};
+                    db_try_get_log_ranges(gCurrentFetchingLogTick, logRange);
+                    db_insert_log_range(gCurrentFetchingLogTick, logRange);
+                    continue;
+                }
                 if (fromId == -1 || length == -1)
                 {
                     Logger::get()->trace("Tick {} doesn't generate any log. Advancing logEvent tick", gCurrentFetchingLogTick);
