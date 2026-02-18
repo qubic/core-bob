@@ -301,7 +301,8 @@ Returns current epoch info including tick range and log boundaries.
     "initialTick": 39862000,
     "endTick": 0,
     "endTickStartLogId": -1,
-    "endTickEndLogId": -3
+    "endTickEndLogId": -3,
+    "latestLogId": 987654321
   }
 }
 ```
@@ -315,6 +316,7 @@ Returns current epoch info including tick range and log boundaries.
 | `endTick` | Last tick of this epoch (0 if epoch still active) |
 | `endTickStartLogId` | Starting log ID for end-of-epoch events (-1 if not available) |
 | `endTickEndLogId` | Ending log ID for end-of-epoch events |
+| `latestLogId` | Latest processed log ID (-1 if no log data exists) |
 
 | Ethereum Equivalent |
 |---------------------|
@@ -348,10 +350,24 @@ Returns epoch info for any epoch (current or historical).
     "initialTick": 39862000,
     "endTick": 40100000,
     "endTickStartLogId": 1234567890,
-    "endTickEndLogId": 1234569000
+    "endTickEndLogId": 1234569000,
+    "lastIndexedTick": 40100000,
+    "latestLogId": 1234569000
   }
 }
 ```
+
+**Result Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `epoch` | number | Epoch number |
+| `initialTick` | number | First tick of this epoch |
+| `endTick` | number | End-of-epoch virtual tick (0 if epoch not yet closed) |
+| `endTickStartLogId` | number | First log ID in the end-epoch tick (-1 if not available) |
+| `endTickEndLogId` | number | Last log ID in the end-epoch tick (-1 if not available) |
+| `lastIndexedTick` | number | Last tick that has been fully indexed |
+| `latestLogId` | number | Latest processed log ID. For the current epoch: live counter from the log processor. For past epochs: equals `endTickEndLogId`. Returns -1 if no log data exists. |
 
 | Ethereum Equivalent |
 |---------------------|

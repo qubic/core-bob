@@ -164,6 +164,7 @@ Json::Value QubicRpcMethods::getCurrentEpoch() {
     result["endTick"] = info.endTick;
     result["endTickStartLogId"] = Json::Int64(info.endTickStartLogId);
     result["endTickEndLogId"] = Json::Int64(info.endTickEndLogId);
+    result["latestLogId"] = Json::Int64(info.latestLogId);
 
     return result;
 }

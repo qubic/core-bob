@@ -669,6 +669,31 @@
           "initialTick": {
             "type": "integer",
             "format": "uint32"
+          },
+          "endTick": {
+            "type": "integer",
+            "format": "uint32",
+            "description": "End-of-epoch virtual tick (0 if epoch not yet closed)"
+          },
+          "endTickStartLogId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "First log ID in the end-epoch tick (-1 if not available)"
+          },
+          "endTickEndLogId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Last log ID in the end-epoch tick (-1 if not available)"
+          },
+          "lastIndexedTick": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Last tick that has been fully indexed"
+          },
+          "latestLogId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Latest processed log ID. Live counter for current epoch, endTickEndLogId for past epochs. -1 if no data."
           }
         }
       },
