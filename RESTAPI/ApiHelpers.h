@@ -59,6 +59,7 @@ struct EpochInfo {
     uint32_t endTick = 0;
     int64_t endTickStartLogId = -1;
     int64_t endTickEndLogId = -1;
+    int64_t latestLogId = -1;
     uint32_t currentTick = 0;
     uint32_t lastIndexedTick = 0;
     bool found = false;

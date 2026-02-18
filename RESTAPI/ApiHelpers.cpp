@@ -187,6 +187,12 @@ EpochInfo getEpochInfo(uint16_t epoch) {
     db_get_u32("lastIndexedTick:"+std::to_string(epoch), lastIndexedTick);
     info.lastIndexedTick = lastIndexedTick;
 
+    if (epoch == gCurrentProcessingEpoch.load()) {
+        info.latestLogId = db_get_latest_log_id(epoch);
+    } else if (info.endTickEndLogId >= 0) {
+        info.latestLogId = info.endTickEndLogId;
+    }
+
     info.found = true;
     return info;
 }

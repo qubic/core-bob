@@ -551,6 +551,7 @@ std::string bobGetEpochInfo(uint16_t epoch)
     root["endTickStartLogId"] = Json::Int64(info.endTickStartLogId);
     root["endTickEndLogId"] = Json::Int64(info.endTickEndLogId);
     root["lastIndexedTick"] = Json::Int64(info.lastIndexedTick);
+    root["latestLogId"] = Json::Int64(info.latestLogId);
     Json::FastWriter writer;
     return writer.write(root);
 }
