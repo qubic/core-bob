@@ -1,7 +1,7 @@
 
 #pragma once
 
-#define BOB_VERSION "1.2.8"
+#define BOB_VERSION "1.3.0"
 
 // These will be defined by CMake during build
 #ifndef GIT_COMMIT_HASH
