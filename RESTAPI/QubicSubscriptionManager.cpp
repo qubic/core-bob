@@ -470,6 +470,11 @@ bool QubicSubscriptionManager::matchesAnyTxFilter(
     uint16_t inputType,
     const TickStreamFilter& sub) const
 {
+    // Exclude all transactions if requested
+    if (sub.excludeTxs) {
+        return false;
+    }
+
     // Empty filter list means match all
     if (sub.txFilters.empty()) {
         return true;
@@ -487,6 +492,11 @@ bool QubicSubscriptionManager::matchesAnyLogFilter(
     const LogEvent& log,
     const TickStreamFilter& sub) const
 {
+    // Exclude all logs if requested
+    if (sub.excludeLogs) {
+        return false;
+    }
+
     // Empty filter list means match all
     if (sub.logFilters.empty()) {
         return true;

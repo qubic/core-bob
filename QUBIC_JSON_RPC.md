@@ -1717,7 +1717,9 @@ This is ideal for:
     ],
     "startTick": 12490000,
     "skipEmptyTicks": false,
-    "includeInputData": true
+    "includeInputData": true,
+    "excludeTxs": false,
+    "excludeLogs": false
   }],
   "id": 1
 }
@@ -1732,6 +1734,8 @@ This is ideal for:
 | `startTick` | number | `0` | Start tick for catch-up (0 = current tick only) |
 | `skipEmptyTicks` | boolean | `false` | Skip ticks with no matching data (heartbeat every 120 ticks) |
 | `includeInputData` | boolean | `true` | Include full inputData hex in transactions |
+| `excludeTxs` | boolean | `false` | Exclude all transactions from output |
+| `excludeLogs` | boolean | `false` | Exclude all logs from output |
 
 **Transaction Filter Fields (`txFilters`):**
 

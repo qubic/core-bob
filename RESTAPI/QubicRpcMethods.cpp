@@ -934,6 +934,16 @@ std::string QubicRpcMethods::subscribe(
             if (filterParams.isMember("includeInputData") && filterParams["includeInputData"].isBool()) {
                 filter.includeInputData = filterParams["includeInputData"].asBool();
             }
+
+            // Parse excludeTxs (default: false)
+            if (filterParams.isMember("excludeTxs") && filterParams["excludeTxs"].isBool()) {
+                filter.excludeTxs = filterParams["excludeTxs"].asBool();
+            }
+
+            // Parse excludeLogs (default: false)
+            if (filterParams.isMember("excludeLogs") && filterParams["excludeLogs"].isBool()) {
+                filter.excludeLogs = filterParams["excludeLogs"].asBool();
+            }
         }
 
         // Create the subscription

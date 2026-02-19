@@ -58,6 +58,8 @@ struct TickStreamFilter {
     std::vector<LogStreamFilter> logFilters;
     bool skipEmptyTicks{false};   // If true, skip ticks with no matches (except every 120 ticks)
     bool includeInputData{true};  // Include full inputData in transactions
+    bool excludeTxs{false};       // If true, exclude all transactions from output
+    bool excludeLogs{false};      // If true, exclude all logs from output
 };
 
 // Transaction data for streaming
