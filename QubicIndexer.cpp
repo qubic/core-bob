@@ -62,9 +62,9 @@ static void indexTick(uint32_t tick, const TickData &td) {
             if (logrange.length[i] > 0) {
                 if (!db_try_get_log(td.epoch, logrange.fromLogId[i], firstEvent))
                 {
-                    Logger::get()->critical("Failed to index data for tick {}. Malformed database."
+                    Logger::get()->critical("Failed to index data for tick {} - epoch {} - logId {}. Malformed database."
                                             "You need to force bob to reverified and reindex DB with command:"
-                                            "hdel db_status latest_verified_tick and hdel db_status last_indexed_tick", tick);
+                                            "hdel db_status latest_verified_tick and hdel db_status last_indexed_tick", tick, td.epoch, logrange.fromLogId[i]);
                     exit(1);
                 }
                 if (firstEvent.getType() == QU_TRANSFER) { // QuTransfer type
@@ -88,8 +88,8 @@ static void indexTick(uint32_t tick, const TickData &td) {
         }
     }
 
-    // handling 5 special events
-    for (int i = SC_INITIALIZE_TX; i <= SC_END_EPOCH_TX; i++)
+    // handling last special events
+    for (int i = SC_INITIALIZE_TX; i < LOG_TX_PER_TICK; i++)
     {
         std::string key = "itx:" + std::to_string(tick) + "_" + std::to_string(i);
         db_set_indexed_tx(key.c_str(), i, logrange.fromLogId[i],
