@@ -1542,7 +1542,7 @@ Monitor QU transfers for specific identities. This is a specialized log subscrip
 | `body` | object | Parsed log body (from, to, amount for QU_TRANSFER) |
 | `isCatchUp` | boolean | `true` if this is historical data from catch-up |
 
-> **Catch-Up:** When `startLogId` is specified, historical events are replayed with `isCatchUp: true`. A `catchUpComplete` notification is sent when all historical data has been delivered (see [Subscribe to Logs](#subscribe-to-logs) for details).
+> **Catch-Up:** When `startLogId` is specified, historical events are replayed with `isCatchUp: true`. Periodic `catchUpProgress` notifications report progress, and a `catchUpComplete` notification is sent when all historical data has been delivered (see [Subscribe to Logs](#subscribe-to-logs) for details).
 
 | Ethereum Equivalent |
 |---------------------|
@@ -1631,9 +1631,40 @@ Subscribe to log events with optional filters. Supports catch-up from a specific
 When `startLogId` is specified:
 1. The subscription is created immediately
 2. Historical logs from `startLogId` to current are sent with `isCatchUp: true`
-3. Real-time logs that arrive during catch-up are queued (up to 10,000 logs)
-4. After catch-up completes, queued logs are delivered, then a `catchUpComplete` notification is sent
-5. All subsequent events are real-time with `isCatchUp: false`
+3. During catch-up, periodic `catchUpProgress` notifications report progress
+4. Real-time logs that arrive during catch-up are queued (up to 10,000 logs)
+5. After catch-up completes, queued logs are delivered, then a `catchUpComplete` notification is sent
+6. All subsequent events are real-time with `isCatchUp: false`
+
+**Catch-Up Progress Notification (sent periodically during catch-up):**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "qubic_subscription",
+  "params": {
+    "subscription": "qubic_sub_2",
+    "result": {
+      "catchUpProgress": true,
+      "current": 50000,
+      "total": 200000,
+      "matched": 1234,
+      "epoch": 150,
+      "position": 987654,
+      "percent": 25
+    }
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `catchUpProgress` | boolean | Always `true` for progress notifications |
+| `current` | number | Number of items processed so far |
+| `total` | number | Estimated total items to process |
+| `matched` | number | Number of items matching the subscription filter |
+| `epoch` | number | Current epoch being processed |
+| `position` | number | Last processed position (logId for log subscriptions, tick number for tick subscriptions) |
+| `percent` | number | Completion percentage (0-100) |
 
 **Catch-Up Complete Notification:**
 ```json
@@ -1643,7 +1674,11 @@ When `startLogId` is specified:
   "params": {
     "subscription": "qubic_sub_2",
     "result": {
-      "catchUpComplete": true
+      "catchUpComplete": true,
+      "totalProcessed": 200000,
+      "totalMatched": 4567,
+      "epoch": 150,
+      "lastPosition": 1087654
     }
   }
 }
@@ -1914,9 +1949,30 @@ This is ideal for:
 When `startTick` is specified and is less than the current tick:
 1. The subscription is created immediately
 2. Historical ticks from `startTick` to current are sent with `isCatchUp: true`
-3. Real-time ticks that arrive during catch-up are queued and delivered in order
-4. After catch-up completes, a `catchUpComplete` notification is sent
-5. All subsequent ticks are real-time with `isCatchUp: false`
+3. During catch-up, periodic `catchUpProgress` notifications report progress
+4. Real-time ticks that arrive during catch-up are queued and delivered in order
+5. After catch-up completes, a `catchUpComplete` notification is sent
+6. All subsequent ticks are real-time with `isCatchUp: false`
+
+**Catch-Up Progress Notification (sent periodically during catch-up):**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "qubic_subscription",
+  "params": {
+    "subscription": "qubic_sub_3",
+    "result": {
+      "catchUpProgress": true,
+      "current": 500,
+      "total": 2000,
+      "matched": 120,
+      "epoch": 150,
+      "position": 12490500,
+      "percent": 25
+    }
+  }
+}
+```
 
 **Catch-Up Complete Notification:**
 ```json
@@ -1926,7 +1982,11 @@ When `startTick` is specified and is less than the current tick:
   "params": {
     "subscription": "qubic_sub_3",
     "result": {
-      "catchUpComplete": true
+      "catchUpComplete": true,
+      "totalProcessed": 2000,
+      "totalMatched": 456,
+      "epoch": 150,
+      "lastPosition": 12492000
     }
   }
 }

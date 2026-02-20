@@ -154,6 +154,17 @@ private:
                                     const std::string& subscriptionId,
                                     const std::string& resultJson);
 
+    // Catch-up progress and completion helpers
+    // position: current tick number (tick-based) or current logId (log-based)
+    void sendCatchUpProgress(const drogon::WebSocketConnectionPtr& conn,
+                             const std::string& subscriptionId,
+                             int64_t current, int64_t total, int64_t matched,
+                             uint16_t epoch, int64_t position);
+    void sendCatchUpComplete(const drogon::WebSocketConnectionPtr& conn,
+                             const std::string& subscriptionId,
+                             int64_t totalProcessed, int64_t totalMatched,
+                             uint16_t epoch, int64_t lastPosition);
+
     // TickStream filter matching helpers
     bool matchesTxFilter(const std::string& from, const std::string& to,
                          int64_t amount, uint16_t inputType,

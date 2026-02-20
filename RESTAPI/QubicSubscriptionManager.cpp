@@ -357,6 +357,40 @@ void QubicSubscriptionManager::sendSubscriptionMessageRaw(
     }
 }
 
+void QubicSubscriptionManager::sendCatchUpProgress(
+    const drogon::WebSocketConnectionPtr& conn,
+    const std::string& subscriptionId,
+    int64_t current, int64_t total, int64_t matched,
+    uint16_t epoch, int64_t position)
+{
+    Json::Value result(Json::objectValue);
+    result["catchUpProgress"] = true;
+    result["current"] = static_cast<Json::Int64>(current);
+    result["total"] = static_cast<Json::Int64>(total);
+    result["matched"] = static_cast<Json::Int64>(matched);
+    result["epoch"] = epoch;
+    result["position"] = static_cast<Json::Int64>(position);
+    if (total > 0) {
+        result["percent"] = static_cast<int>((current * 100) / total);
+    }
+    sendSubscriptionMessage(conn, subscriptionId, result);
+}
+
+void QubicSubscriptionManager::sendCatchUpComplete(
+    const drogon::WebSocketConnectionPtr& conn,
+    const std::string& subscriptionId,
+    int64_t totalProcessed, int64_t totalMatched,
+    uint16_t epoch, int64_t lastPosition)
+{
+    Json::Value result(Json::objectValue);
+    result["catchUpComplete"] = true;
+    result["totalProcessed"] = static_cast<Json::Int64>(totalProcessed);
+    result["totalMatched"] = static_cast<Json::Int64>(totalMatched);
+    result["epoch"] = epoch;
+    result["lastPosition"] = static_cast<Json::Int64>(lastPosition);
+    sendSubscriptionMessage(conn, subscriptionId, result);
+}
+
 std::string QubicSubscriptionManager::subscribeTickStream(
     const drogon::WebSocketConnectionPtr& conn,
     const TickStreamFilter& filter,
@@ -810,6 +844,12 @@ void QubicSubscriptionManager::performCatchUp(
 
         Logger::get()->info("Starting TickStream catch-up {} from {} to {}", subId, fromTick, toTick);
 
+        int64_t totalTicks = static_cast<int64_t>(toTick) - fromTick + 1;
+        int64_t processedTicks = 0;
+        int64_t matchedTicks = 0;
+        uint16_t lastEpoch = 0;
+        const int64_t PROGRESS_INTERVAL = std::max<int64_t>(totalTicks / 20, 100); // ~5% or every 100 ticks
+
         for (uint32_t tick = fromTick; tick <= toTick; ++tick) {
             // Check if shutdown is requested
             if (stopFlag_.load()) {
@@ -843,6 +883,7 @@ void QubicSubscriptionManager::performCatchUp(
 
             // Get epoch from tick data
             uint16_t epoch = td.epoch;
+            lastEpoch = epoch;
 
             // Get logs for this tick
             bool success = false;
@@ -924,6 +965,14 @@ void QubicSubscriptionManager::performCatchUp(
             bool hasMatches = !matchedTxs.empty() || !matchedLogs.empty();
             bool isHeartbeatTick = (tick % 120 == 0);
 
+            processedTicks++;
+            if (hasMatches) matchedTicks++;
+
+            // Send progress report periodically
+            if (processedTicks % PROGRESS_INTERVAL == 0) {
+                sendCatchUpProgress(conn, subId, processedTicks, totalTicks, matchedTicks, epoch, tick);
+            }
+
             if (filter.skipEmptyTicks && !hasMatches && !isHeartbeatTick) {
                 continue;
             }
@@ -986,12 +1035,11 @@ void QubicSubscriptionManager::performCatchUp(
                 if (it->second.pendingTicks.empty()) {
                     // No more pending ticks - mark catch-up as complete
                     it->second.catchUpInProgress = false;
-                    Logger::get()->info("TickStream catch-up {} complete (drained {} pending ticks)",
-                                       subId, 0);
+                    uint32_t lastTick = it->second.lastTick;
+                    Logger::get()->info("TickStream catch-up {} complete (processed={}, matched={})",
+                                       subId, processedTicks, matchedTicks);
                     lock.unlock();
-                    Json::Value complete(Json::objectValue);
-                    complete["catchUpComplete"] = true;
-                    sendSubscriptionMessage(conn, subId, complete);
+                    sendCatchUpComplete(conn, subId, processedTicks, matchedTicks, lastEpoch, lastTick);
                     break;
                 }
 
@@ -1141,20 +1189,21 @@ void QubicSubscriptionManager::performCatchUp(
         // Final check to mark complete if we exited early
         {
             bool wasCatchingUp = false;
+            uint32_t lastTick = 0;
             {
                 std::unique_lock lock(mutex_);
                 auto it = subscriptions_.find(subId);
                 if (it != subscriptions_.end() && it->second.catchUpInProgress) {
                     it->second.catchUpInProgress = false;
                     it->second.pendingTicks.clear();
+                    lastTick = it->second.lastTick;
                     wasCatchingUp = true;
-                    Logger::get()->info("TickStream catch-up {} complete", subId);
+                    Logger::get()->info("TickStream catch-up {} complete (processed={}, matched={})",
+                                       subId, processedTicks, matchedTicks);
                 }
             }
             if (wasCatchingUp) {
-                Json::Value complete(Json::objectValue);
-                complete["catchUpComplete"] = true;
-                sendSubscriptionMessage(conn, subId, complete);
+                sendCatchUpComplete(conn, subId, processedTicks, matchedTicks, lastEpoch, lastTick);
             }
         }
     }).detach();
@@ -1175,6 +1224,11 @@ void QubicSubscriptionManager::performLogsCatchUp(
         } guard{activeCatchUpThreads_};
 
         Logger::get()->info("Starting Logs catch-up {} from epoch {} logId {}", subId, epoch, fromLogId);
+
+        int64_t totalProcessed = 0;
+        int64_t totalMatched = 0;
+        int64_t lastProgressAt = 0;
+        const int64_t PROGRESS_INTERVAL = 100000;  // Report every 100000 logs processed
 
         const int64_t BATCH_SIZE = 1000;  // Fetch 1000 logs at a time
         const int64_t QUEUE_THRESHOLD = 10000;  // Start queuing when within this range
@@ -1300,9 +1354,12 @@ void QubicSubscriptionManager::performLogsCatchUp(
                 }
 
                 // Check if log matches filter
+                totalProcessed++;
                 if (!matchesFilter(log, filter, sourceIdentity, destIdentity)) {
                     continue;
                 }
+
+                totalMatched++;
 
                 // Add isCatchUp field
                 qubicLog["isCatchUp"] = true;
@@ -1321,6 +1378,13 @@ void QubicSubscriptionManager::performLogsCatchUp(
 
             // Update current position
             currentLogId = batchEnd + 1;
+
+            // Send progress report periodically
+            if (totalProcessed - lastProgressAt >= PROGRESS_INTERVAL) {
+                int64_t estimatedTotal = latestLogId - fromLogId + 1;
+                sendCatchUpProgress(conn, subId, totalProcessed, estimatedTotal, totalMatched, epoch, currentLogId - 1);
+                lastProgressAt = totalProcessed;
+            }
 
             // Check if we've caught up
             if (currentLogId > latestLogId) {
@@ -1360,11 +1424,10 @@ void QubicSubscriptionManager::performLogsCatchUp(
                     // No more pending logs, mark catch-up complete
                     it->second.catchUpInProgress = false;
                     it->second.lastLogId = -1;
-                    Logger::get()->info("Logs catch-up {} complete", subId);
+                    Logger::get()->info("Logs catch-up {} complete (processed={}, matched={})",
+                                       subId, totalProcessed, totalMatched);
                     lock.unlock();
-                    Json::Value complete(Json::objectValue);
-                    complete["catchUpComplete"] = true;
-                    sendSubscriptionMessage(conn, subId, complete);
+                    sendCatchUpComplete(conn, subId, totalProcessed, totalMatched, epoch, currentLogId - 1);
                     return;
                 }
             }
@@ -1423,13 +1486,12 @@ void QubicSubscriptionManager::performLogsCatchUp(
                     it->second.pendingLogs.clear();
                     it->second.lastLogId = -1;
                     wasCatchingUp = true;
-                    Logger::get()->info("Logs catch-up {} complete", subId);
+                    Logger::get()->info("Logs catch-up {} complete (processed={}, matched={})",
+                                       subId, totalProcessed, totalMatched);
                 }
             }
             if (wasCatchingUp) {
-                Json::Value complete(Json::objectValue);
-                complete["catchUpComplete"] = true;
-                sendSubscriptionMessage(conn, subId, complete);
+                sendCatchUpComplete(conn, subId, totalProcessed, totalMatched, epoch, currentLogId - 1);
             }
         }
     }).detach();
