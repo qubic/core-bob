@@ -218,6 +218,13 @@ Json::Value dispatchCommonMethod(const Json::Value& id,
                 params[0].asUInt(), params[1].asInt64(), params[2].asInt64()));
         }
 
+        if (method == "qubic_getTickLogRanges") {
+            if (!params.isArray() || params.size() < 1) {
+                return makeError(id, QubicRpcError::INVALID_PARAMS, "Missing parameter: array of tick numbers");
+            }
+            return makeResult(id, QubicRpcMethods::getTickLogRanges(params[0]));
+        }
+
         // ====================================================================
         // Epoch Methods
         // ====================================================================

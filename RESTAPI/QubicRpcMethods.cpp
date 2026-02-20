@@ -588,6 +588,37 @@ Json::Value QubicRpcMethods::getLogsByIdRange(uint16_t epoch, int64_t fromId, in
     return result;
 }
 
+Json::Value QubicRpcMethods::getTickLogRanges(const Json::Value& ticks) {
+    if (!ticks.isArray() || ticks.empty()) {
+        Json::Value error;
+        error["error"] = "Parameter must be a non-empty array of tick numbers";
+        return error;
+    }
+    if (ticks.size() > 1000) {
+        Json::Value error;
+        error["error"] = "Maximum 1000 ticks per request";
+        return error;
+    }
+
+    Json::Value result(Json::arrayValue);
+    for (const auto& tickVal : ticks) {
+        if (!tickVal.isNumeric()) continue;
+        uint32_t tick = tickVal.asUInt();
+        long long fromLogId = -1, length = -1;
+        Json::Value entry(Json::objectValue);
+        entry["tick"] = tick;
+        if (db_try_get_log_range_for_tick(tick, fromLogId, length) && fromLogId >= 0 && length >= 0) {
+            entry["fromLogId"] = static_cast<Json::Int64>(fromLogId);
+            entry["length"] = static_cast<Json::Int64>(length);
+        } else {
+            entry["fromLogId"] = Json::nullValue;
+            entry["length"] = Json::nullValue;
+        }
+        result.append(entry);
+    }
+    return result;
+}
+
 // ============================================================================
 // Asset Methods
 // ============================================================================

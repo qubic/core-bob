@@ -1097,6 +1097,46 @@ Returns logs by ID range (same as `/log/{epoch}/{from_id}/{to_id}` REST endpoint
 
 ---
 
+#### qubic_getTickLogRanges
+Returns logId ranges for given tick numbers. Useful for mapping tick numbers (from `qubic_findLogIds`) to logId ranges that can be fetched with `qubic_getLogsByIdRange`.
+
+**Parameters:**
+| Position | Type | Description |
+|----------|------|-------------|
+| 0 | array | Array of tick numbers (max 1000) |
+
+**Request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "qubic_getTickLogRanges",
+  "params": [[41000100, 41000200, 41000305]],
+  "id": 1
+}
+```
+
+**Response:**
+```json
+{
+  "result": [
+    { "tick": 41000100, "fromLogId": 500000, "length": 42 },
+    { "tick": 41000200, "fromLogId": 502100, "length": 18 },
+    { "tick": 41000305, "fromLogId": null, "length": null }
+  ]
+}
+```
+
+**Workflow: Fetch address-filtered logs from past epochs**
+1. `qubic_findLogIds` — get tick numbers matching your filter (scIndex, logType, topic/address, tick range)
+2. `qubic_getTickLogRanges` — convert those ticks to logId ranges
+3. `qubic_getLogsByIdRange` — fetch actual logs by epoch + logId range
+
+| Ethereum Equivalent |
+|---------------------|
+| N/A |
+
+---
+
 ### Smart Contract Methods
 
 #### qubic_querySmartContract
@@ -2054,6 +2094,7 @@ Cancel an active subscription.
 | N/A | `qubic_getTransfers` |
 | N/A | `qubic_findLogIds` |
 | N/A | `qubic_getLogsByIdRange` |
+| N/A | `qubic_getTickLogRanges` |
 | N/A | `qubic_getQuTransfers` |
 | N/A | `qubic_getAssetTransfers` |
 | N/A | `qubic_getAllAssetTransfers` |

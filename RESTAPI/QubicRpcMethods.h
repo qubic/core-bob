@@ -110,6 +110,11 @@ public:
     // @param toId: ending log ID (inclusive)
     static Json::Value getLogsByIdRange(uint16_t epoch, int64_t fromId, int64_t toId);
 
+    // qubic_getTickLogRanges - Returns logId ranges for given ticks
+    // @param ticks: array of tick numbers
+    // Returns: array of { "tick": ..., "fromLogId": ..., "length": ... }
+    static Json::Value getTickLogRanges(const Json::Value& ticks);
+
     // ========================================================================
     // Epoch Methods
     // ========================================================================
