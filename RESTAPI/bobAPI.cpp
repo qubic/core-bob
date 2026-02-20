@@ -165,6 +165,12 @@ std::string bobGetLog(uint16_t epoch, int64_t start, int64_t end)
         return "{\"error\":\"Wrong range\"}";
     }
 
+    // restrict max batch size 500k ~250MB of data, to prevent OOM and long processing time. For larger range, users should use pagination or smaller range.
+    const int64_t MAX_BATCH_SIZE = 500000;
+    if (end - start + 1 > MAX_BATCH_SIZE) {
+        return "{\"error\":\"Batch size exceeds maximum of 500000. Please use a smaller range.\"}";
+    }
+
     std::string result;
     result.push_back('[');
     bool first = true;
