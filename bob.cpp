@@ -222,7 +222,7 @@ int runBob(int argc, char *argv[])
         set_this_thread_name("verify");
         IOVerifyThread();
     });
-
+    while (gCurrentIndexingTick == 0 || gCurrentVerifyLoggingTick == 0) SLEEP(100);
     initialCleanDB();
 
     auto request_thread = std::thread(
