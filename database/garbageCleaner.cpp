@@ -194,26 +194,24 @@ void initialCleanDB() // to clean up in case crashing last time
     if (db_get_u32(KEY_LAST_CLEAN_TICK_DATA, loadedCleanTickData) && loadedCleanTickData > 0)
     {
         lastCleanTickData = loadedCleanTickData;
-        Logger::get()->info("Loaded lastCleanTickData from DB: {}", lastCleanTickData);
     }
     else
     {
         lastCleanTickData = gInitialTick;
-        Logger::get()->info("No persisted lastCleanTickData found, using default: {}", lastCleanTickData);
     }
 
     if (db_get_u32(KEY_LAST_CLEAN_TX_TICK, loadedCleanTxTick) && loadedCleanTxTick > 0)
     {
         lastCleanTransactionTick = loadedCleanTxTick;
-        Logger::get()->info("Loaded lastCleanTransactionTick from DB: {}", lastCleanTransactionTick);
     }
     else
     {
         lastCleanTransactionTick = gInitialTick;
-        Logger::get()->info("No persisted lastCleanTransactionTick found, using default: {}", lastCleanTransactionTick);
     }
 
     uint32_t lastReportedTick = 0;
+    Logger::get()->info("lastCleanTickData: {} | lastCleanTransactionTick: {} | gCurrentIndexingTick {} | gTxTickToLive {}",
+                        lastCleanTransactionTick, lastCleanTransactionTick, gCurrentIndexingTick.load(), gTxTickToLive.load());
     cleanOnce(lastCleanTickData, lastCleanTransactionTick, lastReportedTick);
 }
 
