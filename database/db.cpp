@@ -1074,10 +1074,19 @@ return 0
 
 bool db_add_indexer(const std::string &key, uint32_t tickNumber)
 {
-    if (!g_redis) return false;
+    if (!g_kvrocks) return false;
     try {
         const std::string member = std::to_string(tickNumber);
-        g_redis->zadd(key, member, static_cast<double>(tickNumber), sw::redis::UpdateType::NOT_EXIST);
+        g_kvrocks->zadd(key, member, static_cast<double>(tickNumber), sw::redis::UpdateType::NOT_EXIST);
+
+        // Auto-clean to maintain maximum size
+        long long count = g_kvrocks->zcard(key);
+        if (count > gMaxActivitiesPerIndexKey) {
+            long long to_remove = count - gMaxActivitiesPerIndexKey;
+            std::vector<std::pair<std::string, double>> removed;
+            g_kvrocks->zpopmin(key, to_remove, std::back_inserter(removed));
+        }
+
         return true;
     } catch (const sw::redis::Error &e) {
         Logger::get()->error("Redis error in db_add_indexer: {}\n", e.what());
@@ -1085,14 +1094,13 @@ bool db_add_indexer(const std::string &key, uint32_t tickNumber)
     }
 }
 
-
 bool db_set_indexed_tx(const char *key,
                        int tx_index,
                        long long from_log_id,
                        long long to_log_id,
                        uint64_t timestamp,
                        bool isExecuted) {
-    if (!g_redis) return false;
+    if (!g_kvrocks) return false;
     try {
         indexedTxData data{
             static_cast<int32_t>(tx_index),
@@ -1102,7 +1110,7 @@ bool db_set_indexed_tx(const char *key,
             static_cast<uint64_t>(timestamp)
         };
         sw::redis::StringView val(reinterpret_cast<const char*>(&data), sizeof(data));
-        g_redis->set(key, val);
+        g_kvrocks->set(key, val);
         return true;
     } catch (const sw::redis::Error& e) {
         Logger::get()->error("Redis error in db_set_indexed_tx: {}", e.what());
@@ -1116,11 +1124,40 @@ bool db_get_indexed_tx(const char* tx_hash,
                        long long& to_log_id,
                        uint64_t& timestamp,
                        bool& executed) {
-    if (!g_redis) return false;
+    if (g_redis) { // TODO: remove at epoch 210, after all bobs migrate their old indexer data to kvrocks
+        try {
+            // Indexed TX stored under "itx:<hash>"
+            std::string key = std::string("itx:") + tx_hash;
+            auto val = g_redis->get(key);
+            if (val) {
+                if (val->size() != sizeof(indexedTxData)) {
+                    Logger::get()->warn("db_get_indexed_tx: size mismatch for key {}. got={}, expected={}",
+                                        key, val->size(), sizeof(indexedTxData));
+                    return false;
+                }
+
+                indexedTxData data{};
+                memcpy(&data, val->data(), sizeof(indexedTxData));
+
+                tx_index     = static_cast<int>(data.tx_index);
+                executed     = data.isExecuted;
+                from_log_id  = static_cast<long long>(data.from_log_id);
+                to_log_id    = static_cast<long long>(data.to_log_id);
+                timestamp    = static_cast<uint64_t>(data.timestamp) / 1000; // note: we store it in millisec in DB
+                return true;
+            }
+            // If not found in g_redis, fall through to g_kvrocks
+        } catch (const sw::redis::Error& e) {
+            Logger::get()->error("Redis error in db_get_indexed_tx: {}", e.what());
+            return false;
+        }
+    }
+
+    if (!g_kvrocks) return false;
     try {
         // Indexed TX stored under "itx:<hash>"
         std::string key = std::string("itx:") + tx_hash;
-        auto val = g_redis->get(key);
+        auto val = g_kvrocks->get(key);
         if (!val) {
             return false;
         }
@@ -1145,12 +1182,11 @@ bool db_get_indexed_tx(const char* tx_hash,
     }
 }
 
-
 std::vector<uint32_t> db_search_log(uint32_t scIndex, uint32_t scLogType, uint32_t fromTick, uint32_t toTick,
                                     std::string topic1, std::string topic2, std::string topic3)
 {
     std::vector<uint32_t> result;
-    if (!g_redis) return result;
+    if (!g_kvrocks) return result;
     if (topic1.size() != 60) {
         Logger::get()->error("db_search_log: Error topic1 size, expect 60 but get {}", topic1.size());
         return result;
@@ -1202,7 +1238,11 @@ std::vector<uint32_t> db_search_log(uint32_t scIndex, uint32_t scLogType, uint32
         sw::redis::BoundedInterval<double> range(fromTick, toTick,
                                                  sw::redis::BoundType::CLOSED);
 
+        // TODO: remove getting from g_redis at epoch 210, after all bobs migrate their old indexer data to kvrocks
         g_redis->zrangebyscore(key,
+                               range,
+                               std::back_inserter(members));
+        g_kvrocks->zrangebyscore(key,
                                range,
                                std::back_inserter(members));
 
