@@ -213,6 +213,8 @@ void initialCleanDB() // to clean up in case crashing last time
     Logger::get()->info("lastCleanTickData: {} | lastCleanTransactionTick: {} | gCurrentIndexingTick {} | gTxTickToLive {}",
                         lastCleanTransactionTick, lastCleanTransactionTick, gCurrentIndexingTick.load(), gTxTickToLive);
     cleanOnce(lastCleanTickData, lastCleanTransactionTick, lastReportedTick);
+    Logger::get()->info("Done init cleaning lastCleanTickData: {} | lastCleanTransactionTick: {} | gCurrentIndexingTick {} | gTxTickToLive {}",
+                        lastCleanTransactionTick, lastCleanTransactionTick, gCurrentIndexingTick.load(), gTxTickToLive);
 }
 
 void garbageCleaner()
