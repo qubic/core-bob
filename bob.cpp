@@ -257,19 +257,20 @@ int runBob(int argc, char *argv[])
     for (int i = 0; i < pool_size; i++)
     {
         QCPtr qc = nullptr;
-        v_recv_thread.emplace_back([&, i](){
-            char nm[16];
-            std::snprintf(nm, sizeof(nm), "recv-%d", i);
-            set_this_thread_name(nm);
-            if (connPool.get(i, qc))
-            {
+        if (connPool.get(i, qc))
+        {
+            v_recv_thread.emplace_back([i, qc, isTrustedNode]() {
+                char nm[16];
+                std::snprintf(nm, sizeof(nm), "recv-%d", i);
+                set_this_thread_name(nm);
                 connReceiver(qc, isTrustedNode);
-            }
-            else
-            {
-                Logger::get()->warn("Invalid connection index ", i);
-            }
-        });
+            });
+        }
+        else
+        {
+            Logger::get()->warn("Invalid connection index ", i);
+        }
+        
         if (qc && qc->isBM()) gNumBMConnection++;
     }
     for (int i = 0; i < std::max(gMaxThreads, pool_size); i++)
