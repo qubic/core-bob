@@ -218,10 +218,12 @@ int runBob(int argc, char *argv[])
         indexVerifiedTicks();
     });
 
-    auto verify_thread = std::thread([&](){
-        set_this_thread_name("verify");
-        IOVerifyThread();
+    std::thread log_event_verifier_thread;
+    log_event_verifier_thread = std::thread([&](){
+        set_this_thread_name("log-ver");
+        verifyLoggingEvent();
     });
+
     while (gCurrentIndexingTick == 0 || gCurrentVerifyLoggingTick == 0) SLEEP(100);
     initialCleanDB();
 
@@ -236,7 +238,10 @@ int runBob(int argc, char *argv[])
             }
     );
 
-
+    auto verify_thread = std::thread([&](){
+        set_this_thread_name("verify");
+        IOVerifyThread();
+    });
 
     gTCM = new TimedCacheMap<>();
     auto sc_thread = std::thread([&](){
@@ -280,11 +285,7 @@ int runBob(int argc, char *argv[])
             RequestProcessorThread();
         });
     }
-    std::thread log_event_verifier_thread;
-    log_event_verifier_thread = std::thread([&](){
-        set_this_thread_name("log-ver");
-        verifyLoggingEvent();
-    });
+
     std::thread garbage_thread;
     if (cfg.tick_storage_mode != TickStorageMode::Free || cfg.tx_storage_mode != TxStorageMode::Free)
     {
