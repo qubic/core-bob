@@ -78,6 +78,14 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
         }
     }
 
+    if (root.isMember("indexer-max-activities-per-key")) {
+        if (!root["indexer-max-activities-per-key"].isNumeric()) {
+            error = "Invalid type: number required for key 'indexer-max-activities-per-key'";
+            return false;
+        }
+        out.indexer_max_activities_per_key = root["indexer-max-activities-per-key"].asUInt64();
+    }
+
     if (root.isMember("arbitrator-identity")) {
         if (!root["arbitrator-identity"].isString()) {
             error = "Invalid type: string required for key 'arbitrator-identity'";

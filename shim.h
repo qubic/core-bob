@@ -60,3 +60,4 @@
 #define gStartTimeUnix (GS().startTimeUnix)
 #define gAllowCheckInQubicGlobal (GS().allowCheckInQubicGlobal)
 #define gTCM (GS().TCM)
+#define gMaxActivitiesPerIndexKey (GS().gMaxActivitiesPerIndexKey)

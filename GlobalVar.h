@@ -75,6 +75,8 @@ struct GlobalState {
 
     long long gKvrocksTTL = 1209600;
     long long gTimeToWaitEpochEnd = 1800;
+    uint64_t gMaxActivitiesPerIndexKey = 100000;
+
 
     unsigned gRpcPort = 40420;
     bool gEnableAdminEndpoints = false;  // Admin endpoints disabled by default
