@@ -211,7 +211,7 @@ void initialCleanDB() // to clean up in case crashing last time
 
     uint32_t lastReportedTick = 0;
     Logger::get()->info("lastCleanTickData: {} | lastCleanTransactionTick: {} | gCurrentIndexingTick {} | gTxTickToLive {}",
-                        lastCleanTransactionTick, lastCleanTransactionTick, gCurrentIndexingTick.load(), gTxTickToLive.load());
+                        lastCleanTransactionTick, lastCleanTransactionTick, gCurrentIndexingTick.load(), gTxTickToLive);
     cleanOnce(lastCleanTickData, lastCleanTransactionTick, lastReportedTick);
 }
 
