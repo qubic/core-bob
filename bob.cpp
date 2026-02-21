@@ -207,6 +207,22 @@ int runBob(int argc, char *argv[])
         }
     }
 
+    auto log_request_trusted_nodes_thread = std::thread([&](){
+        set_this_thread_name("trusted-log-req");
+        EventRequestFromTrustedNode(std::ref(connPool),
+                                    std::chrono::milliseconds(request_logging_cycle_ms));
+    });
+
+    auto indexer_thread = std::thread([&](){
+        set_this_thread_name("indexer");
+        indexVerifiedTicks();
+    });
+
+    auto verify_thread = std::thread([&](){
+        set_this_thread_name("verify");
+        IOVerifyThread();
+    });
+
     initialCleanDB();
 
     auto request_thread = std::thread(
@@ -219,19 +235,9 @@ int runBob(int argc, char *argv[])
                 );
             }
     );
-    auto verify_thread = std::thread([&](){
-        set_this_thread_name("verify");
-        IOVerifyThread();
-    });
-    auto log_request_trusted_nodes_thread = std::thread([&](){
-        set_this_thread_name("trusted-log-req");
-        EventRequestFromTrustedNode(std::ref(connPool),
-                                    std::chrono::milliseconds(request_logging_cycle_ms));
-    });
-    auto indexer_thread = std::thread([&](){
-        set_this_thread_name("indexer");
-        indexVerifiedTicks();
-    });
+
+
+
     gTCM = new TimedCacheMap<>();
     auto sc_thread = std::thread([&](){
         set_this_thread_name("sc");
