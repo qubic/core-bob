@@ -121,6 +121,102 @@ bool cleanRawTick(uint32_t fromTick, uint32_t toTick, bool withTransactions)
     return true;
 }
 
+static void cleanOnce(long long& lastCleanTickData, long long& lastCleanTransactionTick, uint32_t& lastReportedTick)
+{
+    if (gTickStorageMode == TickStorageMode::LastNTick)
+    {
+        long long cleanToTick = (long long)(gCurrentIndexingTick.load()) - 5;
+        cleanToTick = std::min(cleanToTick, (long long)(gCurrentIndexingTick) - 1 - gLastNTickStorage);
+        if (lastCleanTickData < cleanToTick)
+        {
+            if (cleanRawTick(lastCleanTickData + 1, cleanToTick, gTxStorageMode == TxStorageMode::LastNTick /*also clean txs*/))
+            {
+                lastCleanTickData = cleanToTick;
+                db_insert_u32(KEY_LAST_CLEAN_TICK_DATA, static_cast<uint32_t>(lastCleanTickData));
+            }
+
+            if (cleanToTick - lastReportedTick > 1000)
+            {
+                Logger::get()->trace("Cleaned up to tick {}", cleanToTick);
+                lastReportedTick = cleanToTick;
+            }
+        }
+    }
+    else if (gTickStorageMode == TickStorageMode::Kvrocks)
+    {
+        long long cleanToTick = (long long)(gCurrentIndexingTick.load()) - 5;
+        if (lastCleanTickData < cleanToTick)
+        {
+            for (long long t = lastCleanTickData + 1; t <= cleanToTick; t++)
+            {
+                compressTickAndMoveToKVRocks(t);
+            }
+            Logger::get()->trace("Compressed tick {}->{} to kvrocks", lastCleanTickData + 1, cleanToTick);
+            if (cleanRawTick(lastCleanTickData + 1, cleanToTick, false /*do not clean txs instantly*/))
+            {
+                lastCleanTickData = cleanToTick;
+                db_insert_u32(KEY_LAST_CLEAN_TICK_DATA, static_cast<uint32_t>(lastCleanTickData));
+            }
+            Logger::get()->trace("Cleaned tick {}->{} in keydb", lastCleanTickData + 1, cleanToTick);
+            if (cleanToTick - lastReportedTick > 1000)
+            {
+                Logger::get()->trace("Compressed and cleaned up to tick {}", cleanToTick);
+                lastReportedTick = cleanToTick;
+            }
+        }
+    }
+
+    if (gTxStorageMode == TxStorageMode::Kvrocks)
+    {
+        long long cleanToTick = (long long)(gCurrentIndexingTick.load()) - 5;
+        cleanToTick = std::min(cleanToTick, (long long)(gCurrentIndexingTick) - 1 - gTxTickToLive);
+        if (lastCleanTransactionTick < cleanToTick)
+        {
+            for (long long t = lastCleanTransactionTick + 1; t <= cleanToTick; t++)
+            {
+                cleanTransactionLogs(t);
+            }
+            lastCleanTransactionTick = cleanToTick;
+            db_insert_u32(KEY_LAST_CLEAN_TX_TICK, static_cast<uint32_t>(lastCleanTransactionTick));
+        }
+    }
+}
+
+void initialCleanDB() // to clean up in case crashing last time
+{
+    Logger::get()->info("Cleaning up database, this may take several minutes if bob crashed before");
+    uint32_t loadedCleanTickData = 0;
+    uint32_t loadedCleanTxTick = 0;
+
+    long long lastCleanTickData;
+    long long lastCleanTransactionTick;
+
+    if (db_get_u32(KEY_LAST_CLEAN_TICK_DATA, loadedCleanTickData) && loadedCleanTickData > 0)
+    {
+        lastCleanTickData = loadedCleanTickData;
+        Logger::get()->info("Loaded lastCleanTickData from DB: {}", lastCleanTickData);
+    }
+    else
+    {
+        lastCleanTickData = gInitialTick;
+        Logger::get()->info("No persisted lastCleanTickData found, using default: {}", lastCleanTickData);
+    }
+
+    if (db_get_u32(KEY_LAST_CLEAN_TX_TICK, loadedCleanTxTick) && loadedCleanTxTick > 0)
+    {
+        lastCleanTransactionTick = loadedCleanTxTick;
+        Logger::get()->info("Loaded lastCleanTransactionTick from DB: {}", lastCleanTransactionTick);
+    }
+    else
+    {
+        lastCleanTransactionTick = gInitialTick;
+        Logger::get()->info("No persisted lastCleanTransactionTick found, using default: {}", lastCleanTransactionTick);
+    }
+
+    uint32_t lastReportedTick = 0;
+    cleanOnce(lastCleanTickData, lastCleanTransactionTick, lastReportedTick);
+}
+
 void garbageCleaner()
 {
     Logger::get()->info("Start garbage cleaner");
@@ -159,63 +255,7 @@ void garbageCleaner()
     {
         SLEEP(100);
         if (gStopFlag.load()) break;
-        if (gTickStorageMode == TickStorageMode::LastNTick)
-        {
-            long long cleanToTick = (long long)(gCurrentIndexingTick.load()) - 5;
-            cleanToTick = std::min(cleanToTick, (long long)(gCurrentIndexingTick) - 1 - gLastNTickStorage);
-            if (lastCleanTickData < cleanToTick)
-            {
-                if (cleanRawTick(lastCleanTickData + 1, cleanToTick, gTxStorageMode == TxStorageMode::LastNTick /*also clean txs*/))
-                {
-                    lastCleanTickData = cleanToTick;
-                    db_insert_u32(KEY_LAST_CLEAN_TICK_DATA, static_cast<uint32_t>(lastCleanTickData));
-                }
-
-                if (cleanToTick - lastReportedTick > 1000)
-                {
-                    Logger::get()->trace("Cleaned up to tick {}", cleanToTick);
-                    lastReportedTick = cleanToTick;
-                }
-            }
-        }
-        else if (gTickStorageMode == TickStorageMode::Kvrocks)
-        {
-            long long cleanToTick = (long long)(gCurrentIndexingTick.load()) - 5;
-            if (lastCleanTickData < cleanToTick)
-            {
-                for (long long t = lastCleanTickData + 1; t <= cleanToTick; t++)
-                {
-                    compressTickAndMoveToKVRocks(t);
-                }
-                Logger::get()->trace("Compressed tick {}->{} to kvrocks", lastCleanTickData + 1, cleanToTick);
-                if (cleanRawTick(lastCleanTickData + 1, cleanToTick, false /*do not clean txs instantly*/))
-                {
-                    lastCleanTickData = cleanToTick;
-                    db_insert_u32(KEY_LAST_CLEAN_TICK_DATA, static_cast<uint32_t>(lastCleanTickData));
-                }
-                Logger::get()->trace("Cleaned tick {}->{} in keydb", lastCleanTickData + 1, cleanToTick);
-                if (cleanToTick - lastReportedTick > 1000)
-                {
-                    Logger::get()->trace("Compressed and cleaned up to tick {}", cleanToTick);
-                    lastReportedTick = cleanToTick;
-                }
-            }
-        }
-
-        if (gTxStorageMode == TxStorageMode::Kvrocks)
-        {
-            long long cleanToTick = (long long)(gCurrentIndexingTick.load()) - 5;
-            cleanToTick = std::min(cleanToTick, (long long)(gCurrentIndexingTick) - 1 - gTxTickToLive);
-            if (lastCleanTransactionTick < cleanToTick)
-            {
-                for (long long t = lastCleanTransactionTick + 1; t <= cleanToTick; t++)
-                {
-                    cleanTransactionLogs(t);
-                }
-                lastCleanTransactionTick = cleanToTick;
-                db_insert_u32(KEY_LAST_CLEAN_TX_TICK, static_cast<uint32_t>(lastCleanTransactionTick));
-            }
-        }
+        cleanOnce(lastCleanTickData, lastCleanTransactionTick, lastReportedTick);
     }
     if (gIsEndEpoch)
     {

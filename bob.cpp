@@ -29,7 +29,7 @@ void querySmartContractThread(ConnectionPool& connPoolAll);
 bool StartQubicServer(ConnectionPool* cp, uint16_t port = 21842);
 void StopQubicServer();
 void garbageCleaner();
-
+void initialCleanDB();
 
 
 static inline void set_this_thread_name(const char* name_in) {
@@ -207,6 +207,7 @@ int runBob(int argc, char *argv[])
         }
     }
 
+    initialCleanDB();
 
     auto request_thread = std::thread(
             [&](){
