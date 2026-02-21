@@ -155,7 +155,7 @@ void IORequestThread(ConnectionPool& conn_pool, std::chrono::milliseconds reques
                 refetchTickVotes = -1;
             }
             /* Don't need to fetch too far if not yet verifying*/
-            if (gCurrentFetchingTick > gCurrentVerifyLoggingTick + 1000)
+            if (gCurrentFetchingTick > gCurrentIndexingTick + 1000)
             {
                 SLEEP(idleBackoff);
                 continue;
