@@ -66,6 +66,18 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
         out.keydb_url = root["keydb-url"].asString();
     }
 
+    if (root.isMember("kvrocks-url")) {
+        if (!root["kvrocks-url"].isString()) {
+            error = "Invalid type: string required for key 'kvrocks-url'";
+            return false;
+        }
+        out.kvrocks_url = root["kvrocks-url"].asString();
+    } else {
+        if (out.kvrocks_url.empty()) {
+            out.kvrocks_url = "tcp://127.0.0.1:6666";
+        }
+    }
+
     if (root.isMember("arbitrator-identity")) {
         if (!root["arbitrator-identity"].isString()) {
             error = "Invalid type: string required for key 'arbitrator-identity'";
@@ -204,19 +216,6 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
             }
         } else if (mode == "kvrocks") {
             out.tick_storage_mode = TickStorageMode::Kvrocks;
-
-            // kvrocks-url (default tcp://127.0.0.1:6666)
-            if (root.isMember("kvrocks-url")) {
-                if (!root["kvrocks-url"].isString()) {
-                    error = "Invalid type: string required for key 'kvrocks-url'";
-                    return false;
-                }
-                out.kvrocks_url = root["kvrocks-url"].asString();
-            } else {
-                if (out.kvrocks_url.empty()) {
-                    out.kvrocks_url = "tcp://127.0.0.1:6666";
-                }
-            }
         } else if (mode == "free") {
             out.tick_storage_mode = TickStorageMode::Free;
             // No related options; implies no garbage cleaner.
