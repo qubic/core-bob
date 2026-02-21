@@ -1110,7 +1110,7 @@ bool db_set_indexed_tx(const char *key,
             static_cast<uint64_t>(timestamp)
         };
         sw::redis::StringView val(reinterpret_cast<const char*>(&data), sizeof(data));
-        g_kvrocks->set(key, val);
+        g_kvrocks->set(key, val, std::chrono::seconds(gKvrocksTTL));
         return true;
     } catch (const sw::redis::Error& e) {
         Logger::get()->error("Redis error in db_set_indexed_tx: {}", e.what());
