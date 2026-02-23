@@ -14,5 +14,6 @@
   "tx-storage-mode": "kvrocks",
   "tx_tick_to_live": 10000,
   "max-thread": 0,
-  "spam-qu-threshold": 100
+  "spam-qu-threshold": 100,
+  "indexer-max-activities-per-key": 10000
 }

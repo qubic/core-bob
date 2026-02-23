@@ -80,6 +80,10 @@ if [ -n "$KVROCKS_TTL" ]; then
     jq --argjson v "$KVROCKS_TTL" '.["kvrocks_ttl"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
+if [ -n "$INDEXER_MAX_ACTIVITIES_PER_KEY" ]; then
+    jq --argjson v "$INDEXER_MAX_ACTIVITIES_PER_KEY" '.["indexer-max-activities-per-key"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+fi
+
 # --- Boolean parameters ---
 if [ -n "$RUN_SERVER" ]; then
     jq --argjson v "$RUN_SERVER" '.["run-server"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
