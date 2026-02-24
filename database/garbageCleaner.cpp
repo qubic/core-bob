@@ -164,7 +164,7 @@ static void cleanOnce(long long& lastCleanTickData, long long& lastCleanTransact
         {
             // Process in smaller batches and update checkpoint frequently
             constexpr long long CHECKPOINT_INTERVAL = 100;
-
+            Logger::get()->trace("Start compressing tick {}->{}", lastCleanTickData + 1, cleanToTick);
             for (long long t = lastCleanTickData + 1; t <= cleanToTick; t++)
             {
                 compressTickAndMoveToKVRocks(t, full, votes, compressedBuffer);
@@ -292,7 +292,7 @@ void garbageCleaner()
     uint32_t lastReportedTick = 0;
     while (!gStopFlag.load())
     {
-        SLEEP(100);
+        SLEEP(1);
         if (gStopFlag.load()) break;
         cleanOnce(gLastCleanTickData, gLastCleanTransactionTick, lastReportedTick);
     }

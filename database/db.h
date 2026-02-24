@@ -461,7 +461,7 @@ bool db_set_indexed_tx(const char* key,
                        long long to_log_id,
                        uint64_t timestamp,
                        bool executed);
-
+bool db_set_many_indexed_tx(const std::vector<std::tuple<std::string, int, long long, long long, uint64_t, bool>>& txDataList);
 bool db_get_indexed_tx(const char* tx_hash,
                        int& tx_index,
                        long long& from_log_id,

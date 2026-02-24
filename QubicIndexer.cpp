@@ -50,8 +50,12 @@ static void indexTick(uint32_t tick, const TickData &td) {
     LogRangesPerTxInTick logrange{};
     uint64_t timestamp = td.epoch == gCurrentProcessingEpoch ? calculateUnixTimestamp(td) : 0;
     db_try_get_log_ranges(tick, logrange);
+    Logger::get()->trace("Start adding extra data to txs {}", tick);
     if (td.tick == tick)
     {
+        std::vector<std::tuple<std::string, int, long long, long long, uint64_t, bool>> txDataBatch;
+        txDataBatch.reserve(NUMBER_OF_TRANSACTIONS_PER_TICK);
+
         for (int i = 0; i < NUMBER_OF_TRANSACTIONS_PER_TICK; i++) {
             if (td.transactionDigests[i] == m256i::zero()) continue;
             std::string txHash = getTransactionHash(td.transactionDigests[i].m256i_u8);
@@ -82,9 +86,19 @@ static void indexTick(uint32_t tick, const TickData &td) {
                 }
             }
 
-            db_set_indexed_tx(key.c_str(), i, logrange.fromLogId[i],
-                              logrange.fromLogId[i] + logrange.length[i] - 1, timestamp,
-                              isExecuted);
+            txDataBatch.emplace_back(
+                    key,
+                    i,
+                    logrange.fromLogId[i],
+                    logrange.fromLogId[i] + logrange.length[i] - 1,
+                    timestamp,
+                    isExecuted
+            );
+        }
+
+        // Batch insert all transaction index data at once
+        if (!txDataBatch.empty()) {
+            db_set_many_indexed_tx(txDataBatch);
         }
     }
 
@@ -96,7 +110,7 @@ static void indexTick(uint32_t tick, const TickData &td) {
                           logrange.fromLogId[i] + logrange.length[i] - 1, timestamp,
                           true);
     }
-
+    Logger::get()->trace("Finish adding extra data to txs {}", tick);
     // now handling all log events
     bool success;
     auto vle = db_get_logs_by_tick_range(td.epoch, tick, tick, success);
@@ -280,8 +294,9 @@ static void indexTick(uint32_t tick, const TickData &td) {
             }
         }
     }
+    Logger::get()->trace("Start adding indexed data to txs {}", tick);
     db_add_many_indexer(indexerKeyToAdd, tick);
-    Logger::get()->trace("Indexed verified tick {}", tick);
+    Logger::get()->trace("Finish Indexed verified tick {}", tick);
     db_insert_u32("lastIndexedTick:"+std::to_string(gCurrentProcessingEpoch), tick);
 }
 

@@ -1179,6 +1179,36 @@ bool db_set_indexed_tx(const char *key,
     }
 }
 
+bool db_set_many_indexed_tx(const std::vector<std::tuple<std::string, int, long long, long long, uint64_t, bool>>& txDataList) {
+    if (!g_kvrocks) return false;
+    if (txDataList.empty()) return true;
+
+    try {
+        auto pipe = g_kvrocks->pipeline();
+
+        for (const auto& txData : txDataList) {
+            const auto& [key, tx_index, from_log_id, to_log_id, timestamp, isExecuted] = txData;
+
+            indexedTxData data{
+                    static_cast<int32_t>(tx_index),
+                    isExecuted,
+                    static_cast<int64_t>(from_log_id),
+                    static_cast<int64_t>(to_log_id),
+                    static_cast<uint64_t>(timestamp)
+            };
+
+            sw::redis::StringView val(reinterpret_cast<const char*>(&data), sizeof(data));
+            pipe.set(key, val, std::chrono::seconds(gKvrocksTTL));
+        }
+
+        pipe.exec();
+        return true;
+    } catch (const sw::redis::Error& e) {
+        Logger::get()->error("Redis error in db_set_many_indexed_tx: {}", e.what());
+        return false;
+    }
+}
+
 bool db_get_indexed_tx(const char* tx_hash,
                        int& tx_index,
                        long long& from_log_id,
