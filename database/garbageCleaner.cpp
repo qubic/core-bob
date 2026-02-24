@@ -26,7 +26,7 @@ bool cleanTransactionAndLogsAndSaveToDisk(TickData& td, LogRangesPerTxInTick& lr
     long long min_log_id = INTMAX_MAX;
     long long max_log_id = -1;
     lr.getMinMax(min_log_id, max_log_id);
-    if (!db_move_logs_to_kvrocks_by_range(td.epoch, min_log_id, max_log_id))
+    if (!db_move_logs_to_kvrocks_by_range(td.epoch, min_log_id, max_log_id - 1))
     {
         Logger::get()->error("Failed to add transactions to kvrocks for tick {} - epoch {}", td.tick, td.epoch);
         return false;

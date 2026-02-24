@@ -1551,7 +1551,8 @@ bool db_move_logs_to_kvrocks_by_range(uint16_t epoch, long long fromLogId, long 
             if (values[i]) {
                 kvPairs.emplace_back(keys[i], *values[i]);
             } else {
-                Logger::get()->warn("Log {}:{} not found in redis", epoch, fromLogId + i);
+                Logger::get()->warn("Log {}:{} not found in redis. Stop migrating.", epoch, fromLogId + i);
+                return false;
             }
         }
 
