@@ -1529,7 +1529,8 @@ bool db_move_log_to_kvrocks(uint16_t epoch, uint64_t logId) {
 }
 
 bool db_move_logs_to_kvrocks_by_range(uint16_t epoch, long long fromLogId, long long toLogId) {
-    if (!g_redis || !g_kvrocks || fromLogId < 0 || toLogId < fromLogId) return false;
+    if (!g_redis || !g_kvrocks || toLogId < fromLogId) return false;
+    if (fromLogId < 0 || toLogId < 0) return true; // nothing to move
 
     try {
         // Build all keys for the range
