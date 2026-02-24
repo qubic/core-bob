@@ -332,7 +332,7 @@ struct LogRangesPerTxInTick
             }
         }
 
-        if (min_log_id == INTMAX_MAX) {
+        if (min_log_id == INTMAX_MAX || min_log_id < 0 || max_log_id < 0) {
             min_log_id = -1;
             max_log_id = -1;
         }
