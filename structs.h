@@ -324,15 +324,19 @@ struct LogRangesPerTxInTick
             max_log_id = std::max(max_log_id, fromLogId[i] + length[i]);
             if (fromLogId[i] < -1)
             {
-                break;
+                min_log_id = -3; // not ready
+                max_log_id = -3;
+                return;
             }
             if (length[i] < -1)
             {
-                break;
+                min_log_id = -3;  // not ready
+                max_log_id = -3;
+                return;
             }
         }
 
-        if (min_log_id == INTMAX_MAX || min_log_id < 0 || max_log_id < 0) {
+        if (min_log_id == INTMAX_MAX) {
             min_log_id = -1;
             max_log_id = -1;
         }

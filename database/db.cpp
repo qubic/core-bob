@@ -171,6 +171,10 @@ bool db_insert_log_range(uint32_t tick, const LogRangesPerTxInTick& logRange) {
         long long min_log_id = INTMAX_MAX;
         long long max_log_id = -1;
         logRange.getMinMax(min_log_id, max_log_id);
+        if (min_log_id < -1 || max_log_id < -1)
+        {
+            return false;
+        }
 
         // Store the whole struct for the tick
         sw::redis::StringView val(reinterpret_cast<const char*>(&logRange), sizeof(LogRangesPerTxInTick));

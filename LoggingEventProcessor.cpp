@@ -562,7 +562,8 @@ void verifyLoggingEvent()
                         saveFiles("spectrum."+std::to_string(tick-1), "universe."+std::to_string(tick-1));
                     }
                     if (processFromTick < tick) processToTick = tick - 1;
-                    Logger::get()->info("Detect end epoch at tick {}. Setting last batch to {}->{}", tick, processFromTick, processToTick);
+                    Logger::get()->info("Detect end epoch at tick {} ({} => {}). Setting last batch to {}->{}",
+                                        tick, lr.fromLogId[SC_END_EPOCH_TX], lr.length[SC_END_EPOCH_TX], processFromTick, processToTick);
                 }
             }
         }
