@@ -28,12 +28,12 @@ bool cleanTransactionAndLogsAndSaveToDisk(TickData& td, LogRangesPerTxInTick& lr
     lr.getMinMax(min_log_id, max_log_id);
     if (min_log_id != -1 && max_log_id != -1)
     {
-        if (!db_move_logs_to_kvrocks_by_range(td.epoch, min_log_id, max_log_id - 1))
+        if (!db_move_logs_to_kvrocks_by_range(gCurrentProcessingEpoch, min_log_id, max_log_id - 1))
         {
-            Logger::get()->error("Failed to move logs to kvrocks for tick {} - epoch {}", td.tick, td.epoch);
+            Logger::get()->error("Failed to move logs to kvrocks for tick {} - epoch {}", td.tick, gCurrentProcessingEpoch);
             return false;
         }
-        db_delete_logs(td.epoch, min_log_id, max_log_id - 1);
+        db_delete_logs(gCurrentProcessingEpoch, min_log_id, max_log_id - 1);
     }
     return true;
 }
