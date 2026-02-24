@@ -103,6 +103,7 @@ static void indexTick(uint32_t tick, const TickData &td) {
     uint32_t SC_index = 0;
     uint32_t logType = 0;
     m256i topic1, topic2, topic3;
+    std::vector<std::string> indexerKeyToAdd;
     for (int i = 0; i < vle.size(); i++)
     {
         auto& le  = vle[i];
@@ -249,10 +250,10 @@ static void indexTick(uint32_t tick, const TickData &td) {
                 if (SC_index != 0)
                 {
                     key = "indexed:" + std::to_string(SC_index);
-                    db_add_indexer(key, tick);
+                    indexerKeyToAdd.push_back(key);
                 }
                 key = "indexed:" + std::to_string(SC_index) + ":" + std::to_string(logType);
-                db_add_indexer(key, tick);
+                indexerKeyToAdd.push_back(key);
             }
             // populate all scenarios with topic1,2,3
             // 3 bits => 0=>7
@@ -275,11 +276,11 @@ static void indexTick(uint32_t tick, const TickData &td) {
                         key += std::string("ANY") + ((j == 2) ? "" : ":");
                     }
                 }
-                if (isSet) db_add_indexer(key, tick);
+                if (isSet) indexerKeyToAdd.push_back(key);
             }
         }
     }
-
+    db_add_many_indexer(indexerKeyToAdd, tick);
     Logger::get()->trace("Indexed verified tick {}", tick);
     db_insert_u32("lastIndexedTick:"+std::to_string(gCurrentProcessingEpoch), tick);
 }

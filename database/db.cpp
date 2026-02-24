@@ -1094,6 +1094,46 @@ bool db_add_indexer(const std::string &key, uint32_t tickNumber)
     }
 }
 
+bool db_add_many_indexer(const std::vector<std::string> &keys, uint32_t tickNumber)
+{
+    if (!g_kvrocks || keys.empty()) return false;
+
+    try {
+        // Lua script that processes multiple keys atomically
+        static const std::string lua_script = R"(
+            local member = ARGV[1]
+            local score = tonumber(ARGV[2])
+            local max_size = tonumber(ARGV[3])
+
+            for i, key in ipairs(KEYS) do
+                redis.call('ZADD', key, 'NX', score, member)
+                local count = redis.call('ZCARD', key)
+                if count > max_size then
+                    redis.call('ZPOPMIN', key, count - max_size)
+                end
+            end
+
+            return #KEYS
+        )";
+
+        const std::string member = std::to_string(tickNumber);
+        const std::string score = std::to_string(static_cast<double>(tickNumber));
+        const std::string max_size = std::to_string(gMaxActivitiesPerIndexKey);
+
+        // Create a proper vector for argv (can't use initializer list with iterators)
+        std::vector<std::string> argv = {member, score, max_size};
+
+        g_kvrocks->eval<long long>(lua_script,
+                                   keys.begin(), keys.end(),
+                                   argv.begin(), argv.end());
+
+    } catch (const sw::redis::Error &e) {
+        return false;
+        Logger::get()->error("Redis error in db_add_many_indexer: {}\n", e.what());
+    }
+    return true;
+}
+
 bool db_set_indexed_tx(const char *key,
                        int tx_index,
                        long long from_log_id,

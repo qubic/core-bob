@@ -132,6 +132,7 @@ void IORequestThread(ConnectionPool& conn_pool, std::chrono::milliseconds reques
     auto idleBackoff = 10ms;   // Backoff when there's nothing immediate to request
     const auto errorBackoff = 2000ms; // Backoff after an exception
     auto requestClock = std::chrono::high_resolution_clock::now() - requestCycle;
+    bool waitForIndexerFlag = false;
     while (!gStopFlag.load(std::memory_order_relaxed)) {
         if (gIsEndEpoch) break;
 
@@ -154,9 +155,18 @@ void IORequestThread(ConnectionPool& conn_pool, std::chrono::milliseconds reques
                 }
                 refetchTickVotes = -1;
             }
-            /* Don't need to fetch too far if not yet verifying*/
+            if (waitForIndexerFlag)
+            {
+                if (gCurrentFetchingTick > gCurrentIndexingTick + 50) // only resume again when offset is under 50
+                {
+                    SLEEP(idleBackoff);
+                    continue;
+                }
+            }
+            /* Don't need to fetch too far if not yet indexing(verifying)*/
             if (gCurrentFetchingTick > gCurrentIndexingTick + 1000)
             {
+                waitForIndexerFlag = true;
                 SLEEP(idleBackoff);
                 continue;
             }

@@ -469,7 +469,8 @@ bool db_get_indexed_tx(const char* tx_hash,
                        bool& executed);
 
 
-bool db_add_indexer(const std::string &key, uint32_t tickNumber);
+//bool db_add_indexer(const std::string &key, uint32_t tickNumber);
+bool db_add_many_indexer(const std::vector<std::string> &keys, uint32_t tickNumber);
 
 bool db_get_combined_log_range_for_ticks(uint32_t startTick, uint32_t endTick, long long &fromLogId, long long &length);
 
