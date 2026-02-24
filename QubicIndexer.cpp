@@ -50,6 +50,8 @@ static void indexTick(uint32_t tick, const TickData &td) {
     LogRangesPerTxInTick logrange{};
     uint64_t timestamp = td.epoch == gCurrentProcessingEpoch ? calculateUnixTimestamp(td) : 0;
     db_try_get_log_ranges(tick, logrange);
+    bool indexerIgnoreList[LOG_TX_PER_TICK] = {false};
+    auto txOrder = logrange.sort();
     Logger::get()->trace("Start adding extra data to txs {}", tick);
     if (td.tick == tick)
     {
@@ -77,8 +79,14 @@ static void indexTick(uint32_t tick, const TickData &td) {
                     std::vector<uint8_t> tx_data;
                     if (db_try_get_transaction(txHash, tx_data)) {
                         auto tx = (Transaction*)tx_data.data();
+                        if (isZero(tx->destinationPublicKey) && (tx->inputType == 6 || tx->inputType == 7 || tx->inputType == 10))
+                        {
+                            // oracle messages, not index for now
+                            indexerIgnoreList[i] = true;
+                        }
                         if (tx->amount < gSpamThreshold && tx->inputSize == 0 && tx->inputType == 0) // spam tx => not index
                         {
+                            indexerIgnoreList[i] = true;
                             continue;
                         }
                         isExecuted = matchesTransaction(transfer, *tx);
@@ -111,6 +119,9 @@ static void indexTick(uint32_t tick, const TickData &td) {
                           true);
     }
     Logger::get()->trace("Finish adding extra data to txs {}", tick);
+    //
+
+
     // now handling all log events
     bool success;
     auto vle = db_get_logs_by_tick_range(td.epoch, tick, tick, success);
@@ -118,9 +129,14 @@ static void indexTick(uint32_t tick, const TickData &td) {
     uint32_t logType = 0;
     m256i topic1, topic2, topic3;
     std::vector<std::string> indexerKeyToAdd;
+    int lastTxId = 0;
     for (int i = 0; i < vle.size(); i++)
     {
+        // no index for spam events
+        // no index for oracle message
         auto& le  = vle[i];
+        int txId = logrange.scanTxId(txOrder, lastTxId, le.getLogId());
+        if (indexerIgnoreList[i]) continue;
         auto type = le.getType();
         SC_index = 0xffffffff;
         switch(type)
