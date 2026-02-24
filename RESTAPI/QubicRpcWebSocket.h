@@ -3,6 +3,8 @@
 #include "drogon/WebSocketController.h"
 #include <json/json.h>
 #include <string>
+#include <chrono>
+#include <memory>
 
 // JSON-RPC 2.0 error codes - shared with QubicRpcHandler.h
 #ifndef QUBIC_RPC_ERROR_CODES_DEFINED
@@ -18,6 +20,16 @@ namespace QubicRpcError {
     constexpr int LIMIT_EXCEEDED = -32005;
 }
 #endif
+
+// Per-connection context stored via wsConnPtr->setContext()
+struct WsConnectionContext {
+    std::string peerIp;       // Direct connection IP:port
+    std::string clientIp;     // Resolved IP (X-Forwarded-For / X-Real-IP / peer)
+    // Rate limiting
+    std::chrono::steady_clock::time_point windowStart{std::chrono::steady_clock::now()};
+    int messageCount{0};
+    int rateLimitStrikes{0};
+};
 
 class QubicRpcWebSocket : public drogon::WebSocketController<QubicRpcWebSocket> {
 public:
