@@ -756,9 +756,8 @@ bool db_get_tick_vote(uint32_t tick, uint16_t computorIndex, TickVote& vote) {
     return false;
 }
 
-std::vector<TickVote> db_get_tick_votes(uint32_t tick) {
-    std::vector<TickVote> votes;
-    if (!g_redis) return votes;
+bool db_get_tick_votes(uint32_t tick, std::vector<TickVote>& votes) {
+    if (!g_redis) return false;
     try {
         // Deterministic bounded fetch: keys tick_vote:<tick>:0..675
         constexpr int MAX_COMPUTORS = 676;
@@ -796,9 +795,10 @@ std::vector<TickVote> db_get_tick_votes(uint32_t tick) {
             }
         }
     } catch (const sw::redis::Error& e) {
+        return false;
         Logger::get()->error("Redis error in db_get_tick_votes: {}\n", e.what());
     }
-    return votes;
+    return true;
 }
 
 bool db_get_tick_data(uint32_t tick, TickData& data) {
@@ -909,7 +909,8 @@ std::vector<TickVote> db_get_tick_votes_from_vtick(uint32_t tick) {
 }
 
 std::vector<TickVote> db_try_to_get_votes(uint32_t tick) {
-    auto votes = db_get_tick_votes(tick);
+    std::vector<TickVote> votes;
+    db_get_tick_votes(tick, votes);
     if (votes.empty()) {
         votes = db_get_tick_votes_from_vtick(tick);
     }
@@ -1432,7 +1433,8 @@ bool db_try_get_tick_data(uint32_t tick, TickData& data)
 
 std::vector<TickVote> db_try_get_tick_vote(uint32_t tick)
 {
-    std::vector<TickVote> result = db_get_tick_votes(tick);
+    std::vector<TickVote> result;
+    db_get_tick_votes(tick, result);
     if (!result.empty()) {
         return result;
     }
@@ -1523,19 +1525,18 @@ bool db_get_endepoch_log_range_info(const uint16_t epoch, long long &start, long
 }
 
 // Insert FullTickStruct compressed with zstd under key "vtick:<tick>"
-bool db_insert_vtick_to_kvrocks(uint32_t tick, const FullTickStruct& fullTick)
+bool db_insert_vtick_to_kvrocks(uint32_t tick, const FullTickStruct& fullTick, std::vector<char>& buffer)
 {
     if (!g_kvrocks) return false;
     try {
         const size_t srcSize = sizeof(FullTickStruct);
         const size_t maxCompressed = ZSTD_compressBound(srcSize);
 
-        std::string compressed;
-        compressed.resize(maxCompressed);
+        buffer.resize(maxCompressed);
 
         size_t const cSize = ZSTD_compress(
-                compressed.data(),
-                compressed.size(),
+                buffer.data(),
+                buffer.size(),
                 reinterpret_cast<const void*>(&fullTick),
                 srcSize,
                 ZSTD_defaultCLevel()
@@ -1547,11 +1548,8 @@ bool db_insert_vtick_to_kvrocks(uint32_t tick, const FullTickStruct& fullTick)
             return false;
         }
 
-        // shrink to actual compressed size
-        compressed.resize(cSize);
-
         const std::string key = "vtick:" + std::to_string(tick);
-        sw::redis::StringView val(compressed.data(), compressed.size());
+        sw::redis::StringView val(buffer.data(), cSize);  // Use actual size, not full buffer
         g_kvrocks->set(key, val, std::chrono::seconds(gKvrocksTTL));
         return true;
     } catch (const sw::redis::Error& e) {
@@ -1559,8 +1557,6 @@ bool db_insert_vtick_to_kvrocks(uint32_t tick, const FullTickStruct& fullTick)
         return false;
     }
 }
-
-
 
 bool db_get_vtick_from_kvrocks(uint32_t tick, FullTickStruct& outFullTick)
 {

@@ -23,15 +23,12 @@ bool cleanTransactionAndLogsAndSaveToDisk(TickData& td, LogRangesPerTxInTick& lr
     }
     return true;
 }
-void compressTickAndMoveToKVRocks(uint32_t tick)
+void compressTickAndMoveToKVRocks(uint32_t tick, FullTickStruct& full, std::vector<TickVote>& votes, std::vector<char>& compressedBuffer)
 {
-    // Load TickData
-    // Prepare the aggregated struct
-    FullTickStruct full{};
     std::memset((void*)&full, 0, sizeof(full));
     int count = 0;
     int emptyCount = 0;
-    auto votes = db_get_tick_votes(tick);
+    db_get_tick_votes(tick, votes);
     for (const auto& v : votes)
     {
         if (v.computorIndex < 676 && v.epoch != 0)
@@ -56,7 +53,7 @@ void compressTickAndMoveToKVRocks(uint32_t tick)
         }
     }
     // Insert the compressed record
-    if (!db_insert_vtick_to_kvrocks(tick, full))
+    if (!db_insert_vtick_to_kvrocks(tick, full, compressedBuffer))
     {
         Logger::get()->error("compressTick: Failed to insert vtick for tick {}", tick);
         return;
@@ -123,6 +120,10 @@ bool cleanRawTick(uint32_t fromTick, uint32_t toTick, bool withTransactions)
 
 static void cleanOnce(long long& lastCleanTickData, long long& lastCleanTransactionTick, uint32_t& lastReportedTick)
 {
+    FullTickStruct full{}; // allocate once to avoid memory fragment
+    std::vector<TickVote> votes;
+    std::vector<char> compressedBuffer;
+
     if (gTickStorageMode == TickStorageMode::LastNTick)
     {
         long long cleanToTick = (long long)(gCurrentIndexingTick.load()) - 5;
@@ -147,10 +148,23 @@ static void cleanOnce(long long& lastCleanTickData, long long& lastCleanTransact
         long long cleanToTick = (long long)(gCurrentIndexingTick.load()) - 5;
         if (lastCleanTickData < cleanToTick)
         {
+            // Process in smaller batches and update checkpoint frequently
+            constexpr long long CHECKPOINT_INTERVAL = 100;
+
             for (long long t = lastCleanTickData + 1; t <= cleanToTick; t++)
             {
-                compressTickAndMoveToKVRocks(t);
+                compressTickAndMoveToKVRocks(t, full, votes, compressedBuffer);
+
+                // Checkpoint progress every 100 ticks to limit memory accumulation
+                if ((t - lastCleanTickData) % CHECKPOINT_INTERVAL == 0)
+                {
+                    lastCleanTickData = t;
+                    db_insert_u32(KEY_LAST_CLEAN_TICK_DATA, static_cast<uint32_t>(lastCleanTickData));
+                    Logger::get()->trace("Checkpoint: Compressed tick up to {}", t);
+                }
             }
+
+            // Final update
             Logger::get()->trace("Compressed tick {}->{} to kvrocks", lastCleanTickData + 1, cleanToTick);
             if (cleanRawTick(lastCleanTickData + 1, cleanToTick, false /*do not clean txs instantly*/))
             {
@@ -220,6 +234,9 @@ void initialCleanDB() // to clean up in case crashing last time
 void garbageCleaner()
 {
     Logger::get()->info("Start garbage cleaner");
+    FullTickStruct full;
+    std::vector<TickVote> votes;
+    std::vector<char> compressedBuffer;
     uint32_t loadedCleanTickData = 0;
     uint32_t loadedCleanTxTick = 0;
 
@@ -279,7 +296,7 @@ void garbageCleaner()
             {
                 for (long long t = lastCleanTickData + 1; t <= cleanToTick; t++)
                 {
-                    compressTickAndMoveToKVRocks(t);
+                    compressTickAndMoveToKVRocks(t, full, votes, compressedBuffer);
                 }
                 Logger::get()->trace("Compressed tick {}->{} to kvrocks", lastCleanTickData + 1, cleanToTick);
                 if (cleanRawTick(lastCleanTickData + 1, cleanToTick, true))

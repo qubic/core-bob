@@ -143,7 +143,8 @@ void IORequestThread(ConnectionPool& conn_pool, std::chrono::milliseconds reques
                 rqt.tick = refetchTickVotes;
                 memset(rqt.voteFlags, 0, sizeof(rqt.voteFlags));
                 int count = 0;
-                auto tvs = db_get_tick_votes(refetchTickVotes);
+                std::vector<TickVote> tvs;
+                db_get_tick_votes(refetchTickVotes, tvs);
                 for (auto& tv: tvs) {
                     int i = tv.computorIndex;
                     rqt.voteFlags[i >> 3] |= (1 << (i & 7)); // turn on the flag if the vote exists
@@ -193,7 +194,8 @@ void IORequestThread(ConnectionPool& conn_pool, std::chrono::milliseconds reques
                         rqt.tick = gCurrentFetchingTick + offset;
                         memset(rqt.voteFlags, 0, sizeof(rqt.voteFlags));
                         int count = 0;
-                        auto tvs = db_get_tick_votes(gCurrentFetchingTick + offset);
+                        std::vector<TickVote> tvs;
+                        db_get_tick_votes(gCurrentFetchingTick + offset, tvs);
                         for (auto& tv: tvs) {
                             int i = tv.computorIndex;
                             rqt.voteFlags[i >> 3] |= (1 << (i & 7)); // turn on the flag if the vote exists

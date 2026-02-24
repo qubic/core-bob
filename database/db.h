@@ -335,12 +335,10 @@ bool db_get_tick_vote(uint32_t tick, uint16_t computorIndex, TickVote& vote);
  *
  * Parameters
  * - tick: Target tick
- *
- * Return Value
  * - vector of votes (empty on failure or if none exist)
- *   Note: Returned vector may contain fewer than the total computor count if sparse.
+ * Return boolean
  */
-std::vector<TickVote> db_get_tick_votes(uint32_t tick);
+bool db_get_tick_votes(uint32_t tick, std::vector<TickVote>& votes);
 
 /**
  * Count the number of transactions for a specific tick.
@@ -499,7 +497,7 @@ void compressTickAndMoveToKVRocks(uint32_t tick);
 bool cleanRawTick(uint32_t fromTick, uint32_t toTick, bool withTransactions);
 bool cleanTransactionLogs(uint32_t tick);
 
-bool db_insert_vtick_to_kvrocks(uint32_t tick, const FullTickStruct& fullTick);
+bool db_insert_vtick_to_kvrocks(uint32_t tick, const FullTickStruct& fullTick, std::vector<char>& buffer);
 bool db_get_vtick_from_kvrocks(uint32_t tick, FullTickStruct& outFullTick);
 
 std::vector<TickVote> db_try_get_tick_vote(uint32_t tick);
