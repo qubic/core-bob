@@ -1,7 +1,7 @@
 {
   "p2p-node": [],
   "request-cycle-ms": 100,
-  "request-logging-cycle-ms": 30,
+  "request-logging-cycle-ms": 100,
   "future-offset": 3,
   "log-level": "info",
   "keydb-url": "tcp://127.0.0.1:6379",
