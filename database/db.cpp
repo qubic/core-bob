@@ -1361,6 +1361,7 @@ bool db_copy_transaction_to_kvrocks(const std::string &tx_hash) {
 bool db_add_many_transactions_to_kvrocks(const std::vector<std::string>& txKeys,
                                          const std::vector<std::optional<std::basic_string<char>>>& txVal) {
     if (!g_kvrocks) return false;
+    if (txKeys.empty()) return true;
     if (txKeys.size() != txVal.size()) {
         Logger::get()->error("db_add_many_transactions_to_kvrocks: txKeys and txVal size mismatch\n");
         return false;
@@ -1551,7 +1552,7 @@ bool db_move_logs_to_kvrocks_by_range(uint16_t epoch, long long fromLogId, long 
             if (values[i]) {
                 kvPairs.emplace_back(keys[i], *values[i]);
             } else {
-                Logger::get()->warn("Log {}:{} not found in redis. Stop migrating.", epoch, fromLogId + i);
+                Logger::get()->warn("Log {}:{} ({} => {}) not found in redis. Stop migrating.", epoch, fromLogId + i, fromLogId, toLogId);
                 return false;
             }
         }
@@ -1564,7 +1565,7 @@ bool db_move_logs_to_kvrocks_by_range(uint16_t epoch, long long fromLogId, long 
         // MSET all logs to kvrocks in 1 call
         g_kvrocks->mset(kvPairs.begin(), kvPairs.end());
 
-        Logger::get()->info("Migrated {} logs from {}:{} to {} to kvrocks",
+        Logger::get()->trace("Migrated {} logs from {}:{} to {} to kvrocks",
                             kvPairs.size(), epoch, fromLogId, toLogId);
         return true;
     } catch (const std::exception &e) {
