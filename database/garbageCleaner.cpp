@@ -5,22 +5,33 @@ static const std::string KEY_LAST_CLEAN_TX_TICK = "garbage_cleaner:last_clean_tx
 
 bool cleanTransactionAndLogsAndSaveToDisk(TickData& td, LogRangesPerTxInTick& lr)
 {
-    for (int i = 0; i < NUMBER_OF_TRANSACTIONS_PER_TICK; i++)
-    {
-        if (td.transactionDigests[i] != m256i::zero())
-        {
-            if (gTxStorageMode == TxStorageMode::Kvrocks) db_copy_transaction_to_kvrocks(td.transactionDigests[i].toQubicHash());
-
-            if (lr.fromLogId[i] > 0 && lr.length[i] > 0)
-            {
-                long long start = lr.fromLogId[i];
-                long long end = start + lr.length[i] - 1; // inclusive
-                if (gTxStorageMode == TxStorageMode::Kvrocks) db_move_logs_to_kvrocks_by_range(td.epoch, start, end);
-                db_delete_logs(td.epoch, start, end);
-            }
-            db_delete_transaction(td.transactionDigests[i].toQubicHash());
+    std::vector<std::string> txsHash;
+    std::vector<std::optional<std::basic_string<char>>> txVal;
+    for (int i = 0; i < NUMBER_OF_TRANSACTIONS_PER_TICK; i++) {
+        if (td.transactionDigests[i] != m256i::zero()) {
+            txsHash.push_back("transaction:" + td.transactionDigests[i].toQubicHash());
         }
     }
+    if (!db_get_many_transaction_from_keydb(txsHash, txVal))
+    {
+        Logger::get()->error("Failed to get transactions data from keydb for tick {} - epoch {}", td.tick, td.epoch);
+        return false;
+    }
+    if (!db_add_many_transactions_to_kvrocks(txsHash, txVal))
+    {
+        Logger::get()->error("Failed to add transactions to kvrocks for tick {} - epoch {}", td.tick, td.epoch);
+        return false;
+    }
+    db_delete_many(txsHash);
+    long long min_log_id = INTMAX_MAX;
+    long long max_log_id = -1;
+    lr.getMinMax(min_log_id, max_log_id);
+    if (!db_move_logs_to_kvrocks_by_range(td.epoch, min_log_id, max_log_id))
+    {
+        Logger::get()->error("Failed to add transactions to kvrocks for tick {} - epoch {}", td.tick, td.epoch);
+        return false;
+    }
+    db_delete_logs(td.epoch, min_log_id, max_log_id);
     return true;
 }
 void compressTickAndMoveToKVRocks(uint32_t tick, FullTickStruct& full, std::vector<TickVote>& votes, std::vector<char>& compressedBuffer)
@@ -174,7 +185,7 @@ static void cleanOnce(long long& lastCleanTickData, long long& lastCleanTransact
             Logger::get()->trace("Cleaned tick {}->{} in keydb", lastCleanTickData + 1, cleanToTick);
             if (cleanToTick - lastReportedTick > 1000)
             {
-                Logger::get()->trace("Compressed and cleaned up to tick {}", cleanToTick);
+                Logger::get()->trace("[TickStorageMode::Kvrocks] Compressed and cleaned up to tick {}", cleanToTick);
                 lastReportedTick = cleanToTick;
             }
         }
@@ -186,12 +197,21 @@ static void cleanOnce(long long& lastCleanTickData, long long& lastCleanTransact
         cleanToTick = std::min(cleanToTick, (long long)(gCurrentIndexingTick) - 1 - gTxTickToLive);
         if (lastCleanTransactionTick < cleanToTick)
         {
+            // Process in smaller batches and update checkpoint frequently
+            constexpr long long CHECKPOINT_INTERVAL = 100;
             for (long long t = lastCleanTransactionTick + 1; t <= cleanToTick; t++)
             {
                 cleanTransactionLogs(t);
+                if ((t - lastCleanTransactionTick) % CHECKPOINT_INTERVAL == 0)
+                {
+                    lastCleanTransactionTick = t;
+                    db_insert_u32(KEY_LAST_CLEAN_TX_TICK, static_cast<uint32_t>(lastCleanTransactionTick));
+                    Logger::get()->trace("[TxStorageMode::Kvrocks] Checkpoint: cleaned transaction and log tick {}", t);
+                }
             }
             lastCleanTransactionTick = cleanToTick;
             db_insert_u32(KEY_LAST_CLEAN_TX_TICK, static_cast<uint32_t>(lastCleanTransactionTick));
+            Logger::get()->trace("[TxStorageMode::Kvrocks] Checkpoint: cleaned transaction and log tick {}", lastCleanTransactionTick);
         }
     }
 }

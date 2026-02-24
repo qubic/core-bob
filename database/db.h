@@ -41,6 +41,7 @@
 #include <cstdint>
 #include <memory>
 #include <vector>
+#include <optional>
 #include <immintrin.h> // For m256i
 #include "structs.h"
 #include "Logger.h"
@@ -414,6 +415,8 @@ bool db_check_log_range(uint32_t tick);
 bool db_try_get_log_ranges(uint32_t tick, LogRangesPerTxInTick &logRange);
 bool db_has_tick_data(uint32_t tick);
 bool db_try_get_transaction(const std::string& tx_hash, std::vector<uint8_t>& tx_data);
+bool db_get_many_transaction_from_keydb(const std::vector<std::string>& txKeys,
+                                        std::vector<std::optional<std::basic_string<char>>>& txVal);
 bool db_check_transaction_exist(const std::string& tx_hash);
 
 // ---- Deletion Functions ----
@@ -509,9 +512,12 @@ bool db_insert_TickLogRange_to_kvrocks(uint32_t tick, long long& logStart, long 
 bool db_get_cLogRange_from_kvrocks(uint32_t tick, LogRangesPerTxInTick& outLogRange);
 
 bool db_copy_transaction_to_kvrocks(const std::string &tx_hash);
+bool db_add_many_transactions_to_kvrocks(const std::vector<std::string>& txKeys,
+                                         const std::vector<std::optional<std::basic_string<char>>>& txVal);
 
 bool db_move_logs_to_kvrocks_by_range(uint16_t epoch, long long fromLogId, long long toLogId);
 bool db_delete_transaction(std::string hash);
+bool db_delete_many(const std::vector<std::string>& keys);
 bool db_delete_logs(uint16_t epoch, long long start, long long end);
 
 bool db_get_endepoch_log_range_info(const uint16_t epoch, long long &start, long long &length, LogRangesPerTxInTick &lr);
