@@ -18,7 +18,7 @@
 #include "Version.h"
 void IOVerifyThread();
 void IORequestThread(ConnectionPool& conn_pool, std::chrono::milliseconds requestCycle, uint32_t futureOffset);
-void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd, std::chrono::milliseconds request_logging_cycle_ms);
+void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd, uint64_t request_logging_cycle_ms);
 void connReceiver(QCPtr conn, const bool isTrustedNode);
 void DataProcessorThread();
 void RequestProcessorThread();
@@ -210,7 +210,7 @@ int runBob(int argc, char *argv[])
     auto log_request_trusted_nodes_thread = std::thread([&](){
         set_this_thread_name("trusted-log-req");
         EventRequestFromTrustedNode(std::ref(connPool),
-                                    std::chrono::milliseconds(request_logging_cycle_ms));
+                                    request_logging_cycle_ms);
     });
 
     auto indexer_thread = std::thread([&](){
