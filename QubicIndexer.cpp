@@ -79,6 +79,18 @@ static void indexTick(uint32_t tick, const TickData &td) {
                     std::vector<uint8_t> tx_data;
                     if (db_try_get_transaction(txHash, tx_data)) {
                         auto tx = (Transaction*)tx_data.data();
+                        if (isZero(tx->destinationPublicKey) &&
+                        (tx->inputType == 1 || tx->inputType == 2 || tx->inputType == 3 || tx->inputType == 4 || tx->inputType == 5
+                         || tx->inputType == 8 || tx->inputType == 9))
+                        // 1 vote point
+                        // 2 mining solution
+                        // 3,4,5 files
+                        // 8 custom mining reports
+                        // 9 fee report
+                        {
+                            // ignore protocol reports
+                            indexerIgnoreList[i] = true;
+                        }
                         if (isZero(tx->destinationPublicKey) && (tx->inputType == 6 || tx->inputType == 7 || tx->inputType == 10))
                         {
                             // oracle messages, not index for now
@@ -136,6 +148,7 @@ static void indexTick(uint32_t tick, const TickData &td) {
         // no index for oracle message
         auto& le  = vle[i];
         int txId = logrange.scanTxId(txOrder, lastTxId, le.getLogId());
+        lastTxId = txId;
         if (indexerIgnoreList[i]) continue;
         auto type = le.getType();
         SC_index = 0xffffffff;
