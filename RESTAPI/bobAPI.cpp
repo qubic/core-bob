@@ -203,6 +203,11 @@ std::string bobGetLog(uint16_t epoch, int64_t start, int64_t end)
             logTxOrder = lr.sort();
             // scan to find the first cursor
             logTxOrderIndex = lr.scanTxId(logTxOrder, 0, log.getLogId());
+            if (logTxOrderIndex == -1)
+            {
+                result.push_back(']');
+                return result;
+            }
             int txIndex = logTxOrder[logTxOrderIndex];
 
             if (log.getTick() != gInitialTick && txIndex < NUMBER_OF_TRANSACTIONS_PER_TICK)
@@ -246,11 +251,6 @@ std::string bobGetLog(uint16_t epoch, int64_t start, int64_t end)
                 }
             }
 
-            if (logTxOrderIndex == -1)
-            {
-                result.push_back(']');
-                return result;
-            }
             txIndex = logTxOrder[logTxOrderIndex];
             auto s = lr.fromLogId[txIndex];
             auto e = s + lr.length[txIndex] - 1;
