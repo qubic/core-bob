@@ -379,13 +379,25 @@ int runBob(int argc, char *argv[])
     Logger::get()->info("Exited indexer thread");
 
     sc_thread.join();
-    delete gTCM;
-    Logger::get()->info("Exited SC thread");
+    if (gTCM)
+    {
+        gTCM->stop();
+        Logger::get()->info("Stopped gTCM");
+        delete gTCM;
+        gTCM = nullptr;
+        Logger::get()->info("Exited SC thread");
+    }
 
     if (log_event_verifier_thread.joinable())
     {
         log_event_verifier_thread.join();
         Logger::get()->info("Exited verifyLoggingEvent thread");
+    }
+
+    if (run_server)
+    {
+        StopQubicServer();
+        Logger::get()->info("Closed Qubic server at port 21842");
     }
 
     // Now the receivers can drain and exit.
@@ -416,12 +428,6 @@ int runBob(int argc, char *argv[])
     {
         Logger::get()->info("Exiting garbage cleaner");
         garbage_thread.join();
-    }
-
-    if (run_server)
-    {
-        StopQubicServer();
-        Logger::get()->info("Closed Qubic server at port 21842");
     }
 
     stopRESTServer();

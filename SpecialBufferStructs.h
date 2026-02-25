@@ -194,6 +194,10 @@ public:
     }
 
     ~TimedCacheMap() {
+
+    }
+    void stop()
+    {
         {
             std::lock_guard<std::mutex> lock(mtx_);
             should_stop_ = true;
@@ -203,7 +207,6 @@ public:
             cleanup_thread_.join();
         }
     }
-
     // Disable copy and assignment
     TimedCacheMap(const TimedCacheMap&) = delete;
     TimedCacheMap& operator=(const TimedCacheMap&) = delete;
