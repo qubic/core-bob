@@ -225,6 +225,11 @@ int runBob(int argc, char *argv[])
     });
 
     while (gCurrentIndexingTick == 0 || gCurrentVerifyLoggingTick == 0) SLEEP(100);
+    if (gCurrentFetchingTick < gCurrentVerifyLoggingTick)
+    {
+        Logger::get()->critical("Illegal DB status: gCurrentFetchingTick < gCurrentVerifyLoggingTick");
+        exit(2);
+    }
     initialCleanDB();
 
     auto request_thread = std::thread(
