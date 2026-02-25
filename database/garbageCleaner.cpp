@@ -272,7 +272,7 @@ void garbageCleaner()
     }
     else
     {
-        gLastCleanTickData = gInitialTick;
+        gLastCleanTickData = gInitialTick - 1;
         Logger::get()->info("No persisted lastCleanTickData found, using default: {}", gLastCleanTickData);
     }
 
@@ -283,7 +283,7 @@ void garbageCleaner()
     }
     else
     {
-        gLastCleanTransactionTick = gInitialTick;
+        gLastCleanTransactionTick = gInitialTick - 1;
         Logger::get()->info("No persisted gLastCleanTransactionTick found, using default: {}", gLastCleanTransactionTick);
     }
 
