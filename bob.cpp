@@ -164,6 +164,11 @@ int runBob(int argc, char *argv[])
     uint32_t endEpochTick = 0;
     std::string key = "end_epoch_tick:" + std::to_string(gCurrentProcessingEpoch);
     bool isThisEpochAlreadyEnd = db_get_u32(key, endEpochTick);
+    bool needInitialClean = true;
+    if (isThisEpochAlreadyEnd)
+    {
+        needInitialClean = false; // expecting a big jump in tick
+    }
     int retryCount = 0;
     while ((initTick == 0 ||
             ( (initEpoch < gCurrentProcessingEpoch && !isThisEpochAlreadyEnd) ||
@@ -230,7 +235,7 @@ int runBob(int argc, char *argv[])
         Logger::get()->critical("Illegal DB status: gCurrentFetchingTick < gCurrentVerifyLoggingTick");
         exit(2);
     }
-    initialCleanDB();
+    if (needInitialClean) initialCleanDB();
 
     auto request_thread = std::thread(
             [&](){
