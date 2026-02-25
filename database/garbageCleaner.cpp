@@ -228,22 +228,24 @@ void initialCleanDB() // to clean up in case crashing last time
     long long lastCleanTickData;
     long long lastCleanTransactionTick;
 
-    if (db_get_u32(KEY_LAST_CLEAN_TICK_DATA, loadedCleanTickData) && loadedCleanTickData > 0)
+    db_get_u32(KEY_LAST_CLEAN_TICK_DATA, loadedCleanTickData);
+    if (loadedCleanTickData > 0 && loadedCleanTickData > gInitialTick - 1)
     {
         lastCleanTickData = loadedCleanTickData;
     }
     else
     {
-        lastCleanTickData = gInitialTick;
+        lastCleanTickData = gInitialTick - 1;
     }
 
-    if (db_get_u32(KEY_LAST_CLEAN_TX_TICK, loadedCleanTxTick) && loadedCleanTxTick > 0)
+    db_get_u32(KEY_LAST_CLEAN_TX_TICK, loadedCleanTxTick);
+    if (loadedCleanTxTick > 0 && loadedCleanTxTick > gInitialTick - 1)
     {
         lastCleanTransactionTick = loadedCleanTxTick;
     }
     else
     {
-        lastCleanTransactionTick = gInitialTick;
+        lastCleanTransactionTick = gInitialTick - 1;
     }
 
     uint32_t lastReportedTick = 0;
@@ -264,8 +266,8 @@ void garbageCleaner()
     uint32_t loadedCleanTxTick = 0;
     gLastCleanTickData = 0;
     gLastCleanTransactionTick = 0;
-
-    if (db_get_u32(KEY_LAST_CLEAN_TICK_DATA, loadedCleanTickData) && loadedCleanTickData > 0)
+    db_get_u32(KEY_LAST_CLEAN_TICK_DATA, loadedCleanTickData);
+    if (loadedCleanTickData > 0 && loadedCleanTickData > gInitialTick - 1)
     {
         gLastCleanTickData = loadedCleanTickData;
         Logger::get()->info("Loaded lastCleanTickData from DB: {}", gLastCleanTickData);
@@ -276,7 +278,8 @@ void garbageCleaner()
         Logger::get()->info("No persisted lastCleanTickData found, using default: {}", gLastCleanTickData);
     }
 
-    if (db_get_u32(KEY_LAST_CLEAN_TX_TICK, loadedCleanTxTick) && loadedCleanTxTick > 0)
+    db_get_u32(KEY_LAST_CLEAN_TX_TICK, loadedCleanTxTick);
+    if (loadedCleanTxTick > 0 && loadedCleanTxTick > gInitialTick - 1)
     {
         gLastCleanTransactionTick = loadedCleanTxTick;
         Logger::get()->info("Loaded gLastCleanTransactionTick from DB: {}", gLastCleanTransactionTick);
