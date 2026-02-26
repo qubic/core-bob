@@ -80,6 +80,10 @@ if [ -n "$KVROCKS_TTL" ]; then
     jq --argjson v "$KVROCKS_TTL" '.["kvrocks_ttl"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
+if [ -n "$INDEXER_MAX_ACTIVITIES_PER_KEY" ]; then
+    jq --argjson v "$INDEXER_MAX_ACTIVITIES_PER_KEY" '.["indexer-max-activities-per-key"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+fi
+
 # --- Boolean parameters ---
 if [ -n "$RUN_SERVER" ]; then
     jq --argjson v "$RUN_SERVER" '.["run-server"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
@@ -107,9 +111,67 @@ if [ -n "$P2P_NODES" ]; then
     jq --arg v "$P2P_NODES" '.["p2p-node"] = ($v | split(",") | map(. | ltrimstr(" ") | rtrimstr(" ")))' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
+# --- Redis/KeyDB settings ---
+REDIS_CONF="/etc/redis/redis.conf"
+
+if [ -n "$REDIS_MAXMEMORY" ]; then
+    sed -i "s/^maxmemory .*/maxmemory $REDIS_MAXMEMORY/" "$REDIS_CONF"
+fi
+
+if [ -n "$REDIS_MAXMEMORY_POLICY" ]; then
+    sed -i "s/^maxmemory-policy .*/maxmemory-policy $REDIS_MAXMEMORY_POLICY/" "$REDIS_CONF"
+fi
+
+if [ -n "$REDIS_PORT" ]; then
+    sed -i "s/^port .*/port $REDIS_PORT/" "$REDIS_CONF"
+fi
+
+if [ -n "$REDIS_LOGLEVEL" ]; then
+    sed -i "s/^loglevel .*/loglevel $REDIS_LOGLEVEL/" "$REDIS_CONF"
+fi
+
+# --- Kvrocks settings ---
+KVROCKS_CONF="/etc/kvrocks/kvrocks.conf"
+
+if [ -n "$KVROCKS_BLOCK_CACHE_SIZE" ]; then
+    sed -i "s/^rocksdb.block_cache_size .*/rocksdb.block_cache_size $KVROCKS_BLOCK_CACHE_SIZE/" "$KVROCKS_CONF"
+fi
+
+if [ -n "$KVROCKS_WRITE_BUFFER_SIZE" ]; then
+    sed -i "s/^rocksdb.write_buffer_size .*/rocksdb.write_buffer_size $KVROCKS_WRITE_BUFFER_SIZE/" "$KVROCKS_CONF"
+fi
+
+if [ -n "$KVROCKS_MAX_WRITE_BUFFER_NUMBER" ]; then
+    sed -i "s/^rocksdb.max_write_buffer_number .*/rocksdb.max_write_buffer_number $KVROCKS_MAX_WRITE_BUFFER_NUMBER/" "$KVROCKS_CONF"
+fi
+
+if [ -n "$KVROCKS_MAX_OPEN_FILES" ]; then
+    sed -i "s/^rocksdb.max_open_files .*/rocksdb.max_open_files $KVROCKS_MAX_OPEN_FILES/" "$KVROCKS_CONF"
+fi
+
+if [ -n "$KVROCKS_ROCKSDB_TTL" ]; then
+    sed -i "s/^rocksdb.ttl .*/rocksdb.ttl $KVROCKS_ROCKSDB_TTL/" "$KVROCKS_CONF"
+fi
+
+if [ -n "$KVROCKS_WORKERS" ]; then
+    sed -i "s/^workers .*/workers $KVROCKS_WORKERS/" "$KVROCKS_CONF"
+fi
+
+if [ -n "$KVROCKS_PORT" ]; then
+    sed -i "s/^port .*/port $KVROCKS_PORT/" "$KVROCKS_CONF"
+fi
+
+if [ -n "$KVROCKS_LOGLEVEL" ]; then
+    sed -i "s/^log-level .*/log-level $KVROCKS_LOGLEVEL/" "$KVROCKS_CONF"
+fi
+
 echo "=== Bob configuration ==="
 # Print config but redact the node-seed for security
 jq 'if .["node-seed"] then .["node-seed"] = "***REDACTED***" else . end' "$CONFIG_FILE"
+echo "=== Redis configuration ==="
+grep -E "^(maxmemory|maxmemory-policy|port|loglevel) " "$REDIS_CONF"
+echo "=== Kvrocks configuration ==="
+grep -E "^(rocksdb\.|workers |port |log-level )" "$KVROCKS_CONF"
 echo "========================="
 
 # Execute the original CMD (supervisord)

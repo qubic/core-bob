@@ -1,7 +1,7 @@
 {
   "p2p-node": [],
   "request-cycle-ms": 100,
-  "request-logging-cycle-ms": 30,
+  "request-logging-cycle-ms": 100,
   "future-offset": 3,
   "log-level": "info",
   "keydb-url": "tcp://127.0.0.1:6379",
@@ -12,7 +12,8 @@
   "tick-storage-mode": "kvrocks",
   "kvrocks-url": "tcp://127.0.0.1:6666",
   "tx-storage-mode": "kvrocks",
-  "tx_tick_to_live": 10000,
+  "tx_tick_to_live": 3000,
   "max-thread": 0,
-  "spam-qu-threshold": 100
+  "spam-qu-threshold": 100,
+  "indexer-max-activities-per-key": 10000
 }

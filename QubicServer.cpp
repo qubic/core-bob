@@ -53,7 +53,7 @@ namespace {
             ip_connections_[ip]++;
             total_connections_++;
 
-            Logger::get()->debug("ConnectionLimiter: Accepted {} (IP: {}/{}, Global: {}/{})",
+            Logger::get()->trace("ConnectionLimiter: Accepted {} (IP: {}/{}, Global: {}/{})",
                                  ip, ip_connections_[ip], max_per_ip_,
                                  total_connections_, max_global_);
             return true;
@@ -74,7 +74,7 @@ namespace {
                 total_connections_--;
             }
 
-            Logger::get()->debug("ConnectionLimiter: Released {} (Global: {}/{})",
+            Logger::get()->trace("ConnectionLimiter: Released {} (Global: {}/{})",
                                  ip, total_connections_, max_global_);
         }
 
@@ -250,7 +250,7 @@ namespace {
 
             size_t after = clients_.size();
             if (before != after) {
-                Logger::get()->debug("QubicServer: Cleaned up {} finished client(s), {} active",
+                Logger::get()->trace("QubicServer: Cleaned up {} finished client(s), {} active",
                                      before - after, after);
             }
         }
@@ -331,7 +331,7 @@ namespace {
                     clients_.push_back(ctx);
                 }
 
-                Logger::get()->debug("QubicServer: Accepted connection from {} (total active: {})",
+                Logger::get()->trace("QubicServer: Accepted connection from {} (total active: {})",
                                      client_ip, limiter_->getTotalConnections());
 
                 // Non-trusted connections
@@ -345,10 +345,10 @@ namespace {
                         connReceiver(ctx->conn, isTrustedNode);
 
                     } catch (const std::exception& ex) {
-                        Logger::get()->debug("QubicServer: Exception for {}: {}",
+                        Logger::get()->trace("QubicServer: Exception for {}: {}",
                                              ctx->client_ip, ex.what());
                     } catch (...) {
-                        Logger::get()->debug("QubicServer: Unknown exception for {}", ctx->client_ip);
+                        Logger::get()->trace("QubicServer: Unknown exception for {}", ctx->client_ip);
                     }
 
                     // Cleanup when receiver exits
@@ -361,7 +361,7 @@ namespace {
                     // Mark as finished for cleanup thread
                     ctx->finished.store(true, std::memory_order_release);
 
-                    Logger::get()->debug("QubicServer: Client {} disconnected", ctx->client_ip);
+                    Logger::get()->trace("QubicServer: Client {} disconnected", ctx->client_ip);
                 });
             }
         }

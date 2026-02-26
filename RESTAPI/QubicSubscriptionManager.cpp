@@ -82,6 +82,11 @@ std::string QubicSubscriptionManager::subscribe(
         return "";
     }
 
+    // Check subscription limit
+    if (static_cast<int>(clientIt->second.size()) >= MAX_SUBSCRIPTIONS_PER_CLIENT) {
+        return "";
+    }
+
     // Generate subscription ID
     std::string subId = generateSubscriptionId();
 
@@ -401,6 +406,11 @@ std::string QubicSubscriptionManager::subscribeTickStream(
     // Check if client is registered
     auto clientIt = clientSubscriptions_.find(conn);
     if (clientIt == clientSubscriptions_.end()) {
+        return "";
+    }
+
+    // Check subscription limit
+    if (static_cast<int>(clientIt->second.size()) >= MAX_SUBSCRIPTIONS_PER_CLIENT) {
         return "";
     }
 

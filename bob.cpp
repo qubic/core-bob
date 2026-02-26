@@ -18,7 +18,7 @@
 #include "Version.h"
 void IOVerifyThread();
 void IORequestThread(ConnectionPool& conn_pool, std::chrono::milliseconds requestCycle, uint32_t futureOffset);
-void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd, std::chrono::milliseconds request_logging_cycle_ms);
+void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd, uint64_t request_logging_cycle_ms);
 void connReceiver(QCPtr conn, const bool isTrustedNode);
 void DataProcessorThread();
 void RequestProcessorThread();
@@ -29,7 +29,7 @@ void querySmartContractThread(ConnectionPool& connPoolAll);
 bool StartQubicServer(ConnectionPool* cp, uint16_t port = 21842);
 void StopQubicServer();
 void garbageCleaner();
-
+void initialCleanDB();
 
 
 static inline void set_this_thread_name(const char* name_in) {
@@ -100,6 +100,7 @@ int runBob(int argc, char *argv[])
             (std::chrono::system_clock::now().time_since_epoch()).count();
     gAllowCheckInQubicGlobal = cfg.allow_check_in_qubic_global;
     gAllowReceiveLogFromIncomingConnection = cfg.allow_receive_log_from_incoming_connections;
+    gMaxActivitiesPerIndexKey = cfg.indexer_max_activities_per_key;
 
     // Defaults for new knobs are already in AppConfig
     unsigned int request_cycle_ms = cfg.request_cycle_ms;
@@ -206,6 +207,30 @@ int runBob(int argc, char *argv[])
         }
     }
 
+    auto log_request_trusted_nodes_thread = std::thread([&](){
+        set_this_thread_name("trusted-log-req");
+        EventRequestFromTrustedNode(std::ref(connPool),
+                                    request_logging_cycle_ms);
+    });
+
+    auto indexer_thread = std::thread([&](){
+        set_this_thread_name("indexer");
+        indexVerifiedTicks();
+    });
+
+    std::thread log_event_verifier_thread;
+    log_event_verifier_thread = std::thread([&](){
+        set_this_thread_name("log-ver");
+        verifyLoggingEvent();
+    });
+
+    while (gCurrentIndexingTick == 0 || gCurrentVerifyLoggingTick == 0) SLEEP(100);
+    if (gCurrentFetchingTick < gCurrentVerifyLoggingTick)
+    {
+        Logger::get()->critical("Illegal DB status: gCurrentFetchingTick < gCurrentVerifyLoggingTick");
+        exit(2);
+    }
+    initialCleanDB();
 
     auto request_thread = std::thread(
             [&](){
@@ -217,19 +242,12 @@ int runBob(int argc, char *argv[])
                 );
             }
     );
+
     auto verify_thread = std::thread([&](){
         set_this_thread_name("verify");
         IOVerifyThread();
     });
-    auto log_request_trusted_nodes_thread = std::thread([&](){
-        set_this_thread_name("trusted-log-req");
-        EventRequestFromTrustedNode(std::ref(connPool),
-                                    std::chrono::milliseconds(request_logging_cycle_ms));
-    });
-    auto indexer_thread = std::thread([&](){
-        set_this_thread_name("indexer");
-        indexVerifiedTicks();
-    });
+
     gTCM = new TimedCacheMap<>();
     auto sc_thread = std::thread([&](){
         set_this_thread_name("sc");
@@ -244,19 +262,20 @@ int runBob(int argc, char *argv[])
     for (int i = 0; i < pool_size; i++)
     {
         QCPtr qc = nullptr;
-        v_recv_thread.emplace_back([&, i](){
-            char nm[16];
-            std::snprintf(nm, sizeof(nm), "recv-%d", i);
-            set_this_thread_name(nm);
-            if (connPool.get(i, qc))
-            {
+        if (connPool.get(i, qc))
+        {
+            v_recv_thread.emplace_back([i, qc, isTrustedNode]() {
+                char nm[16];
+                std::snprintf(nm, sizeof(nm), "recv-%d", i);
+                set_this_thread_name(nm);
                 connReceiver(qc, isTrustedNode);
-            }
-            else
-            {
-                Logger::get()->warn("Invalid connection index ", i);
-            }
-        });
+            });
+        }
+        else
+        {
+            Logger::get()->warn("Invalid connection index ", i);
+        }
+        
         if (qc && qc->isBM()) gNumBMConnection++;
     }
     for (int i = 0; i < std::max(gMaxThreads, pool_size); i++)
@@ -272,11 +291,7 @@ int runBob(int argc, char *argv[])
             RequestProcessorThread();
         });
     }
-    std::thread log_event_verifier_thread;
-    log_event_verifier_thread = std::thread([&](){
-        set_this_thread_name("log-ver");
-        verifyLoggingEvent();
-    });
+
     std::thread garbage_thread;
     if (cfg.tick_storage_mode != TickStorageMode::Free || cfg.tx_storage_mode != TxStorageMode::Free)
     {
@@ -308,11 +323,13 @@ int runBob(int argc, char *argv[])
         prevVerifyEventTick = gCurrentVerifyLoggingTick.load();
         prevIndexingTick = gCurrentIndexingTick.load();
         Logger::get()->info(
-                "Current state: FetchingTick: {} ({:.1f}) | FetchingLog: {} ({:.1f}) | Indexing: {} ({:.1f}) | Verifying: {} ({:.1f})",
+                "Current state: FetchingTick: {} ({:.1f}) | FetchingLog: {} ({:.1f}) | Indexing: {} ({:.1f}) | Verifying: {} ({:.1f}) | GC: {}/{}",
                 gCurrentFetchingTick.load(), fetching_td_speed,
                 gCurrentFetchingLogTick.load(), fetching_le_speed,
                 gCurrentIndexingTick.load(), indexing_speed,
-                gCurrentVerifyLoggingTick.load(), verify_le_speed);
+                gCurrentVerifyLoggingTick.load(), verify_le_speed,
+                gLastCleanTickData, gLastCleanTransactionTick
+                );
         requestMapperFrom.clean();
         requestMapperTo.clean();
         responseSCData.clean(10);
@@ -362,13 +379,25 @@ int runBob(int argc, char *argv[])
     Logger::get()->info("Exited indexer thread");
 
     sc_thread.join();
-    delete gTCM;
-    Logger::get()->info("Exited SC thread");
+    if (gTCM)
+    {
+        gTCM->stop();
+        Logger::get()->info("Stopped gTCM");
+        delete gTCM;
+        gTCM = nullptr;
+        Logger::get()->info("Exited SC thread");
+    }
 
     if (log_event_verifier_thread.joinable())
     {
         log_event_verifier_thread.join();
         Logger::get()->info("Exited verifyLoggingEvent thread");
+    }
+
+    if (run_server)
+    {
+        StopQubicServer();
+        Logger::get()->info("Closed Qubic server at port 21842");
     }
 
     // Now the receivers can drain and exit.
@@ -399,12 +428,6 @@ int runBob(int argc, char *argv[])
     {
         Logger::get()->info("Exiting garbage cleaner");
         garbage_thread.join();
-    }
-
-    if (run_server)
-    {
-        StopQubicServer();
-        Logger::get()->info("Closed Qubic server at port 21842");
     }
 
     stopRESTServer();

@@ -101,16 +101,37 @@ bool db_delete_transaction(std::string hash)
     return true;
 }
 
+bool db_delete_many(const std::vector<std::string>& keys)
+{
+    if (!g_redis) return false;
+    try {
+        if (!keys.empty())
+        {
+            g_redis->unlink(keys.begin(), keys.end());
+        }
+    } catch (const sw::redis::Error& e) {
+        Logger::get()->error("Redis error: {}\n", e.what());
+        return false;
+    }
+    return true;
+}
+
 bool db_delete_logs(uint16_t epoch, long long start, long long end)
 {
     if (!g_redis) return false;
     try {
+        std::vector<std::string> keys;
+        keys.reserve(end - start + 1);
         for (long long i = start; i <= end; i++)
         {
             std::string key = "log:" +
                               std::to_string(epoch) + ":" +
                               std::to_string(i);
-            g_redis->unlink(key);
+            keys.push_back(key);
+        }
+        if (!keys.empty())
+        {
+            g_redis->unlink(keys.begin(), keys.end());
         }
     } catch (const sw::redis::Error& e) {
         Logger::get()->error("Redis error: {}\n", e.what());
@@ -149,26 +170,10 @@ bool db_insert_log_range(uint32_t tick, const LogRangesPerTxInTick& logRange) {
         // Compute min/max and store under a per-tick summary key
         long long min_log_id = INTMAX_MAX;
         long long max_log_id = -1;
-        for (size_t i = 0; i < LOG_TX_PER_TICK; ++i) {
-            if (logRange.fromLogId[i] == -1 || logRange.length[i] == -1) continue;
-            min_log_id = std::min(min_log_id, logRange.fromLogId[i]);
-            max_log_id = std::max(max_log_id, logRange.fromLogId[i] + logRange.length[i]);
-            if (logRange.fromLogId[i] < -1)
-            {
-//                Logger::get()->error("Log ranges have invalid value: tick {} logRange.fromLogId[i] {}", tick, logRange.fromLogId[i]);
-                return false;
-            }
-            if (logRange.length[i] < -1)
-            {
-//                Logger::get()->error("Log ranges have invalid value: tick {} logRange.length[i] {}", tick, logRange.length[i]);
-                return false;
-            }
-            //TODO: track END_EPOCH log range
-        }
-
-        if (min_log_id == INTMAX_MAX) {
-            min_log_id = -1;
-            max_log_id = -1;
+        logRange.getMinMax(min_log_id, max_log_id);
+        if (min_log_id < -1 || max_log_id < -1)
+        {
+            return false;
         }
 
         // Store the whole struct for the tick
@@ -756,9 +761,8 @@ bool db_get_tick_vote(uint32_t tick, uint16_t computorIndex, TickVote& vote) {
     return false;
 }
 
-std::vector<TickVote> db_get_tick_votes(uint32_t tick) {
-    std::vector<TickVote> votes;
-    if (!g_redis) return votes;
+bool db_get_tick_votes(uint32_t tick, std::vector<TickVote>& votes) {
+    if (!g_redis) return false;
     try {
         // Deterministic bounded fetch: keys tick_vote:<tick>:0..675
         constexpr int MAX_COMPUTORS = 676;
@@ -796,9 +800,10 @@ std::vector<TickVote> db_get_tick_votes(uint32_t tick) {
             }
         }
     } catch (const sw::redis::Error& e) {
+        return false;
         Logger::get()->error("Redis error in db_get_tick_votes: {}\n", e.what());
     }
-    return votes;
+    return true;
 }
 
 bool db_get_tick_data(uint32_t tick, TickData& data) {
@@ -820,6 +825,25 @@ bool db_get_tick_data(uint32_t tick, TickData& data) {
         Logger::get()->error("Redis error in db_get_tick_data: {}\n", e.what());
     }
     return false;
+}
+
+
+bool db_get_many_transaction_from_keydb(const std::vector<std::string>& fullKeys,
+                                        std::vector<std::optional<std::basic_string<char>>>& txVal) {
+    if (!g_redis) return false;
+    txVal.clear();
+    if (fullKeys.empty()) {
+        return true;
+    }
+
+    try {
+        txVal.reserve(fullKeys.size());
+        g_redis->mget(fullKeys.begin(), fullKeys.end(), std::back_inserter(txVal));
+        return true;
+    } catch (const sw::redis::Error& e) {
+        Logger::get()->error("Redis error in db_get_many_transaction: {}\n", e.what());
+        return false;
+    }
 }
 
 bool _db_get_transaction(const std::string& tx_hash, std::vector<uint8_t>& tx_data) {
@@ -909,7 +933,8 @@ std::vector<TickVote> db_get_tick_votes_from_vtick(uint32_t tick) {
 }
 
 std::vector<TickVote> db_try_to_get_votes(uint32_t tick) {
-    auto votes = db_get_tick_votes(tick);
+    std::vector<TickVote> votes;
+    db_get_tick_votes(tick, votes);
     if (votes.empty()) {
         votes = db_get_tick_votes_from_vtick(tick);
     }
@@ -1074,10 +1099,19 @@ return 0
 
 bool db_add_indexer(const std::string &key, uint32_t tickNumber)
 {
-    if (!g_redis) return false;
+    if (!g_kvrocks) return false;
     try {
         const std::string member = std::to_string(tickNumber);
-        g_redis->zadd(key, member, static_cast<double>(tickNumber), sw::redis::UpdateType::NOT_EXIST);
+        g_kvrocks->zadd(key, member, static_cast<double>(tickNumber), sw::redis::UpdateType::NOT_EXIST);
+
+        // Auto-clean to maintain maximum size
+        long long count = g_kvrocks->zcard(key);
+        if (count > gMaxActivitiesPerIndexKey) {
+            long long to_remove = count - gMaxActivitiesPerIndexKey;
+            std::vector<std::pair<std::string, double>> removed;
+            g_kvrocks->zpopmin(key, to_remove, std::back_inserter(removed));
+        }
+
         return true;
     } catch (const sw::redis::Error &e) {
         Logger::get()->error("Redis error in db_add_indexer: {}\n", e.what());
@@ -1085,6 +1119,45 @@ bool db_add_indexer(const std::string &key, uint32_t tickNumber)
     }
 }
 
+bool db_add_many_indexer(const std::vector<std::string> &keys, uint32_t tickNumber)
+{
+    if (!g_kvrocks || keys.empty()) return false;
+
+    try {
+        // Lua script that processes multiple keys atomically
+        static const std::string lua_script = R"(
+            local member = ARGV[1]
+            local score = tonumber(ARGV[2])
+            local max_size = tonumber(ARGV[3])
+
+            for i, key in ipairs(KEYS) do
+                redis.call('ZADD', key, 'NX', score, member)
+                local count = redis.call('ZCARD', key)
+                if count > max_size then
+                    redis.call('ZPOPMIN', key, count - max_size)
+                end
+            end
+
+            return #KEYS
+        )";
+
+        const std::string member = std::to_string(tickNumber);
+        const std::string score = std::to_string(static_cast<double>(tickNumber));
+        const std::string max_size = std::to_string(gMaxActivitiesPerIndexKey);
+
+        // Create a proper vector for argv (can't use initializer list with iterators)
+        std::vector<std::string> argv = {member, score, max_size};
+
+        g_kvrocks->eval<long long>(lua_script,
+                                   keys.begin(), keys.end(),
+                                   argv.begin(), argv.end());
+
+    } catch (const sw::redis::Error &e) {
+        return false;
+        Logger::get()->error("Redis error in db_add_many_indexer: {}\n", e.what());
+    }
+    return true;
+}
 
 bool db_set_indexed_tx(const char *key,
                        int tx_index,
@@ -1092,7 +1165,7 @@ bool db_set_indexed_tx(const char *key,
                        long long to_log_id,
                        uint64_t timestamp,
                        bool isExecuted) {
-    if (!g_redis) return false;
+    if (!g_kvrocks) return false;
     try {
         indexedTxData data{
             static_cast<int32_t>(tx_index),
@@ -1102,10 +1175,40 @@ bool db_set_indexed_tx(const char *key,
             static_cast<uint64_t>(timestamp)
         };
         sw::redis::StringView val(reinterpret_cast<const char*>(&data), sizeof(data));
-        g_redis->set(key, val);
+        g_kvrocks->set(key, val, std::chrono::seconds(gKvrocksTTL));
         return true;
     } catch (const sw::redis::Error& e) {
         Logger::get()->error("Redis error in db_set_indexed_tx: {}", e.what());
+        return false;
+    }
+}
+
+bool db_set_many_indexed_tx(const std::vector<std::tuple<std::string, int, long long, long long, uint64_t, bool>>& txDataList) {
+    if (!g_kvrocks) return false;
+    if (txDataList.empty()) return true;
+
+    try {
+        auto pipe = g_kvrocks->pipeline();
+
+        for (const auto& txData : txDataList) {
+            const auto& [key, tx_index, from_log_id, to_log_id, timestamp, isExecuted] = txData;
+
+            indexedTxData data{
+                    static_cast<int32_t>(tx_index),
+                    isExecuted,
+                    static_cast<int64_t>(from_log_id),
+                    static_cast<int64_t>(to_log_id),
+                    static_cast<uint64_t>(timestamp)
+            };
+
+            sw::redis::StringView val(reinterpret_cast<const char*>(&data), sizeof(data));
+            pipe.set(key, val, std::chrono::seconds(gKvrocksTTL));
+        }
+
+        pipe.exec();
+        return true;
+    } catch (const sw::redis::Error& e) {
+        Logger::get()->error("Redis error in db_set_many_indexed_tx: {}", e.what());
         return false;
     }
 }
@@ -1116,11 +1219,40 @@ bool db_get_indexed_tx(const char* tx_hash,
                        long long& to_log_id,
                        uint64_t& timestamp,
                        bool& executed) {
-    if (!g_redis) return false;
+    if (g_redis) { // TODO: remove at epoch 210, after all bobs migrate their old indexer data to kvrocks
+        try {
+            // Indexed TX stored under "itx:<hash>"
+            std::string key = std::string("itx:") + tx_hash;
+            auto val = g_redis->get(key);
+            if (val) {
+                if (val->size() != sizeof(indexedTxData)) {
+                    Logger::get()->warn("db_get_indexed_tx: size mismatch for key {}. got={}, expected={}",
+                                        key, val->size(), sizeof(indexedTxData));
+                    return false;
+                }
+
+                indexedTxData data{};
+                memcpy(&data, val->data(), sizeof(indexedTxData));
+
+                tx_index     = static_cast<int>(data.tx_index);
+                executed     = data.isExecuted;
+                from_log_id  = static_cast<long long>(data.from_log_id);
+                to_log_id    = static_cast<long long>(data.to_log_id);
+                timestamp    = static_cast<uint64_t>(data.timestamp) / 1000; // note: we store it in millisec in DB
+                return true;
+            }
+            // If not found in g_redis, fall through to g_kvrocks
+        } catch (const sw::redis::Error& e) {
+            Logger::get()->error("Redis error in db_get_indexed_tx: {}", e.what());
+            return false;
+        }
+    }
+
+    if (!g_kvrocks) return false;
     try {
         // Indexed TX stored under "itx:<hash>"
         std::string key = std::string("itx:") + tx_hash;
-        auto val = g_redis->get(key);
+        auto val = g_kvrocks->get(key);
         if (!val) {
             return false;
         }
@@ -1145,12 +1277,11 @@ bool db_get_indexed_tx(const char* tx_hash,
     }
 }
 
-
 std::vector<uint32_t> db_search_log(uint32_t scIndex, uint32_t scLogType, uint32_t fromTick, uint32_t toTick,
                                     std::string topic1, std::string topic2, std::string topic3)
 {
     std::vector<uint32_t> result;
-    if (!g_redis) return result;
+    if (!g_kvrocks) return result;
     if (topic1.size() != 60) {
         Logger::get()->error("db_search_log: Error topic1 size, expect 60 but get {}", topic1.size());
         return result;
@@ -1202,7 +1333,11 @@ std::vector<uint32_t> db_search_log(uint32_t scIndex, uint32_t scLogType, uint32
         sw::redis::BoundedInterval<double> range(fromTick, toTick,
                                                  sw::redis::BoundType::CLOSED);
 
+        // TODO: remove getting from g_redis at epoch 210, after all bobs migrate their old indexer data to kvrocks
         g_redis->zrangebyscore(key,
+                               range,
+                               std::back_inserter(members));
+        g_kvrocks->zrangebyscore(key,
                                range,
                                std::back_inserter(members));
 
@@ -1252,6 +1387,41 @@ bool db_copy_transaction_to_kvrocks(const std::string &tx_hash) {
         return true;
     } catch (const sw::redis::Error &e) {
         Logger::get()->error("Redis error in db_migrate_transaction: {}\n", e.what());
+        return false;
+    }
+}
+
+
+bool db_add_many_transactions_to_kvrocks(const std::vector<std::string>& txKeys,
+                                         const std::vector<std::optional<std::basic_string<char>>>& txVal) {
+    if (!g_kvrocks) return false;
+    if (txKeys.empty()) return true;
+    if (txKeys.size() != txVal.size()) {
+        Logger::get()->error("db_add_many_transactions_to_kvrocks: txKeys and txVal size mismatch\n");
+        return false;
+    }
+
+    try {
+        // Use pipeline for batch operations to improve performance
+        auto pipe = g_kvrocks->pipeline();
+
+        for (size_t i = 0; i < txKeys.size(); ++i) {
+            if (!txVal[i]) {
+                continue;
+            }
+
+            const std::string key = "transaction:" + txKeys[i];
+            sw::redis::StringView view(txVal[i]->data(), txVal[i]->size());
+
+            pipe.set(key, view, std::chrono::seconds(gKvrocksTTL));
+        }
+
+        // Execute all commands in the pipeline
+        pipe.exec();
+
+        return true;
+    } catch (const sw::redis::Error &e) {
+        Logger::get()->error("Redis error in db_add_many_transactions_to_kvrocks: {}\n", e.what());
         return false;
     }
 }
@@ -1352,7 +1522,8 @@ bool db_try_get_tick_data(uint32_t tick, TickData& data)
 
 std::vector<TickVote> db_try_get_tick_vote(uint32_t tick)
 {
-    std::vector<TickVote> result = db_get_tick_votes(tick);
+    std::vector<TickVote> result;
+    db_get_tick_votes(tick, result);
     if (!result.empty()) {
         return result;
     }
@@ -1392,19 +1563,48 @@ bool db_move_log_to_kvrocks(uint16_t epoch, uint64_t logId) {
 }
 
 bool db_move_logs_to_kvrocks_by_range(uint16_t epoch, long long fromLogId, long long toLogId) {
-    if (!g_redis || !g_kvrocks || fromLogId < 0 || toLogId < fromLogId) return false;
+    if (!g_redis || !g_kvrocks || toLogId < fromLogId) return false;
+    if (fromLogId < 0 || toLogId < 0) return true; // nothing to move
 
     try {
-        bool success = true;
+        // Build all keys for the range
+        std::vector<std::string> keys;
+        keys.reserve(toLogId - fromLogId + 1);
         for (long long logId = fromLogId; logId <= toLogId; logId++) {
-            if (!db_move_log_to_kvrocks(epoch, logId)) {
-                Logger::get()->warn("Failed to migrate log {}:{}", epoch, logId);
-                success = false;
+            keys.push_back("log:" + std::to_string(epoch) + ":" + std::to_string(logId));
+        }
+
+        // MGET all log data from g_redis in 1 call
+        std::vector<sw::redis::OptionalString> values;
+        values.reserve(keys.size());
+        g_redis->mget(keys.begin(), keys.end(), std::back_inserter(values));
+
+        // Prepare key-value pairs for MSET to kvrocks
+        std::vector<std::pair<std::string, std::string>> kvPairs;
+        kvPairs.reserve(keys.size());
+
+        for (size_t i = 0; i < keys.size(); i++) {
+            if (values[i]) {
+                kvPairs.emplace_back(keys[i], *values[i]);
+            } else {
+                Logger::get()->warn("Log {}:{} ({} => {}) not found in redis. Stop migrating.", epoch, fromLogId + i, fromLogId, toLogId);
+                return false;
             }
         }
-        return success;
+
+        if (kvPairs.empty()) {
+            Logger::get()->warn("No logs found in range {}:{} to {}", epoch, fromLogId, toLogId);
+            return false;
+        }
+
+        // MSET all logs to kvrocks in 1 call
+        g_kvrocks->mset(kvPairs.begin(), kvPairs.end());
+
+        Logger::get()->trace("Migrated {} logs from {}:{} to {} to kvrocks",
+                            kvPairs.size(), epoch, fromLogId, toLogId);
+        return true;
     } catch (const std::exception &e) {
-        Logger::get()->error("Error in db_migrate_logs_by_range: {}\n", e.what());
+        Logger::get()->error("Error in db_move_logs_to_kvrocks_by_range: {}\n", e.what());
         return false;
     }
 }
@@ -1443,19 +1643,18 @@ bool db_get_endepoch_log_range_info(const uint16_t epoch, long long &start, long
 }
 
 // Insert FullTickStruct compressed with zstd under key "vtick:<tick>"
-bool db_insert_vtick_to_kvrocks(uint32_t tick, const FullTickStruct& fullTick)
+bool db_insert_vtick_to_kvrocks(uint32_t tick, const FullTickStruct& fullTick, std::vector<char>& buffer)
 {
     if (!g_kvrocks) return false;
     try {
         const size_t srcSize = sizeof(FullTickStruct);
         const size_t maxCompressed = ZSTD_compressBound(srcSize);
 
-        std::string compressed;
-        compressed.resize(maxCompressed);
+        buffer.resize(maxCompressed);
 
         size_t const cSize = ZSTD_compress(
-                compressed.data(),
-                compressed.size(),
+                buffer.data(),
+                buffer.size(),
                 reinterpret_cast<const void*>(&fullTick),
                 srcSize,
                 ZSTD_defaultCLevel()
@@ -1467,11 +1666,8 @@ bool db_insert_vtick_to_kvrocks(uint32_t tick, const FullTickStruct& fullTick)
             return false;
         }
 
-        // shrink to actual compressed size
-        compressed.resize(cSize);
-
         const std::string key = "vtick:" + std::to_string(tick);
-        sw::redis::StringView val(compressed.data(), compressed.size());
+        sw::redis::StringView val(buffer.data(), cSize);  // Use actual size, not full buffer
         g_kvrocks->set(key, val, std::chrono::seconds(gKvrocksTTL));
         return true;
     } catch (const sw::redis::Error& e) {
@@ -1479,8 +1675,6 @@ bool db_insert_vtick_to_kvrocks(uint32_t tick, const FullTickStruct& fullTick)
         return false;
     }
 }
-
-
 
 bool db_get_vtick_from_kvrocks(uint32_t tick, FullTickStruct& outFullTick)
 {

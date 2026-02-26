@@ -132,6 +132,7 @@ void IORequestThread(ConnectionPool& conn_pool, std::chrono::milliseconds reques
     auto idleBackoff = 10ms;   // Backoff when there's nothing immediate to request
     const auto errorBackoff = 2000ms; // Backoff after an exception
     auto requestClock = std::chrono::high_resolution_clock::now() - requestCycle;
+    bool waitForIndexerFlag = false;
     while (!gStopFlag.load(std::memory_order_relaxed)) {
         if (gIsEndEpoch) break;
 
@@ -142,7 +143,8 @@ void IORequestThread(ConnectionPool& conn_pool, std::chrono::milliseconds reques
                 rqt.tick = refetchTickVotes;
                 memset(rqt.voteFlags, 0, sizeof(rqt.voteFlags));
                 int count = 0;
-                auto tvs = db_get_tick_votes(refetchTickVotes);
+                std::vector<TickVote> tvs;
+                db_get_tick_votes(refetchTickVotes, tvs);
                 for (auto& tv: tvs) {
                     int i = tv.computorIndex;
                     rqt.voteFlags[i >> 3] |= (1 << (i & 7)); // turn on the flag if the vote exists
@@ -154,9 +156,18 @@ void IORequestThread(ConnectionPool& conn_pool, std::chrono::milliseconds reques
                 }
                 refetchTickVotes = -1;
             }
-            /* Don't need to fetch too far if not yet verifying*/
-            if (gCurrentFetchingTick > gCurrentVerifyLoggingTick + 1000)
+            if (waitForIndexerFlag)
             {
+                if (gCurrentFetchingTick > gCurrentIndexingTick + 50) // only resume again when offset is under 50
+                {
+                    SLEEP(idleBackoff);
+                    continue;
+                }
+            }
+            /* Don't need to fetch too far if not yet indexing(verifying)*/
+            if (gCurrentFetchingTick > gCurrentIndexingTick + 1000)
+            {
+                waitForIndexerFlag = true;
                 SLEEP(idleBackoff);
                 continue;
             }
@@ -183,7 +194,8 @@ void IORequestThread(ConnectionPool& conn_pool, std::chrono::milliseconds reques
                         rqt.tick = gCurrentFetchingTick + offset;
                         memset(rqt.voteFlags, 0, sizeof(rqt.voteFlags));
                         int count = 0;
-                        auto tvs = db_get_tick_votes(gCurrentFetchingTick + offset);
+                        std::vector<TickVote> tvs;
+                        db_get_tick_votes(gCurrentFetchingTick + offset, tvs);
                         for (auto& tv: tvs) {
                             int i = tv.computorIndex;
                             rqt.voteFlags[i >> 3] |= (1 << (i & 7)); // turn on the flag if the vote exists

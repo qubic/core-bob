@@ -100,6 +100,8 @@ struct QubicSubscription {
     std::vector<PendingLogEvent> pendingLogs;  // Logs queued during catch-up
 };
 
+static constexpr int MAX_SUBSCRIPTIONS_PER_CLIENT = 10;
+
 class QubicSubscriptionManager {
 public:
     static QubicSubscriptionManager& instance();

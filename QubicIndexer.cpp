@@ -50,8 +50,14 @@ static void indexTick(uint32_t tick, const TickData &td) {
     LogRangesPerTxInTick logrange{};
     uint64_t timestamp = td.epoch == gCurrentProcessingEpoch ? calculateUnixTimestamp(td) : 0;
     db_try_get_log_ranges(tick, logrange);
+    bool indexerIgnoreList[LOG_TX_PER_TICK] = {false};
+    auto txOrder = logrange.sort();
+    Logger::get()->trace("Start adding extra data to txs {}", tick);
     if (td.tick == tick)
     {
+        std::vector<std::tuple<std::string, int, long long, long long, uint64_t, bool>> txDataBatch;
+        txDataBatch.reserve(NUMBER_OF_TRANSACTIONS_PER_TICK);
+
         for (int i = 0; i < NUMBER_OF_TRANSACTIONS_PER_TICK; i++) {
             if (td.transactionDigests[i] == m256i::zero()) continue;
             std::string txHash = getTransactionHash(td.transactionDigests[i].m256i_u8);
@@ -62,9 +68,9 @@ static void indexTick(uint32_t tick, const TickData &td) {
             if (logrange.length[i] > 0) {
                 if (!db_try_get_log(td.epoch, logrange.fromLogId[i], firstEvent))
                 {
-                    Logger::get()->critical("Failed to index data for tick {}. Malformed database."
+                    Logger::get()->critical("Failed to index data for tick {} - epoch {} - logId {}. Malformed database."
                                             "You need to force bob to reverified and reindex DB with command:"
-                                            "hdel db_status latest_verified_tick and hdel db_status last_indexed_tick", tick);
+                                            "hdel db_status latest_verified_tick and hdel db_status last_indexed_tick", tick, td.epoch, logrange.fromLogId[i]);
                     exit(1);
                 }
                 if (firstEvent.getType() == QU_TRANSFER) { // QuTransfer type
@@ -73,8 +79,26 @@ static void indexTick(uint32_t tick, const TickData &td) {
                     std::vector<uint8_t> tx_data;
                     if (db_try_get_transaction(txHash, tx_data)) {
                         auto tx = (Transaction*)tx_data.data();
+                        if (isZero(tx->destinationPublicKey) &&
+                        (tx->inputType == 1 || tx->inputType == 2 || tx->inputType == 3 || tx->inputType == 4 || tx->inputType == 5
+                         || tx->inputType == 8 || tx->inputType == 9))
+                        // 1 vote point
+                        // 2 mining solution
+                        // 3,4,5 files
+                        // 8 custom mining reports
+                        // 9 fee report
+                        {
+                            // ignore protocol reports
+                            indexerIgnoreList[i] = true;
+                        }
+                        if (isZero(tx->destinationPublicKey) && (tx->inputType == 6 || tx->inputType == 7 || tx->inputType == 10))
+                        {
+                            // oracle messages, not index for now
+                            indexerIgnoreList[i] = true;
+                        }
                         if (tx->amount < gSpamThreshold && tx->inputSize == 0 && tx->inputType == 0) // spam tx => not index
                         {
+                            indexerIgnoreList[i] = true;
                             continue;
                         }
                         isExecuted = matchesTransaction(transfer, *tx);
@@ -82,20 +106,33 @@ static void indexTick(uint32_t tick, const TickData &td) {
                 }
             }
 
-            db_set_indexed_tx(key.c_str(), i, logrange.fromLogId[i],
-                              logrange.fromLogId[i] + logrange.length[i] - 1, timestamp,
-                              isExecuted);
+            txDataBatch.emplace_back(
+                    key,
+                    i,
+                    logrange.fromLogId[i],
+                    logrange.fromLogId[i] + logrange.length[i] - 1,
+                    timestamp,
+                    isExecuted
+            );
+        }
+
+        // Batch insert all transaction index data at once
+        if (!txDataBatch.empty()) {
+            db_set_many_indexed_tx(txDataBatch);
         }
     }
 
-    // handling 5 special events
-    for (int i = SC_INITIALIZE_TX; i <= SC_END_EPOCH_TX; i++)
+    // handling last special events
+    for (int i = SC_INITIALIZE_TX; i < LOG_TX_PER_TICK; i++)
     {
         std::string key = "itx:" + std::to_string(tick) + "_" + std::to_string(i);
         db_set_indexed_tx(key.c_str(), i, logrange.fromLogId[i],
                           logrange.fromLogId[i] + logrange.length[i] - 1, timestamp,
                           true);
     }
+    Logger::get()->trace("Finish adding extra data to txs {}", tick);
+    //
+
 
     // now handling all log events
     bool success;
@@ -103,9 +140,16 @@ static void indexTick(uint32_t tick, const TickData &td) {
     uint32_t SC_index = 0;
     uint32_t logType = 0;
     m256i topic1, topic2, topic3;
+    std::vector<std::string> indexerKeyToAdd;
+    int lastTxId = 0;
     for (int i = 0; i < vle.size(); i++)
     {
+        // no index for spam events
+        // no index for oracle message
         auto& le  = vle[i];
+        int txId = logrange.scanTxId(txOrder, lastTxId, le.getLogId());
+        lastTxId = txId;
+        if (indexerIgnoreList[i]) continue;
         auto type = le.getType();
         SC_index = 0xffffffff;
         switch(type)
@@ -249,10 +293,10 @@ static void indexTick(uint32_t tick, const TickData &td) {
                 if (SC_index != 0)
                 {
                     key = "indexed:" + std::to_string(SC_index);
-                    db_add_indexer(key, tick);
+                    indexerKeyToAdd.push_back(key);
                 }
                 key = "indexed:" + std::to_string(SC_index) + ":" + std::to_string(logType);
-                db_add_indexer(key, tick);
+                indexerKeyToAdd.push_back(key);
             }
             // populate all scenarios with topic1,2,3
             // 3 bits => 0=>7
@@ -275,12 +319,13 @@ static void indexTick(uint32_t tick, const TickData &td) {
                         key += std::string("ANY") + ((j == 2) ? "" : ":");
                     }
                 }
-                if (isSet) db_add_indexer(key, tick);
+                if (isSet) indexerKeyToAdd.push_back(key);
             }
         }
     }
-
-    Logger::get()->trace("Indexed verified tick {}", tick);
+    Logger::get()->trace("Start adding indexed data to txs {}", tick);
+    db_add_many_indexer(indexerKeyToAdd, tick);
+    Logger::get()->trace("Finish Indexed verified tick {}", tick);
     db_insert_u32("lastIndexedTick:"+std::to_string(gCurrentProcessingEpoch), tick);
 }
 

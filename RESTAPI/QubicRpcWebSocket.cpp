@@ -7,14 +7,49 @@
 #include "shim.h"
 #include <sstream>
 
+static constexpr int MAX_MESSAGES_PER_SECOND = 20;
+static constexpr int MAX_RATE_LIMIT_STRIKES = 3;
+
+// Resolve the real client IP from proxy headers, falling back to peer address
+static std::string resolveClientIp(const drogon::HttpRequestPtr& req) {
+    // X-Forwarded-For: client, proxy1, proxy2 - take the leftmost
+    auto xff = req->getHeader("X-Forwarded-For");
+    if (!xff.empty()) {
+        auto comma = xff.find(',');
+        std::string ip = (comma != std::string::npos) ? xff.substr(0, comma) : xff;
+        while (!ip.empty() && ip.front() == ' ') ip.erase(ip.begin());
+        while (!ip.empty() && ip.back() == ' ') ip.pop_back();
+        if (!ip.empty()) return ip;
+    }
+    // X-Real-IP: single IP set by nginx/proxy
+    auto xri = req->getHeader("X-Real-IP");
+    if (!xri.empty()) return xri;
+    // Direct connection
+    return req->getPeerAddr().toIp();
+}
+
+static WsConnectionContext* getWsContext(const drogon::WebSocketConnectionPtr& conn) {
+    auto ctx = conn->getContext<WsConnectionContext>();
+    return ctx.get();
+}
+
 void QubicRpcWebSocket::handleNewConnection(
     const drogon::HttpRequestPtr& req,
     const drogon::WebSocketConnectionPtr& wsConnPtr)
 {
+    std::string peerIp = req->getPeerAddr().toIpPort();
+    std::string clientIp = resolveClientIp(req);
+
+    // Attach context to connection
+    auto ctx = std::make_shared<WsConnectionContext>();
+    ctx->peerIp = peerIp;
+    ctx->clientIp = clientIp;
+    wsConnPtr->setContext(ctx);
+
     // Reject connections until bootstrap is complete
     if (gCurrentVerifyLoggingTick.load() <= gInitialTick.load()) {
-        Logger::get()->debug("Qubic JSON-RPC WebSocket connection rejected (bootstrap in progress) from {}",
-                            req->getPeerAddr().toIpPort());
+        Logger::get()->info("WS connection rejected (bootstrap in progress) client={} peer={}",
+                            clientIp, peerIp);
         Json::Value error;
         error["jsonrpc"] = "2.0";
         error["error"]["code"] = -32000;
@@ -26,8 +61,7 @@ void QubicRpcWebSocket::handleNewConnection(
         return;
     }
 
-    Logger::get()->debug("Qubic JSON-RPC WebSocket connection from {}",
-                        req->getPeerAddr().toIpPort());
+    Logger::get()->info("WS connection opened client={} peer={}", clientIp, peerIp);
 
     // Register with subscription manager
     QubicSubscriptionManager::instance().addClient(wsConnPtr);
@@ -36,7 +70,12 @@ void QubicRpcWebSocket::handleNewConnection(
 void QubicRpcWebSocket::handleConnectionClosed(
     const drogon::WebSocketConnectionPtr& wsConnPtr)
 {
-    Logger::get()->debug("Qubic JSON-RPC WebSocket connection closed");
+    auto* ctx = getWsContext(wsConnPtr);
+    if (ctx) {
+        Logger::get()->info("WS connection closed client={} peer={}", ctx->clientIp, ctx->peerIp);
+    } else {
+        Logger::get()->info("WS connection closed");
+    }
 
     // Cleanup subscriptions
     QubicSubscriptionManager::instance().removeClient(wsConnPtr);
@@ -58,6 +97,36 @@ void QubicRpcWebSocket::handleNewMessage(
         sendResponse(wsConnPtr, QubicRpcHandler::makeError(Json::Value::null,
                      QubicRpcError::INVALID_REQUEST, "Only text messages are supported"));
         return;
+    }
+
+    // Rate limiting
+    auto* ctx = getWsContext(wsConnPtr);
+    if (ctx) {
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - ctx->windowStart);
+        if (elapsed.count() >= 1) {
+            // Reset window
+            ctx->windowStart = now;
+            ctx->messageCount = 1;
+            ctx->rateLimitStrikes = 0;
+        } else {
+            ctx->messageCount++;
+            if (ctx->messageCount > MAX_MESSAGES_PER_SECOND) {
+                ctx->rateLimitStrikes++;
+                if (ctx->rateLimitStrikes >= MAX_RATE_LIMIT_STRIKES) {
+                    Logger::get()->warn("WS rate limit exceeded, disconnecting client={} peer={}",
+                                       ctx->clientIp, ctx->peerIp);
+                    sendResponse(wsConnPtr, QubicRpcHandler::makeError(Json::Value::null,
+                                 QubicRpcError::LIMIT_EXCEEDED, "Rate limit exceeded, disconnecting"));
+                    wsConnPtr->shutdown();
+                    return;
+                }
+                sendResponse(wsConnPtr, QubicRpcHandler::makeError(Json::Value::null,
+                             QubicRpcError::LIMIT_EXCEEDED, "Rate limit exceeded: max " +
+                             std::to_string(MAX_MESSAGES_PER_SECOND) + " messages/second"));
+                return;
+            }
+        }
     }
 
     // Parse JSON
@@ -162,10 +231,26 @@ Json::Value QubicRpcWebSocket::dispatchMethod(
             Json::Value filterParams = params.size() > 1 ? params[1] : Json::Value();
             std::string subId = QubicRpcMethods::subscribe(conn, subType, filterParams);
             if (subId.empty()) {
+                // Check if it was a valid type but limit exceeded
+                if (subType == "newTicks" || subType == "logs" || subType == "transfers" || subType == "tickStream") {
+                    auto* ctx = getWsContext(conn);
+                    Logger::get()->warn("WS subscription limit reached type={} client={} peer={}",
+                                       subType,
+                                       ctx ? ctx->clientIp : "unknown",
+                                       ctx ? ctx->peerIp : "unknown");
+                    return QubicRpcHandler::makeError(id, QubicRpcError::LIMIT_EXCEEDED,
+                                   "Maximum subscriptions per connection reached");
+                }
                 return QubicRpcHandler::makeError(id, QubicRpcError::INVALID_PARAMS,
                                "Invalid subscription type: " + subType +
                                ". Valid types: newTicks, logs, transfers, tickStream");
             }
+            // Log successful subscription with IP info
+            auto* ctx = getWsContext(conn);
+            Logger::get()->info("WS subscribe type={} id={} client={} peer={}",
+                               subType, subId,
+                               ctx ? ctx->clientIp : "unknown",
+                               ctx ? ctx->peerIp : "unknown");
             return QubicRpcHandler::makeResult(id, subId);
         }
         if (method == "qubic_unsubscribe") {

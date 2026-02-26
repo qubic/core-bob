@@ -182,7 +182,35 @@ std::string bobGetLog(uint16_t epoch, int64_t start, int64_t end)
     for (int64_t id = start; id <= end; ++id) {
         LogEvent log;
         if (db_try_get_log(epoch, static_cast<uint64_t>(id), log)) {
-            if (log.getTick() != gInitialTick)
+            if (!db_try_get_log_ranges(log.getTick(), lr))
+            {
+                Json::Value err(Json::objectValue);
+                err["ok"] = false;
+                err["error"] = "Missing log range " + std::to_string(log.getTick())
+                               + ". Cannot process logging events";
+                err["epoch"] = epoch;
+                err["logId"] = Json::UInt64(static_cast<uint64_t>(id));
+                Json::StreamWriterBuilder wb;
+                wb["indentation"] = "";
+                std::string js = Json::writeString(wb, err);
+                if (!first) result.push_back(',');
+                result += js;
+                result.push_back(']');
+                return result;
+            }
+
+            logTxOrderIndex = 0;
+            logTxOrder = lr.sort();
+            // scan to find the first cursor
+            logTxOrderIndex = lr.scanTxId(logTxOrder, 0, log.getLogId());
+            if (logTxOrderIndex == -1)
+            {
+                result.push_back(']');
+                return result;
+            }
+            int txIndex = logTxOrder[logTxOrderIndex];
+
+            if (log.getTick() != gInitialTick && txIndex < NUMBER_OF_TRANSACTIONS_PER_TICK)
             {
                 db_try_get_tick_data(log.getTick(), td);
                 if (td.epoch == 0)
@@ -222,17 +250,8 @@ std::string bobGetLog(uint16_t epoch, int64_t start, int64_t end)
                     }
                 }
             }
-            db_try_get_log_ranges(log.getTick(), lr);
-            logTxOrderIndex = 0;
-            logTxOrder = lr.sort();
-            // scan to find the first cursor
-            logTxOrderIndex = lr.scanTxId(logTxOrder, 0, log.getLogId());
-            if (logTxOrderIndex == -1)
-            {
-                result.push_back(']');
-                return result;
-            }
-            int txIndex = logTxOrder[logTxOrderIndex];
+
+            txIndex = logTxOrder[logTxOrderIndex];
             auto s = lr.fromLogId[txIndex];
             auto e = s + lr.length[txIndex] - 1;
             if (id > e) // processed all, move the cursor to next tx

@@ -41,6 +41,7 @@
 #include <cstdint>
 #include <memory>
 #include <vector>
+#include <optional>
 #include <immintrin.h> // For m256i
 #include "structs.h"
 #include "Logger.h"
@@ -335,12 +336,10 @@ bool db_get_tick_vote(uint32_t tick, uint16_t computorIndex, TickVote& vote);
  *
  * Parameters
  * - tick: Target tick
- *
- * Return Value
  * - vector of votes (empty on failure or if none exist)
- *   Note: Returned vector may contain fewer than the total computor count if sparse.
+ * Return boolean
  */
-std::vector<TickVote> db_get_tick_votes(uint32_t tick);
+bool db_get_tick_votes(uint32_t tick, std::vector<TickVote>& votes);
 
 /**
  * Count the number of transactions for a specific tick.
@@ -416,6 +415,8 @@ bool db_check_log_range(uint32_t tick);
 bool db_try_get_log_ranges(uint32_t tick, LogRangesPerTxInTick &logRange);
 bool db_has_tick_data(uint32_t tick);
 bool db_try_get_transaction(const std::string& tx_hash, std::vector<uint8_t>& tx_data);
+bool db_get_many_transaction_from_keydb(const std::vector<std::string>& txKeys,
+                                        std::vector<std::optional<std::basic_string<char>>>& txVal);
 bool db_check_transaction_exist(const std::string& tx_hash);
 
 // ---- Deletion Functions ----
@@ -460,7 +461,7 @@ bool db_set_indexed_tx(const char* key,
                        long long to_log_id,
                        uint64_t timestamp,
                        bool executed);
-
+bool db_set_many_indexed_tx(const std::vector<std::tuple<std::string, int, long long, long long, uint64_t, bool>>& txDataList);
 bool db_get_indexed_tx(const char* tx_hash,
                        int& tx_index,
                        long long& from_log_id,
@@ -469,7 +470,8 @@ bool db_get_indexed_tx(const char* tx_hash,
                        bool& executed);
 
 
-bool db_add_indexer(const std::string &key, uint32_t tickNumber);
+//bool db_add_indexer(const std::string &key, uint32_t tickNumber);
+bool db_add_many_indexer(const std::vector<std::string> &keys, uint32_t tickNumber);
 
 bool db_get_combined_log_range_for_ticks(uint32_t startTick, uint32_t endTick, long long &fromLogId, long long &length);
 
@@ -498,7 +500,7 @@ void compressTickAndMoveToKVRocks(uint32_t tick);
 bool cleanRawTick(uint32_t fromTick, uint32_t toTick, bool withTransactions);
 bool cleanTransactionLogs(uint32_t tick);
 
-bool db_insert_vtick_to_kvrocks(uint32_t tick, const FullTickStruct& fullTick);
+bool db_insert_vtick_to_kvrocks(uint32_t tick, const FullTickStruct& fullTick, std::vector<char>& buffer);
 bool db_get_vtick_from_kvrocks(uint32_t tick, FullTickStruct& outFullTick);
 
 std::vector<TickVote> db_try_get_tick_vote(uint32_t tick);
@@ -510,9 +512,12 @@ bool db_insert_TickLogRange_to_kvrocks(uint32_t tick, long long& logStart, long 
 bool db_get_cLogRange_from_kvrocks(uint32_t tick, LogRangesPerTxInTick& outLogRange);
 
 bool db_copy_transaction_to_kvrocks(const std::string &tx_hash);
+bool db_add_many_transactions_to_kvrocks(const std::vector<std::string>& txKeys,
+                                         const std::vector<std::optional<std::basic_string<char>>>& txVal);
 
 bool db_move_logs_to_kvrocks_by_range(uint16_t epoch, long long fromLogId, long long toLogId);
 bool db_delete_transaction(std::string hash);
+bool db_delete_many(const std::vector<std::string>& keys);
 bool db_delete_logs(uint16_t epoch, long long start, long long end);
 
 bool db_get_endepoch_log_range_info(const uint16_t epoch, long long &start, long long &length, LogRangesPerTxInTick &lr);

@@ -562,7 +562,8 @@ void verifyLoggingEvent()
                         saveFiles("spectrum."+std::to_string(tick-1), "universe."+std::to_string(tick-1));
                     }
                     if (processFromTick < tick) processToTick = tick - 1;
-                    Logger::get()->info("Detect end epoch at tick {}. Setting last batch to {}->{}", tick, processFromTick, processToTick);
+                    Logger::get()->info("Detect end epoch at tick {} ({} => {}). Setting last batch to {}->{}",
+                                        tick, lr.fromLogId[SC_END_EPOCH_TX], lr.length[SC_END_EPOCH_TX], processFromTick, processToTick);
                 }
             }
         }
@@ -1000,12 +1001,31 @@ verifyNodeStateDigest:
 
 // The logging fetcher thread from trusted nodes only (no signature require)
 void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
-                                 std::chrono::milliseconds request_logging_cycle_ms)
+                                 uint64_t request_logging_cycle_ms)
 {
-    auto idleBackoff = request_logging_cycle_ms;
+    auto idleBackoff = 1;
+    uint64_t lastRequestMs = 0;
+    uint32_t lastRequestTick = 0;
+    int64_t lastRequestLogid = -1;
 
     while (!gStopFlag.load(std::memory_order_relaxed)) {
         try {
+            bool shouldRequestLogRange = false;
+            bool shouldRequestLogEvent = false;
+            uint64_t currentMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            if (currentMs - lastRequestMs > request_logging_cycle_ms)
+            {
+//                Logger::get()->debug("current {} last {} - cycle {}", currentMs, lastRequestMs, request_logging_cycle_ms);
+                lastRequestMs = currentMs;
+                shouldRequestLogRange = true;
+                shouldRequestLogEvent = true;
+            }
+            if (lastRequestTick < gCurrentFetchingTick && gCurrentFetchingTick != 0)
+            {
+//                Logger::get()->debug("current {} last {}", gCurrentFetchingTick, lastRequestTick);
+                lastRequestTick = gCurrentFetchingTick;
+                shouldRequestLogRange = true;
+            }
             while (refetchLogFromTick != -1 && refetchLogToTick != -1 && !gStopFlag.load(std::memory_order_relaxed))
             {
                 for (uint32_t t = refetchLogFromTick; t <= refetchLogToTick; t++)
@@ -1033,10 +1053,15 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
                 continue;
             }
             if (gStopFlag.load(std::memory_order_relaxed)) break;
+
             if (!db_check_log_range(gCurrentFetchingLogTick))
             {
-                RequestAllLogIdRangesFromTick ralr{{0,0,0,0},gCurrentFetchingLogTick};
-                connPoolWithPwd.sendWithPasscodeToRandom((uint8_t*)&ralr, 0, sizeof(RequestAllLogIdRangesFromTick), RequestAllLogIdRangesFromTick::type(), true);
+                if (shouldRequestLogRange)
+                {
+                    RequestAllLogIdRangesFromTick ralr{{0,0,0,0},gCurrentFetchingLogTick};
+                    connPoolWithPwd.sendWithPasscodeToRandom((uint8_t*)&ralr, 0, sizeof(RequestAllLogIdRangesFromTick), RequestAllLogIdRangesFromTick::type(), true);
+                    Logger::get()->debug("Requested logRange {}", gCurrentFetchingLogTick);
+                }
             } else {
                 long long fromId, length;
                 if (!db_try_get_log_range_for_tick(gCurrentFetchingLogTick, fromId, length))
@@ -1059,10 +1084,19 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
                 {
                     fromId++;
                 }
-                for (long long s = fromId; s <= endId; s += BOB_LOG_EVENT_CHUNK_SIZE) {
-                    long long e = std::min(endId, s + BOB_LOG_EVENT_CHUNK_SIZE - 1);
-                    RequestLog rl{{0,0,0,0},(unsigned long long)(s),(unsigned long long)(e)};
-                    connPoolWithPwd.sendWithPasscodeToRandom((uint8_t *) &rl, 0, sizeof(RequestLog), RequestLog::type(), true);
+                if (lastRequestLogid < fromId)
+                {
+                    shouldRequestLogEvent = true;
+                    lastRequestLogid = fromId;
+                }
+                if (shouldRequestLogEvent)
+                {
+                    for (long long s = fromId; s <= endId; s += BOB_LOG_EVENT_CHUNK_SIZE) {
+                        long long e = std::min(endId, s + BOB_LOG_EVENT_CHUNK_SIZE - 1);
+                        RequestLog rl{{0,0,0,0},(unsigned long long)(s),(unsigned long long)(e)};
+                        connPoolWithPwd.sendWithPasscodeToRandom((uint8_t *) &rl, 0, sizeof(RequestLog), RequestLog::type(), true);
+                        Logger::get()->debug("Requested log {}=>{}", s, e);
+                    }
                 }
                 if (fromId > endId)
                 {
@@ -1071,12 +1105,16 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
                     db_update_latest_event_tick_and_epoch(gCurrentFetchingLogTick, gCurrentProcessingEpoch);
                 }
             }
-            for (int i = 1; i < 5; i++)
+            if (shouldRequestLogRange)
             {
-                if (!db_check_log_range(gCurrentFetchingLogTick + i))
+                for (int i = 1; i < 5; i++)
                 {
-                    RequestAllLogIdRangesFromTick ralr{{0,0,0,0},gCurrentFetchingLogTick + i};
-                    connPoolWithPwd.sendWithPasscodeToRandom((uint8_t*)&ralr, 0, sizeof(RequestAllLogIdRangesFromTick), RequestAllLogIdRangesFromTick::type(), true);
+                    if (!db_check_log_range(gCurrentFetchingLogTick + i))
+                    {
+                        RequestAllLogIdRangesFromTick ralr{{0,0,0,0},gCurrentFetchingLogTick + i};
+                        connPoolWithPwd.sendWithPasscodeToRandom((uint8_t*)&ralr, 0, sizeof(RequestAllLogIdRangesFromTick), RequestAllLogIdRangesFromTick::type(), true);
+                        Logger::get()->debug("Requested logRange {}", gCurrentFetchingLogTick + i);
+                    }
                 }
             }
             SLEEP(idleBackoff);
