@@ -51,7 +51,6 @@ static void indexTick(uint32_t tick, const TickData &td) {
     uint64_t timestamp = td.epoch == gCurrentProcessingEpoch ? calculateUnixTimestamp(td) : 0;
     db_try_get_log_ranges(tick, logrange);
     bool indexerIgnoreList[LOG_TX_PER_TICK] = {false};
-    auto txOrder = logrange.sort();
     Logger::get()->trace("Start adding extra data to txs {}", tick);
     if (td.tick == tick)
     {
@@ -90,11 +89,13 @@ static void indexTick(uint32_t tick, const TickData &td) {
                         {
                             // ignore protocol reports
                             indexerIgnoreList[i] = true;
+                            continue;
                         }
                         if (isZero(tx->destinationPublicKey) && (tx->inputType == 6 || tx->inputType == 7 || tx->inputType == 10))
                         {
                             // oracle messages, not index for now
                             indexerIgnoreList[i] = true;
+                            continue;
                         }
                         if (tx->amount < gSpamThreshold && tx->inputSize == 0 && tx->inputType == 0) // spam tx => not index
                         {
@@ -142,6 +143,7 @@ static void indexTick(uint32_t tick, const TickData &td) {
     m256i topic1, topic2, topic3;
     std::vector<std::string> indexerKeyToAdd;
     int lastTxId = 0;
+    auto txOrder = logrange.sort();
     for (int i = 0; i < vle.size(); i++)
     {
         // no index for spam events
@@ -149,7 +151,7 @@ static void indexTick(uint32_t tick, const TickData &td) {
         auto& le  = vle[i];
         int txId = logrange.scanTxId(txOrder, lastTxId, le.getLogId());
         lastTxId = txId;
-        if (indexerIgnoreList[i]) continue;
+        if (indexerIgnoreList[txOrder[txId]]) continue;
         auto type = le.getType();
         SC_index = 0xffffffff;
         switch(type)
