@@ -1410,10 +1410,9 @@ bool db_add_many_transactions_to_kvrocks(const std::vector<std::string>& txKeys,
                 continue;
             }
 
-            const std::string key = "transaction:" + txKeys[i];
             sw::redis::StringView view(txVal[i]->data(), txVal[i]->size());
 
-            pipe.set(key, view, std::chrono::seconds(gKvrocksTTL));
+            pipe.set(txKeys[i], view, std::chrono::seconds(gKvrocksTTL));
         }
 
         // Execute all commands in the pipeline
