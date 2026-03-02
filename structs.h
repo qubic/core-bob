@@ -282,6 +282,14 @@ struct LogRangesPerTxInTick
     {
         return 51;
     }
+    // Returns true if any transaction slot has logs (= tick was executed)
+    bool hasAnyLogs() const
+    {
+        for (int i = 0; i < LOG_TX_PER_TICK; ++i) {
+            if (fromLogId[i] >= 0 && length[i] > 0) return true;
+        }
+        return false;
+    }
     // return a sorted indice array by logId
     std::vector<int> sort()
     {

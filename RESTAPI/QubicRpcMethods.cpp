@@ -229,6 +229,56 @@ Json::Value QubicRpcMethods::getTickByHash(const std::string& tickHash, bool inc
     return Json::Value::null;
 }
 
+Json::Value QubicRpcMethods::getTickVotes(const std::string& tickTag) {
+    int64_t tick = QubicRpc::parseTickTag(tickTag);
+    if (tick < 0) {
+        return Json::Value::null;
+    }
+
+    auto votes = db_try_get_tick_vote(static_cast<uint32_t>(tick));
+    Json::Value result(Json::arrayValue);
+
+    for (const auto& vote : votes) {
+        Json::Value voteObj(Json::objectValue);
+        voteObj["computorIndex"] = vote.computorIndex;
+        voteObj["epoch"] = vote.epoch;
+        voteObj["tick"] = vote.tick;
+
+        // Timestamp fields
+        voteObj["millisecond"] = vote.millisecond;
+        voteObj["second"] = vote.second;
+        voteObj["minute"] = vote.minute;
+        voteObj["hour"] = vote.hour;
+        voteObj["day"] = vote.day;
+        voteObj["month"] = vote.month;
+        voteObj["year"] = vote.year;
+
+        // Digest integers
+        voteObj["prevResourceTestingDigest"] = vote.prevResourceTestingDigest;
+        voteObj["saltedResourceTestingDigest"] = vote.saltedResourceTestingDigest;
+        voteObj["prevTransactionBodyDigest"] = vote.prevTransactionBodyDigest;
+        voteObj["saltedTransactionBodyDigest"] = vote.saltedTransactionBodyDigest;
+
+        // m256i digests
+        voteObj["prevSpectrumDigest"] = vote.prevSpectrumDigest.toQubicHash();
+        voteObj["prevUniverseDigest"] = vote.prevUniverseDigest.toQubicHash();
+        voteObj["prevComputerDigest"] = vote.prevComputerDigest.toQubicHash();
+        voteObj["saltedSpectrumDigest"] = vote.saltedSpectrumDigest.toQubicHash();
+        voteObj["saltedUniverseDigest"] = vote.saltedUniverseDigest.toQubicHash();
+        voteObj["saltedComputerDigest"] = vote.saltedComputerDigest.toQubicHash();
+
+        voteObj["transactionDigest"] = vote.transactionDigest.toQubicHash();
+        voteObj["expectedNextTickTransactionDigest"] = vote.expectedNextTickTransactionDigest.toQubicHash();
+
+        // Signature as hex
+        voteObj["signature"] = QubicRpc::bytesToHex(vote.signature, SIGNATURE_SIZE);
+
+        result.append(voteObj);
+    }
+
+    return result;
+}
+
 // ============================================================================
 // Transaction Methods
 // ============================================================================

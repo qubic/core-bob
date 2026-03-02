@@ -563,12 +563,14 @@ std::string QubicSubscriptionManager::buildTickStreamJsonString(
     const std::vector<std::pair<LogEvent, int>>& matchedLogs,
     size_t totalTxs,
     size_t totalLogs,
-    bool includeInputData) const
+    bool includeInputData,
+    bool hasLogs) const
 {
     // Determine if we have tick data (epoch == 0 means no tick data in database)
     bool hasNoTickData = (td.epoch == 0);
-    // A tick is skipped if we have no tick data OR no transactions (226+ computors voted empty)
-    bool isSkipped = hasNoTickData || (totalTxs == 0);
+    // A tick is skipped if we have no tick data, no transactions, or no logs were produced
+    // (a tick can have non-zero transactionDigests but be voted empty by quorum — no logs = not executed)
+    bool isSkipped = hasNoTickData || (totalTxs == 0) || !hasLogs;
 
     // Apply epoch fallback: if tick data epoch is 0 but tick is in current epoch range, use current epoch
     uint16_t effectiveEpoch = epoch;
@@ -736,6 +738,9 @@ void QubicSubscriptionManager::onVerifiedTick(
 
         size_t totalTxs = allTxs.size();
 
+        // Check if any transaction in this tick has logs (= was executed)
+        bool hasLogs = lr.hasAnyLogs();
+
         // Find all TickStream subscriptions
         for (auto& [subId, sub] : subscriptions_) {
             if (sub.type != QubicSubscriptionType::TickStream) continue;
@@ -803,7 +808,7 @@ void QubicSubscriptionManager::onVerifiedTick(
                 tick, epoch, false, td,
                 matchedTxs, matchedLogs,
                 totalTxs, totalLogs,
-                sub.tickStreamFilter.includeInputData);
+                sub.tickStreamFilter.includeInputData, hasLogs);
 
             Logger::get()->debug("TickStream sending tick {} to sub {} (txs={}, logs={})",
                                tick, subId, matchedTxs.size(), matchedLogs.size());
@@ -952,6 +957,9 @@ void QubicSubscriptionManager::performCatchUp(
                 }
             }
 
+            // Check if any transaction in this tick has logs (= was executed)
+            bool hasLogs = lr.hasAnyLogs();
+
             // Collect matching logs
             std::vector<std::pair<LogEvent, int>> matchedLogs;
             for (const auto& log : logs) {
@@ -992,7 +1000,7 @@ void QubicSubscriptionManager::performCatchUp(
                 tick, epoch, true, td,
                 matchedTxs, matchedLogs,
                 totalTxs, logs.size(),
-                filter.includeInputData);
+                filter.includeInputData, hasLogs);
 
             std::string msg = "{\"jsonrpc\":\"2.0\",\"method\":\"qubic_subscription\",\"params\":{\"subscription\":\"" +
                               subId + "\",\"result\":" + tickJsonStr + "}}";
@@ -1133,6 +1141,9 @@ void QubicSubscriptionManager::performCatchUp(
                 }
             }
 
+            // Check if any transaction in this tick has logs (= was executed)
+            bool hasLogs = lr.hasAnyLogs();
+
             // Collect matching logs
             std::vector<std::pair<LogEvent, int>> matchedLogs;
             for (const auto& log : logs) {
@@ -1171,7 +1182,7 @@ void QubicSubscriptionManager::performCatchUp(
                 tick, epoch, false, td,
                 matchedTxs, matchedLogs,
                 totalTxs, logs.size(),
-                filter.includeInputData);
+                filter.includeInputData, hasLogs);
 
             std::string msg = "{\"jsonrpc\":\"2.0\",\"method\":\"qubic_subscription\",\"params\":{\"subscription\":\"" +
                               subId + "\",\"result\":" + tickJsonStr + "}}";

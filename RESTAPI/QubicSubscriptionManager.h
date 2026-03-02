@@ -183,7 +183,7 @@ private:
                                           const std::vector<StreamTx>& matchedTxs,
                                           const std::vector<std::pair<LogEvent, int>>& matchedLogs,
                                           size_t totalTxs, size_t totalLogs,
-                                          bool includeInputData) const;
+                                          bool includeInputData, bool hasLogs) const;
 
     mutable std::shared_mutex mutex_;
 

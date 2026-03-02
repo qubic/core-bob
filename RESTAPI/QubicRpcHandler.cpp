@@ -117,6 +117,12 @@ Json::Value dispatchCommonMethod(const Json::Value& id,
             // Disabled: inefficient implementation requiring full tick scan
             return makeError(id, QubicRpcError::METHOD_NOT_FOUND, "qubic_getTickByHash is not available");
         }
+        if (method == "qubic_getTickVotes") {
+            if (!params.isArray() || params.size() < 1) {
+                return makeError(id, QubicRpcError::INVALID_PARAMS, "Missing tick parameter");
+            }
+            return makeResult(id, QubicRpcMethods::getTickVotes(params[0].asString()));
+        }
 
         // ====================================================================
         // Transaction Methods

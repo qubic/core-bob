@@ -184,8 +184,19 @@ Json::Value tickDataToQubicTick(uint32_t tick, const TickData& td,
 
     // Determine if we have tick data (epoch == 0 means no tick data in database)
     bool hasNoTickData = (td.epoch == 0);
-    // A tick is skipped if we have no tick data OR 226+ computors voted with zero txDigest (empty tick)
+    // A tick is skipped if we have no tick data OR no transactions
     bool isSkipped = hasNoTickData || txDigests.empty();
+
+    // If tick has digests, check if anything was actually executed (has logs)
+    // A tick can have non-zero transactionDigests in TickData (proposed by computor)
+    // but still be voted empty by quorum — in that case no logs are produced
+    if (!isSkipped) {
+        long long fromLogId = -1, length = -1;
+        db_try_get_log_range_for_tick(tick, fromLogId, length);
+        if (fromLogId == -1 || length <= 0) {
+            isSkipped = true;
+        }
+    }
 
     result["hasNoTickData"] = hasNoTickData;
     result["isSkipped"] = isSkipped;

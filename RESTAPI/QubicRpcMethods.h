@@ -40,6 +40,10 @@ public:
     // qubic_getTickByHash - Returns tick data by signature hash
     static Json::Value getTickByHash(const std::string& tickHash, bool includeTransactions);
 
+    // qubic_getTickVotes - Returns computor votes for a tick
+    // @param tickTag: "latest", "earliest", "pending", or numeric tick
+    static Json::Value getTickVotes(const std::string& tickTag);
+
     // ========================================================================
     // Transaction Methods
     // ========================================================================
