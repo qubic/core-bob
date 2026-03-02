@@ -1,5 +1,4 @@
 {
-  "p2p-node": ["BM:127.0.0.1:31842:0-0-0-0"],
   "request-cycle-ms": 100,
   "request-logging-cycle-ms": 100,
   "future-offset": 3,
