@@ -187,7 +187,6 @@ bool processSendToManyBenchmark(LogEvent& le)
         m256i startId;
         int64_t dstCount;
         int64_t numTransfersEach;
-        int8_t _terminator; // Only data before "_terminator" are logged
     };
     auto s = (QUTILSendToManyBenchmarkLog*)le.getLogBodyPtr();
     struct
@@ -235,7 +234,7 @@ bool processSendToManyBenchmark(LogEvent& le)
             //qpi.transfer(locals.currentId, 1);
             // simulate this with QU_TRANSFER qt
             QuTransfer qt{};
-            qt.sourcePublicKey = m256i(0,0,0,4);
+            qt.sourcePublicKey = m256i(4,0,0,0);
             qt.destinationPublicKey = locals.currentId;
             qt.amount = 1;
             processQuTransfer(qt, le.getTick());
@@ -656,7 +655,6 @@ gatherAllLoggingEvents:
             for (int i = 0; i < vle.size(); i++)
             {
                 auto& le  = vle[i];
-
                 // If self-check fails, skip this entry and reset any pairing state to avoid
                 // dereferencing invalid bodies or headers.
                 if (!le.selfCheck(gCurrentProcessingEpoch))
@@ -722,6 +720,7 @@ gatherAllLoggingEvents:
                                 processSendToManyBenchmark(le);
                             }
                         }
+                        break;
                     }
                     case SPECTRUM_STATS:
                     {

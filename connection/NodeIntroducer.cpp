@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstdint>
 #include "Logger.h"
+#include "shim.h"
 
 std::vector<std::string> GetPeerFromDNS()
 {
@@ -152,6 +153,7 @@ void GetLatestTickFromExternalSources(uint32_t& tick, uint16_t& epoch)
 
 void CheckInQubicGlobal()
 {
+    if (gIsTestnet) return;
     // Declare the external function
     extern std::string bobGetExtraStatus();
 

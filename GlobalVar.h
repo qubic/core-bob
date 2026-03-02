@@ -89,6 +89,7 @@ struct GlobalState {
     uint64_t startTimeUnix = 0;
 
     bool allowCheckInQubicGlobal = true;
+    bool isTestNet;
 
     std::atomic_bool gStopFlag;
 

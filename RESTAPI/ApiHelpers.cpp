@@ -403,10 +403,22 @@ SmartContractQueryResult checkSmartContractResult(uint32_t nonce, uint32_t scInd
 
         m256i hash = ApiHelpers::makeHashQuerySC(scIndex, funcNumber, inputDataHex);
         gTCM->add(hash, out);
-    } else {
-        result.pending = true;
+        return result;
     }
 
+    {
+        m256i digest{};
+        digest = makeHashQuerySC(scIndex, funcNumber, inputDataHex);
+        if (gTCM->tryGet(digest, out))
+        {
+            result.success = true;
+            result.data = bytesToHex(out.data(), out.size());
+            return result;
+        }
+    }
+    result.success = false;
+    result.data = "";
+    result.pending = true;
     return result;
 }
 
@@ -443,24 +455,10 @@ SmartContractQueryResult querySmartContract(uint32_t nonce, uint32_t scIndex,
         return result;
     }
 
-    // Check cache first
-    std::vector<uint8_t> out;
-    if (responseSCData.get(nonce, out)) {
-        result.success = true;
-        result.data = bytesToHex(out.data(), out.size());
-        return result;
-    }
-
-    // cache level 2
+    result = checkSmartContractResult(nonce, scIndex, funcNumber, inputDataHex);
+    if (result.success)
     {
-        m256i digest{};
-        digest = makeHashQuerySC(scIndex, funcNumber, inputDataHex);
-        if (gTCM->tryGet(digest, out))
-        {
-            result.success = true;
-            result.data = bytesToHex(out.data(), out.size());
-            return result;
-        }
+        return result;
     }
 
     // Parse input data
