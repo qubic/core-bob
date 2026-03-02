@@ -517,6 +517,7 @@ void getComputorList(ConnectionPool& cp, std::string arbitratorIdentity)
                              comp.publicKeys[0].m256i_u64[3] == 4967671197750064684ULL))
                         {
                             is_valid = true;
+                            gIsTestnet = true;
                         }
                     } else {
                         is_valid = verify(arbitratorPublicKey, digest, comp.signature);
@@ -529,6 +530,12 @@ void getComputorList(ConnectionPool& cp, std::string arbitratorIdentity)
                     else
                     {
                         Logger::get()->critical("Invalid signature in computor list. ARB {}", arbitratorIdentity);
+                    }
+                } else
+                {
+                    if (isArrayZero(computorsList.signature, 64))
+                    {
+                        gIsTestnet = true;
                     }
                 }
             }

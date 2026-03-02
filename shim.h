@@ -64,3 +64,5 @@
 
 #define gLastCleanTickData   (GS().lastCleanTickData)
 #define gLastCleanTransactionTick   (GS().lastCleanTransactionTick)
+
+#define gIsTestnet (GS().isTestNet)
