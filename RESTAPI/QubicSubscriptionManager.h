@@ -134,6 +134,9 @@ public:
                         const std::string& subId,
                         uint32_t fromTick, uint32_t toTick);
 
+    // Clear catchUpInProgress flag (when no catch-up is needed)
+    void clearCatchUpFlag(const std::string& subId);
+
     // Catch-up for Logs/Transfers subscriptions (logId-based)
     void performLogsCatchUp(const drogon::WebSocketConnectionPtr& conn,
                             const std::string& subId,

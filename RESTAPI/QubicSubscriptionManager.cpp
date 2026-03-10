@@ -837,6 +837,15 @@ void QubicSubscriptionManager::onVerifiedTick(
     }
 }
 
+void QubicSubscriptionManager::clearCatchUpFlag(const std::string& subId) {
+    std::unique_lock lock(mutex_);
+    auto it = subscriptions_.find(subId);
+    if (it != subscriptions_.end()) {
+        it->second.catchUpInProgress = false;
+        Logger::get()->info("TickStream {} catch-up flag cleared (startTick at or beyond verification cursor)", subId);
+    }
+}
+
 void QubicSubscriptionManager::performCatchUp(
     const drogon::WebSocketConnectionPtr& conn,
     const std::string& subId,

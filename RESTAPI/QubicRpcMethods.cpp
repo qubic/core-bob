@@ -985,6 +985,10 @@ std::string QubicRpcMethods::subscribe(
             uint32_t currentTick = gCurrentVerifyLoggingTick.load();
             if (startTick < currentTick) {
                 manager.performCatchUp(conn, subId, startTick, currentTick - 1);
+            } else {
+                // startTick is at or beyond current verification cursor — no catch-up needed
+                // Clear the flag so onVerifiedTick delivers ticks immediately
+                manager.clearCatchUpFlag(subId);
             }
         }
 
