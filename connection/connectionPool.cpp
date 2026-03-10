@@ -1,6 +1,8 @@
 #include "connection.h"
 #include <mutex>
 
+#include "shim.h"
+
 ConnectionPool::ConnectionPool()
         : rng_(std::random_device{}()) {}
 
@@ -111,7 +113,7 @@ int ConnectionPool::sendToRandom(uint8_t* buffer, int sz, uint8_t type, bool ran
 
 // Sends to 'howMany' distinct random valid connections (or fewer if not enough are valid).
 // Returns a vector of bytes-sent per selected connection, in the order of selection.
-std::vector<int> ConnectionPool::sendToMany(uint8_t* buffer, int sz, std::size_t howMany, uint8_t type, bool randomDejavu) {
+std::vector<int> ConnectionPool::sendToMany(uint8_t* buffer, int sz, std::size_t howMany, uint8_t type, bool randomDejavu, int nodeType) {
     std::lock_guard<std::mutex> lock(mutex_);
     std::vector<int> results;
     if (conns_.empty() || howMany == 0) return results;
@@ -121,7 +123,9 @@ std::vector<int> ConnectionPool::sendToMany(uint8_t* buffer, int sz, std::size_t
     idx.reserve(conns_.size());
     for (std::size_t i = 0; i < conns_.size(); ++i) {
         if (conns_[i] && conns_[i]->isSocketValid()) {
-            idx.push_back(i);
+            if (nodeType == NODE_TYPE_ANY) idx.push_back(i);
+            if (nodeType == NODE_TYPE_BM && conns_[i]->isBM()) idx.push_back(i);
+            if (nodeType == NODE_TYPE_BOB && conns_[i]->isBob()) idx.push_back(i);
         }
     }
     if (idx.empty()) return results;
@@ -139,7 +143,7 @@ std::vector<int> ConnectionPool::sendToMany(uint8_t* buffer, int sz, std::size_t
     return results;
 }
 
-int ConnectionPool::sendWithPasscodeToRandom(uint8_t* buffer, int passcodeOffset, int sz, uint8_t type, bool randomDejavu) {
+int ConnectionPool::sendWithPasscodeToRandom(uint8_t* buffer, int passcodeOffset, int sz, uint8_t type, bool randomDejavu, int nodeType) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (conns_.empty()) return -1;
 
@@ -148,7 +152,9 @@ int ConnectionPool::sendWithPasscodeToRandom(uint8_t* buffer, int passcodeOffset
     idx.reserve(conns_.size());
     for (std::size_t i = 0; i < conns_.size(); ++i) {
         if (conns_[i] && conns_[i]->isSocketValid()) {
-            idx.push_back(i);
+            if (nodeType == NODE_TYPE_ANY) idx.push_back(i);
+            if (nodeType == NODE_TYPE_BM && conns_[i]->isBM()) idx.push_back(i);
+            if (nodeType == NODE_TYPE_BOB && conns_[i]->isBob()) idx.push_back(i);
         }
     }
     if (idx.empty()) return -1;
@@ -156,4 +162,32 @@ int ConnectionPool::sendWithPasscodeToRandom(uint8_t* buffer, int passcodeOffset
     auto chosen = idx[dist(rng_)];
     conns_[chosen]->getPasscode((uint64_t*)(buffer+passcodeOffset));
     return conns_[chosen]->enqueueWithHeader(buffer, sz, type, randomDejavu);
+}
+
+int ConnectionPool::smartTickRequest(uint8_t* buffer, int sz, uint8_t type, bool randomDejavu) {
+    if (gLastSeenNetworkTick > gCurrentFetchingTick + 10) {
+        sendToMany(buffer, sz, 1, type, randomDejavu, NODE_TYPE_BM);
+        sendToMany(buffer, sz, 1, type, randomDejavu, NODE_TYPE_BOB);
+    } else {
+        std::uniform_int_distribution<std::size_t> dist{};
+        if (dist(rng_) % 2 == 0) {
+            sendToMany(buffer, sz, 1, type, randomDejavu, NODE_TYPE_BM);
+        } else {
+            sendToMany(buffer, sz, 1, type, randomDejavu, NODE_TYPE_BOB);
+        }
+    }
+}
+
+int ConnectionPool::smartLogRequest(uint8_t* buffer, int passcodeOffset, int sz, uint8_t type, bool randomDejavu) {
+    if (gLastSeenNetworkTick > gCurrentFetchingLogTick + 10) {
+        sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BM);
+        sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BOB);
+    } else {
+        std::uniform_int_distribution<std::size_t> dist{};
+        if (dist(rng_) % 2 == 0) {
+            sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BM);
+        } else {
+            sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BOB);
+        }
+    }
 }

@@ -1032,7 +1032,7 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
                     if (!db_check_log_range(t))
                     {
                         RequestAllLogIdRangesFromTick ralr{{0,0,0,0},t};
-                        connPoolWithPwd.sendWithPasscodeToRandom((uint8_t*)&ralr, 0, sizeof(RequestAllLogIdRangesFromTick), RequestAllLogIdRangesFromTick::type(), true);
+                        connPoolWithPwd.smartLogRequest((uint8_t*)&ralr, 0, sizeof(RequestAllLogIdRangesFromTick), RequestAllLogIdRangesFromTick::type(), true);
                     }
                 }
                 SLEEP(1000);
@@ -1042,7 +1042,7 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
                 for (long long s = refetchFromId; s <= refetchToId; s += BOB_LOG_EVENT_CHUNK_SIZE) {
                     long long e = std::min(refetchToId, s + BOB_LOG_EVENT_CHUNK_SIZE - 1);
                     RequestLog rl{{0,0,0,0},(unsigned long long)(s),(unsigned long long)(e)};
-                    connPoolWithPwd.sendWithPasscodeToRandom((uint8_t *) &rl, 0, sizeof(RequestLog), RequestLog::type(), true);
+                    connPoolWithPwd.smartLogRequest((uint8_t *) &rl, 0, sizeof(RequestLog), RequestLog::type(), true);
                 }
                 SLEEP(1000);
             }
@@ -1058,7 +1058,7 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
                 if (shouldRequestLogRange)
                 {
                     RequestAllLogIdRangesFromTick ralr{{0,0,0,0},gCurrentFetchingLogTick};
-                    connPoolWithPwd.sendWithPasscodeToRandom((uint8_t*)&ralr, 0, sizeof(RequestAllLogIdRangesFromTick), RequestAllLogIdRangesFromTick::type(), true);
+                    connPoolWithPwd.smartLogRequest((uint8_t*)&ralr, 0, sizeof(RequestAllLogIdRangesFromTick), RequestAllLogIdRangesFromTick::type(), true);
                     Logger::get()->debug("Requested logRange {}", gCurrentFetchingLogTick);
                 }
             } else {
@@ -1093,7 +1093,7 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
                     for (long long s = fromId; s <= endId; s += BOB_LOG_EVENT_CHUNK_SIZE) {
                         long long e = std::min(endId, s + BOB_LOG_EVENT_CHUNK_SIZE - 1);
                         RequestLog rl{{0,0,0,0},(unsigned long long)(s),(unsigned long long)(e)};
-                        connPoolWithPwd.sendWithPasscodeToRandom((uint8_t *) &rl, 0, sizeof(RequestLog), RequestLog::type(), true);
+                        connPoolWithPwd.smartLogRequest((uint8_t *) &rl, 0, sizeof(RequestLog), RequestLog::type(), true);
                         Logger::get()->debug("Requested log {}=>{}", s, e);
                     }
                 }
@@ -1111,7 +1111,7 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
                     if (!db_check_log_range(gCurrentFetchingLogTick + i))
                     {
                         RequestAllLogIdRangesFromTick ralr{{0,0,0,0},gCurrentFetchingLogTick + i};
-                        connPoolWithPwd.sendWithPasscodeToRandom((uint8_t*)&ralr, 0, sizeof(RequestAllLogIdRangesFromTick), RequestAllLogIdRangesFromTick::type(), true);
+                        connPoolWithPwd.smartLogRequest((uint8_t*)&ralr, 0, sizeof(RequestAllLogIdRangesFromTick), RequestAllLogIdRangesFromTick::type(), true);
                         Logger::get()->debug("Requested logRange {}", gCurrentFetchingLogTick + i);
                     }
                 }

@@ -7,7 +7,9 @@
 #include <algorithm>
 #include "structs.h"
 #include "SpecialBufferStructs.h"
-
+#define NODE_TYPE_ANY 0
+#define NODE_TYPE_BOB 1
+#define NODE_TYPE_BM 2
 // Not thread safe
 class QubicConnection
 {
@@ -96,9 +98,15 @@ public:
 
     // Sends to 'howMany' distinct random valid connections (or fewer if not enough are valid).
     // Returns a vector of bytes-sent per selected connection, in the order of selection.
-    std::vector<int> sendToMany(uint8_t* buffer, int sz, std::size_t howMany, uint8_t type, bool randomDejavu);
+    std::vector<int> sendToMany(uint8_t* buffer, int sz, std::size_t howMany, uint8_t type, bool randomDejavu, int nodeType);
 
-    int sendWithPasscodeToRandom(uint8_t* buffer, int passcodeOffset, int sz, uint8_t type, bool randomDejavu);
+    // depends on node status, bob will decide which and how many ticks request packets need to be sent out
+    int smartTickRequest(uint8_t* buffer, int sz, uint8_t type, bool randomDejavu);
+
+    // depends on node status, bob will decide which and how many ticks request packets need to be sent out
+    int smartLogRequest(uint8_t* buffer, int passcodeOffset, int sz, uint8_t type, bool randomDejavu);
+
+    int sendWithPasscodeToRandom(uint8_t* buffer, int passcodeOffset, int sz, uint8_t type, bool randomDejavu, int nodeType);
 
 private:
     std::vector<QCPtr> conns_;

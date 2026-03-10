@@ -152,7 +152,7 @@ void IORequestThread(ConnectionPool& conn_pool, std::chrono::milliseconds reques
                 }
                 if (count < 676)
                 {
-                    conn_pool.sendToMany((uint8_t *) &rqt, sizeof(rqt), 3, RequestedQuorumTick::type, true);
+                    conn_pool.smartTickRequest((uint8_t *) &rqt, sizeof(rqt), RequestedQuorumTick::type, true);
                 }
                 refetchTickVotes = -1;
             }
@@ -182,7 +182,7 @@ void IORequestThread(ConnectionPool& conn_pool, std::chrono::milliseconds reques
                         {
                             RequestTickData rtd;
                             rtd.tick = gCurrentFetchingTick + offset;
-                            conn_pool.sendToMany((uint8_t *) &rtd, sizeof(rtd), 1, RequestTickData::type, true);
+                            conn_pool.smartTickRequest((uint8_t *) &rtd, sizeof(rtd), RequestTickData::type, true);
                         } else {
                             have_next_td = true;
                         }
@@ -203,7 +203,7 @@ void IORequestThread(ConnectionPool& conn_pool, std::chrono::milliseconds reques
                         }
                         if (count < 676)
                         {
-                            conn_pool.sendToMany((uint8_t *) &rqt, sizeof(rqt), 1, RequestedQuorumTick::type, true);
+                            conn_pool.smartTickRequest((uint8_t *) &rqt, sizeof(rqt), RequestedQuorumTick::type, true);
                         }
                     }
 
@@ -228,7 +228,7 @@ void IORequestThread(ConnectionPool& conn_pool, std::chrono::milliseconds reques
                                     count++;
                                 }
                             }
-                            if (count) conn_pool.sendToMany((uint8_t *) &rtt, sizeof(rtt), 1, RequestedTickTransactions::type, true);
+                            if (count) conn_pool.smartTickRequest((uint8_t *) &rtt, sizeof(rtt), RequestedTickTransactions::type, true);
                         }
                     }
                 }

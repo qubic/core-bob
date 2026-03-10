@@ -299,6 +299,15 @@ int runBob(int argc, char *argv[])
         garbage_thread = std::thread(garbageCleaner);
     }
 
+    {
+        // update last seen network tick
+        uint32_t network_latest_tick;
+        uint16_t network_epoch;
+        GetLatestTickFromExternalSources(network_latest_tick, network_epoch);
+        if (network_latest_tick > 0) {
+            gLastSeenNetworkTick.store(network_latest_tick);
+        }
+    }
 
     uint32_t prevFetchingTickData = 0;
     uint32_t prevLoggingEventTick = 0;

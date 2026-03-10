@@ -1,7 +1,7 @@
 {
   "request-cycle-ms": 100,
   "request-logging-cycle-ms": 100,
-  "future-offset": 3,
+  "future-offset": 10,
   "log-level": "info",
   "keydb-url": "tcp://127.0.0.1:6379",
   "run-server": false,
@@ -11,6 +11,6 @@
   "kvrocks-url": "tcp://127.0.0.1:6666",
   "tx-storage-mode" : "kvrocks",
   "tx_tick_to_live" : 1111,
-  "max-thread": 8,
+  "max-thread": 4,
   "spam-qu-threshold": 100
 }
