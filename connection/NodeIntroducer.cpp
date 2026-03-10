@@ -85,6 +85,7 @@ bool DownloadStateFiles(uint16_t epoch)
 
 void GetLatestTickFromExternalSources(uint32_t& tick, uint16_t& epoch)
 {
+    if (gIsTestnet) return;
     // Try primary API
     auto client1 = drogon::HttpClient::newHttpClient("https://api.qubic.global");
     auto req1 = drogon::HttpRequest::newHttpRequest();
