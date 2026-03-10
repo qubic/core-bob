@@ -168,26 +168,26 @@ int ConnectionPool::smartTickRequest(uint8_t* buffer, int sz, uint8_t type, bool
     if (gLastSeenNetworkTick > gCurrentFetchingTick + 10) {
         sendToMany(buffer, sz, 1, type, randomDejavu, NODE_TYPE_BM);
         sendToMany(buffer, sz, 1, type, randomDejavu, NODE_TYPE_BOB);
-    } else {
-        std::uniform_int_distribution<std::size_t> dist{};
-        if (dist(rng_) % 2 == 0) {
-            sendToMany(buffer, sz, 1, type, randomDejavu, NODE_TYPE_BM);
-        } else {
-            sendToMany(buffer, sz, 1, type, randomDejavu, NODE_TYPE_BOB);
-        }
+        return 3;
     }
+    std::uniform_int_distribution<std::size_t> dist{};
+    if (dist(rng_) % 2 == 0) {
+        sendToMany(buffer, sz, 1, type, randomDejavu, NODE_TYPE_BM);
+        return 2;
+    }
+    sendToMany(buffer, sz, 1, type, randomDejavu, NODE_TYPE_BOB);
+    return 1;
 }
 
 int ConnectionPool::smartLogRequest(uint8_t* buffer, int passcodeOffset, int sz, uint8_t type, bool randomDejavu) {
     if (gLastSeenNetworkTick > gCurrentFetchingLogTick + 10) {
-        sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BM);
-        sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BOB);
-    } else {
-        std::uniform_int_distribution<std::size_t> dist{};
-        if (dist(rng_) % 2 == 0) {
-            sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BM);
-        } else {
-            sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BOB);
-        }
+        int r0 = sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BM);
+        int r1 = sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BOB);
+        return r0 + r1;
     }
+    std::uniform_int_distribution<std::size_t> dist{};
+    if (dist(rng_) % 2 == 0) {
+        return sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BM);
+    }
+    return sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BOB);
 }
