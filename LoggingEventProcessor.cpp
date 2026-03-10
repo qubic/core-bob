@@ -1000,7 +1000,8 @@ verifyNodeStateDigest:
 
 // The logging fetcher thread from trusted nodes only (no signature require)
 void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
-                                 uint64_t request_logging_cycle_ms)
+                                 uint64_t request_logging_cycle_ms,
+                                 uint32_t future_offset)
 {
     auto idleBackoff = 1;
     uint64_t lastRequestMs = 0;
@@ -1018,12 +1019,6 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
                 lastRequestMs = currentMs;
                 shouldRequestLogRange = true;
                 shouldRequestLogEvent = true;
-            }
-            if (lastRequestTick < gCurrentFetchingTick && gCurrentFetchingTick != 0)
-            {
-//                Logger::get()->debug("current {} last {}", gCurrentFetchingTick, lastRequestTick);
-                lastRequestTick = gCurrentFetchingTick;
-                shouldRequestLogRange = true;
             }
             while (refetchLogFromTick != -1 && refetchLogToTick != -1 && !gStopFlag.load(std::memory_order_relaxed))
             {
@@ -1079,10 +1074,7 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
                     continue;
                 }
                 long long endId = fromId + length - 1; // inclusive
-                while (db_log_exists(gCurrentProcessingEpoch, fromId) && fromId <= endId)
-                {
-                    fromId++;
-                }
+                while (db_log_exists(gCurrentProcessingEpoch, fromId) && fromId <= endId) fromId++;
                 if (lastRequestLogid < fromId)
                 {
                     shouldRequestLogEvent = true;
@@ -1092,6 +1084,8 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
                 {
                     for (long long s = fromId; s <= endId; s += BOB_LOG_EVENT_CHUNK_SIZE) {
                         long long e = std::min(endId, s + BOB_LOG_EVENT_CHUNK_SIZE - 1);
+                        while (db_log_exists(gCurrentProcessingEpoch, e) && e >= fromId) e--;
+                        if (e < fromId) continue;
                         RequestLog rl{{0,0,0,0},(unsigned long long)(s),(unsigned long long)(e)};
                         connPoolWithPwd.smartLogRequest((uint8_t *) &rl, 0, sizeof(RequestLog), RequestLog::type(), true);
                         Logger::get()->debug("Requested log {}=>{}", s, e);
@@ -1106,13 +1100,27 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
             }
             if (shouldRequestLogRange)
             {
-                for (int i = 1; i < 5; i++)
+                for (int i = 1; i < future_offset; i++)
                 {
                     if (!db_check_log_range(gCurrentFetchingLogTick + i))
                     {
                         RequestAllLogIdRangesFromTick ralr{{0,0,0,0},gCurrentFetchingLogTick + i};
                         connPoolWithPwd.smartLogRequest((uint8_t*)&ralr, 0, sizeof(RequestAllLogIdRangesFromTick), RequestAllLogIdRangesFromTick::type(), true);
                         Logger::get()->debug("Requested logRange {}", gCurrentFetchingLogTick + i);
+                    } else {
+                        long long fromId, length;
+                        if (!db_try_get_log_range_for_tick(gCurrentFetchingLogTick+ i, fromId, length)) continue;
+                        if (fromId == -1 || length == -1) continue;
+                        long long endId = fromId + length - 1; // inclusive
+                        while (db_log_exists(gCurrentProcessingEpoch, fromId) && fromId <= endId) fromId++;
+                        for (long long s = fromId; s <= endId; s += BOB_LOG_EVENT_CHUNK_SIZE) {
+                            long long e = std::min(endId, s + BOB_LOG_EVENT_CHUNK_SIZE - 1);
+                            while (db_log_exists(gCurrentProcessingEpoch, e) && e >= fromId) e--;
+                            if (e < fromId) continue;
+                            RequestLog rl{{0,0,0,0},(unsigned long long)(s),(unsigned long long)(e)};
+                            connPoolWithPwd.smartLogRequest((uint8_t *) &rl, 0, sizeof(RequestLog), RequestLog::type(), true);
+                            Logger::get()->debug("Requested log {}=>{}", s, e);
+                        }
                     }
                 }
             }
