@@ -156,10 +156,10 @@ void CheckInQubicGlobal()
 {
     if (gIsTestnet) return;
     // Declare the external function
-    extern std::string bobGetExtraStatus();
+    extern std::string bobGetExtraStatus(const std::string& challenge = "");
 
     // Get the JSON string data
-    std::string jsonData = bobGetExtraStatus();
+    std::string jsonData = bobGetExtraStatus("");
 
     // Create HTTP client and request
     auto client = drogon::HttpClient::newHttpClient("https://api.qubic.global");

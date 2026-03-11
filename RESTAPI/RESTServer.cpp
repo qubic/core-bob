@@ -485,7 +485,8 @@ namespace {
                 "/status",
                 [](const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
                     try {
-                        std::string result = bobGetStatus();
+                        std::string challenge = req->getParameter("challenge");
+                        std::string result = bobGetStatus(challenge);
                         callback(makeJsonResponse(result));
                     } catch (const std::exception &ex) {
                         callback(makeError(std::string("status error: ") + ex.what(), k500InternalServerError));
