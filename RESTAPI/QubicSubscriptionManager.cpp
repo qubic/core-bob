@@ -613,6 +613,10 @@ std::string QubicSubscriptionManager::buildTickStreamJsonString(
             txJson["inputData"] = ss.str();
         }
 
+        if (!tx.signature.empty()) {
+            txJson["signature"] = tx.signature;
+        }
+
         txArray.append(txJson);
     }
 
@@ -706,6 +710,12 @@ void QubicSubscriptionManager::onVerifiedTick(
             if (tx->inputSize > 0 && txData.size() >= sizeof(Transaction) + tx->inputSize) {
                 const uint8_t* inputPtr = txData.data() + sizeof(Transaction);
                 stx.inputData.assign(inputPtr, inputPtr + tx->inputSize);
+            }
+
+            // Copy transaction signature
+            if (txData.size() >= sizeof(Transaction) + tx->inputSize + SIGNATURE_SIZE) {
+                const uint8_t* sigPtr = txData.data() + sizeof(Transaction) + tx->inputSize;
+                stx.signature = QubicRpc::bytesToHex(sigPtr, SIGNATURE_SIZE);
             }
 
             // Get execution info from log ranges (more reliable than indexed tx for real-time)

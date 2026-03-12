@@ -303,6 +303,10 @@ Json::Value transactionToQubicTx(const Transaction* tx, const std::string& txHas
         result["inputData"] = "";
     }
 
+    // Transaction signature (64 bytes after header + input data)
+    const uint8_t* sigPtr = reinterpret_cast<const uint8_t*>(tx) + sizeof(Transaction) + tx->inputSize;
+    result["signature"] = bytesToHex(sigPtr, SIGNATURE_SIZE);
+
     return result;
 }
 

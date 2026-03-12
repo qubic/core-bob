@@ -71,6 +71,7 @@ struct StreamTx {
     uint16_t inputType;
     uint16_t inputSize;
     std::vector<uint8_t> inputData;
+    std::string signature;
     bool executed;
     int64_t logIdFrom;
     int64_t logIdLength;
