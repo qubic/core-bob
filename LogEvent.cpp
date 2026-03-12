@@ -150,6 +150,46 @@ Json::Value LogEvent::parseToJson() const
             break;
         }
 
+        case 11: { // ASSET_OWNERSHIP_MANAGING_CONTRACT_CHANGE
+            const auto needed = static_cast<uint32_t>(sizeof(AssetOwnershipManagingContractChange));
+            if (bodySize < needed) {
+                body["error"] = "body_too_small_for_AssetOwnershipManagingContractChange";
+                body["needed"] = needed;
+                body["got"] = bodySize;
+            } else {
+                const AssetOwnershipManagingContractChange *a = getStruct<AssetOwnershipManagingContractChange>();
+                root["logTypename"] = "ASSET_OWNERSHIP_MANAGING_CONTRACT_CHANGE";
+                body["ownershipPublicKey"] = a->ownershipPublicKey.toQubicHashUpperCase();
+                body["issuerPublicKey"] = a->issuerPublicKey.toQubicHashUpperCase();
+                body["sourceContractIndex"] = a->sourceContractIndex;
+                body["destinationContractIndex"] = a->destinationContractIndex;
+                body["numberOfShares"] = Json::Int64(a->numberOfShares);
+                body["assetName"] = trim_zero_bytes(a->assetName, 7);
+                filled = true;
+            }
+            break;
+        }
+        case 12: { // ASSET_POSSESSION_MANAGING_CONTRACT_CHANGE
+            const auto needed = static_cast<uint32_t>(sizeof(AssetPossessionManagingContractChange));
+            if (bodySize < needed) {
+                body["error"] = "body_too_small_for_AssetPossessionManagingContractChange";
+                body["needed"] = needed;
+                body["got"] = bodySize;
+            } else {
+                const AssetPossessionManagingContractChange *a = getStruct<AssetPossessionManagingContractChange>();
+                root["logTypename"] = "ASSET_POSSESSION_MANAGING_CONTRACT_CHANGE";
+                body["possessionPublicKey"] = a->possessionPublicKey.toQubicHashUpperCase();
+                body["ownershipPublicKey"] = a->ownershipPublicKey.toQubicHashUpperCase();
+                body["issuerPublicKey"] = a->issuerPublicKey.toQubicHashUpperCase();
+                body["sourceContractIndex"] = a->sourceContractIndex;
+                body["destinationContractIndex"] = a->destinationContractIndex;
+                body["numberOfShares"] = Json::Int64(a->numberOfShares);
+                body["assetName"] = trim_zero_bytes(a->assetName, 7);
+                filled = true;
+            }
+            break;
+        }
+
         case 13: { // CONTRACT_RESERVE_DEDUCTION
             const auto needed = static_cast<uint32_t>(sizeof(ContractReserveDeduction));
             if (bodySize < needed) {
