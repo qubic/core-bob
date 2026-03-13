@@ -1007,6 +1007,9 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
     uint64_t lastRequestMs = 0;
     uint32_t lastRequestTick = 0;
     int64_t lastRequestLogid = -1;
+    uint32_t stallTick = 0;
+    uint64_t stallStartMs = 0;
+    uint64_t lastStallLogMs = 0;
 
     while (!gStopFlag.load(std::memory_order_relaxed)) {
         try {
@@ -1124,6 +1127,31 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
                     }
                 }
             }
+            // Stall detection: log warning if stuck on the same tick for 30s
+            uint32_t currentLogTick = gCurrentFetchingLogTick.load();
+            if (currentLogTick != stallTick) {
+                stallTick = currentLogTick;
+                stallStartMs = currentMs;
+                lastStallLogMs = 0;
+            } else if (currentMs - stallStartMs >= 30000 && currentMs - lastStallLogMs >= 30000) {
+                lastStallLogMs = currentMs;
+                bool hasLogRange = db_check_log_range(currentLogTick);
+                if (hasLogRange) {
+                    long long fromId, length;
+                    db_try_get_log_range_for_tick(currentLogTick, fromId, length);
+                    long long endId = (fromId >= 0 && length > 0) ? fromId + length - 1 : -1;
+                    long long missing = 0;
+                    for (long long id = fromId; id <= endId; id++) {
+                        if (!db_log_exists(gCurrentProcessingEpoch, id)) missing++;
+                    }
+                    Logger::get()->warn("FetchingLog stalled on tick {} for {}s: hasLogRange=true fromId={} endId={} missing={}/{}",
+                                       currentLogTick, (currentMs - stallStartMs) / 1000, fromId, endId, missing, length);
+                } else {
+                    Logger::get()->warn("FetchingLog stalled on tick {} for {}s: hasLogRange=false (no peer responded with log range)",
+                                       currentLogTick, (currentMs - stallStartMs) / 1000);
+                }
+            }
+
             SLEEP(idleBackoff);
         } catch (std::logic_error &ex) {
 
