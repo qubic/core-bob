@@ -21,6 +21,7 @@ QubicSubscriptionManager& QubicSubscriptionManager::instance() {
 void QubicSubscriptionManager::shutdown() {
     Logger::get()->debug("QubicSubscriptionManager: signaling shutdown");
     stopFlag_.store(true);
+    stopWorker();
 
     // Wait for all catch-up threads to finish (max 5 seconds)
     int waitCount = 0;
@@ -654,7 +655,71 @@ std::string QubicSubscriptionManager::buildTickStreamJsonString(
     return ss.str();
 }
 
+void QubicSubscriptionManager::startWorker() {
+    if (workerRunning_.exchange(true)) return;  // already running
+    workerThread_ = std::thread([this]() { verifiedTickWorker(); });
+}
+
+void QubicSubscriptionManager::stopWorker() {
+    workerRunning_.store(false);
+    queueCv_.notify_all();
+    if (workerThread_.joinable()) workerThread_.join();
+}
+
+void QubicSubscriptionManager::verifiedTickWorker() {
+    Logger::get()->info("verifiedTickWorker: started");
+    while (workerRunning_.load()) {
+        QueuedVerifiedTick item;
+        {
+            std::unique_lock lock(queueMutex_);
+            queueCv_.wait(lock, [this]() {
+                return !verifiedTickQueue_.empty() || !workerRunning_.load();
+            });
+            if (!workerRunning_.load() && verifiedTickQueue_.empty()) break;
+            if (verifiedTickQueue_.empty()) continue;
+            item = std::move(verifiedTickQueue_.front());
+            verifiedTickQueue_.pop_front();
+        }
+        try {
+            processVerifiedTick(item.tick, item.epoch, item.logs, item.td);
+        } catch (const std::exception& e) {
+            Logger::get()->error("verifiedTickWorker: error processing tick {}: {}", item.tick, e.what());
+        } catch (...) {
+            Logger::get()->error("verifiedTickWorker: unknown error processing tick {}", item.tick);
+        }
+    }
+    Logger::get()->info("verifiedTickWorker: stopped");
+    workerRunning_.store(false);
+}
+
 void QubicSubscriptionManager::onVerifiedTick(
+    uint32_t tick,
+    uint16_t epoch,
+    const std::vector<LogEvent>& logs,
+    const TickData& td)
+{
+    // Start or restart the worker thread if not running
+    if (!workerRunning_.load()) {
+        // Join previous thread if it died
+        if (workerThread_.joinable()) workerThread_.join();
+        startWorker();
+    }
+
+    // Queue the tick data — the worker thread does the heavy lifting
+    {
+        std::lock_guard lock(queueMutex_);
+        // Cap queue size to prevent unbounded memory growth if worker falls behind
+        if (verifiedTickQueue_.size() >= 1000) {
+            Logger::get()->warn("verifiedTickWorker: queue full (1000), dropping oldest tick {}",
+                               verifiedTickQueue_.front().tick);
+            verifiedTickQueue_.pop_front();
+        }
+        verifiedTickQueue_.push_back({tick, epoch, logs, td});
+    }
+    queueCv_.notify_one();
+}
+
+void QubicSubscriptionManager::processVerifiedTick(
     uint32_t tick,
     uint16_t epoch,
     const std::vector<LogEvent>& logs,

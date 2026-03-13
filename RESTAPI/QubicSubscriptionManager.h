@@ -2,9 +2,13 @@
 
 #include <string>
 #include <vector>
+#include <deque>
 #include <unordered_map>
 #include <unordered_set>
 #include <shared_mutex>
+#include <mutex>
+#include <condition_variable>
+#include <thread>
 #include <atomic>
 #include <optional>
 #include "drogon/WebSocketConnection.h"
@@ -130,6 +134,10 @@ public:
     void onVerifiedTick(uint32_t tick, uint16_t epoch,
                         const std::vector<LogEvent>& logs, const TickData& td);
 
+    // Start/stop the background worker that processes queued verified ticks
+    void startWorker();
+    void stopWorker();
+
     // Catch-up for TickStream subscriptions
     void performCatchUp(const drogon::WebSocketConnectionPtr& conn,
                         const std::string& subId,
@@ -148,6 +156,13 @@ public:
 
 private:
     QubicSubscriptionManager() = default;
+
+    // Background worker that drains the verified tick queue
+    void verifiedTickWorker();
+
+    // Processes a single verified tick (the actual heavy work)
+    void processVerifiedTick(uint32_t tick, uint16_t epoch,
+                             const std::vector<LogEvent>& logs, const TickData& td);
 
     std::string generateSubscriptionId();
     bool matchesFilter(const LogEvent& log, const LogFilter& filter,
@@ -206,4 +221,17 @@ private:
 
     // Count of active catch-up threads
     std::atomic<int> activeCatchUpThreads_{0};
+
+    // Verified tick queue (decouples indexer from subscription processing)
+    struct QueuedVerifiedTick {
+        uint32_t tick;
+        uint16_t epoch;
+        std::vector<LogEvent> logs;
+        TickData td;
+    };
+    std::mutex queueMutex_;
+    std::condition_variable queueCv_;
+    std::deque<QueuedVerifiedTick> verifiedTickQueue_;
+    std::thread workerThread_;
+    std::atomic<bool> workerRunning_{false};
 };
