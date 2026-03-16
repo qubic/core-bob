@@ -171,6 +171,14 @@ int64_t parseTickTag(const std::string& tag) {
 // Tick Conversions
 // ============================================================================
 
+bool isTickSkipped(const TickData& td, bool hasTxDigests) {
+    if (td.epoch == 0 || !hasTxDigests) return true;
+    // Tick has digests but quorum may have voted it empty — check if anything was executed
+    long long fromLogId = -1, length = -1;
+    db_try_get_log_range_for_tick(td.tick, fromLogId, length);
+    return (fromLogId == -1 || length <= 0);
+}
+
 std::string tickToHash(uint32_t tick, const TickData& td) {
     return bytesToHex(td.signature, 32);
 }
@@ -182,10 +190,8 @@ Json::Value tickDataToQubicTick(uint32_t tick, const TickData& td,
 
     result["tickNumber"] = tick;
 
-    // Determine if we have tick data (epoch == 0 means no tick data in database)
     bool hasNoTickData = (td.epoch == 0);
-    // A tick is skipped if we have no tick data OR 226+ computors voted with zero txDigest (empty tick)
-    bool isSkipped = hasNoTickData || txDigests.empty();
+    bool isSkipped = isTickSkipped(td, !txDigests.empty());
 
     result["hasNoTickData"] = hasNoTickData;
     result["isSkipped"] = isSkipped;

@@ -69,6 +69,10 @@ int64_t parseTickTag(const std::string& tag);
 // Tick Conversions
 // ============================================================================
 
+// Check if a tick was skipped (no execution happened).
+// A tick is skipped if: no tick data, no tx digests, or digests present but no logs (quorum voted empty).
+bool isTickSkipped(const TickData& td, bool hasTxDigests);
+
 // Generate tick hash from tick data (signature)
 std::string tickToHash(uint32_t tick, const TickData& td);
 

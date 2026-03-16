@@ -566,10 +566,8 @@ std::string QubicSubscriptionManager::buildTickStreamJsonString(
     size_t totalLogs,
     bool includeInputData) const
 {
-    // Determine if we have tick data (epoch == 0 means no tick data in database)
     bool hasNoTickData = (td.epoch == 0);
-    // A tick is skipped if we have no tick data OR no transactions (226+ computors voted empty)
-    bool isSkipped = hasNoTickData || (totalTxs == 0);
+    bool isSkipped = QubicRpc::isTickSkipped(td, totalTxs > 0);
 
     // Apply epoch fallback: if tick data epoch is 0 but tick is in current epoch range, use current epoch
     uint16_t effectiveEpoch = epoch;
