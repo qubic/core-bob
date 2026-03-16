@@ -85,6 +85,7 @@ public:
     bool get(int i, QCPtr& qc);
 
     void randomlyRemove();
+    void randomlyRemoveBob();
     void removeDisconnectedClient();
 
     // Sends to one random valid connection. Returns bytes sent, or -1 if none could be used.

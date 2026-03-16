@@ -179,7 +179,14 @@ void processLogRanges(RequestResponseHeader& header, const uint8_t* ptr)
         if (header_sz == needed_sz)
         {
             const auto* logRange = reinterpret_cast<const LogRangesPerTxInTick*>(ptr);
+            static uint64_t recvCount = 0;
+            if (recvCount++ % 100 == 0)
+                Logger::get()->info("processLogRanges: received logRange for tick {} (count={})", packet.tick, recvCount);
             db_insert_log_range(packet.tick, *logRange);
+        }
+        else
+        {
+            Logger::get()->debug("processLogRanges: size mismatch for tick {}: got {} expected {}", packet.tick, header_sz, needed_sz);
         }
     }
     else
@@ -409,6 +416,9 @@ void replyLogRange(QCPtr& conn, uint32_t dejavu, uint8_t* ptr)
     RequestAllLogIdRangesFromTick* request = (RequestAllLogIdRangesFromTick*)ptr;
     if (request->tick >= gCurrentVerifyLoggingTick)
     {
+        static uint64_t rejectTickCount = 0;
+        if (rejectTickCount++ % 100 == 0)
+            Logger::get()->debug("replyLogRange: rejected tick {} >= gCurrentVerifyLoggingTick {}", request->tick, gCurrentVerifyLoggingTick.load());
         conn->sendEndPacket();
         return;
     }
@@ -417,6 +427,7 @@ void replyLogRange(QCPtr& conn, uint32_t dejavu, uint8_t* ptr)
         request->passcode[2] != 0 ||
         request->passcode[3] != 0)
     {
+        Logger::get()->debug("replyLogRange: rejected tick {} due to non-zero passcode", request->tick);
         conn->sendEndPacket();
         return;
     }
@@ -434,6 +445,9 @@ void replyLogRange(QCPtr& conn, uint32_t dejavu, uint8_t* ptr)
         conn->enqueueSend((uint8_t *) &pl, sizeof(pl));
         return;
     }
+    static uint64_t notFoundCount = 0;
+    if (notFoundCount++ % 100 == 0)
+        Logger::get()->debug("replyLogRange: no data for tick {} (count={})", tick, notFoundCount);
     conn->sendEndPacket(dejavu);
 }
 
@@ -469,7 +483,6 @@ void RequestProcessorThread()
 {
     std::vector<uint8_t> buf;
     buf.resize(RequestResponseHeader::max_size, 0);
-    uint8_t* ptr = buf.data();
     while (!gStopFlag.load())
     {
         uint32_t packet_size = 0;
@@ -484,9 +497,9 @@ void RequestProcessorThread()
             continue;
         }
         RequestResponseHeader header{};
-        memcpy((void*)&header, ptr, 8);
+        memcpy((void*)&header, buf.data(), 8);
         auto type = header.type();
-        ptr += 8;
+        uint8_t* ptr = buf.data() + 8;
 
         std::vector<uint8_t> ignore;
         QCPtr conn;

@@ -340,8 +340,7 @@ namespace {
                 // Launch per-connection receiver thread
                 ctx->th = std::thread([this, ctx, isTrustedNode]() {
                     try {
-                        ctx->conn->doHandshake();
-                        // Run the main receiver loop
+                        // Run the main receiver loop (no handshake needed for incoming connections)
                         connReceiver(ctx->conn, isTrustedNode);
 
                     } catch (const std::exception& ex) {

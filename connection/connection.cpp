@@ -113,6 +113,12 @@ int QubicConnection::receiveData(uint8_t* buffer, int sz)
         auto ret = recv(mSocket, (char*)buffer + count, std::min(1024, sz), 0);
         if (ret < 0)
         {
+            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
+            {
+                // Timeout or interrupted — not a real error, just retry
+                if (shouldStop) return -1;
+                continue;
+            }
             return ret;
         }
         if (ret == 0)
@@ -471,7 +477,9 @@ void doHandshakeAndGetBootstrapInfo(ConnectionPool& cp, bool isTrusted, uint32_t
             {
                 uint32_t initTick = 0;
                 uint16_t initEpoch = 0;
-                conn->doHandshake();
+                if (conn->isBM()) {
+                    conn->doHandshake();
+                }
                 conn->getBootstrapTickInfo(initTick, initEpoch);
                 maxInitTick = std::max(maxInitTick, initTick);
                 maxInitEpoch = std::max(maxInitEpoch, initEpoch);

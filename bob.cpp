@@ -144,6 +144,8 @@ int runBob(int argc, char *argv[])
     }
     parseConnection(connPool, cfg.p2p_nodes);
 
+    while (connPool.size() > 6) connPool.randomlyRemoveBob();
+    // If still over 6 (e.g. many BM nodes), fall back to random removal
     while (connPool.size() > 6) connPool.randomlyRemove();
 
     if (run_server) {
