@@ -104,6 +104,7 @@ bool verifyQuorum(uint32_t tick, TickData& td, std::vector<TickVote>& votes)
     {
         Logger::get()->critical("Consensus error: tickData {} is mismatched (there are potentially 2 tick data). Delete the current one in DB.", td.tick);
         db_delete_tick_data(tick);
+        memset((void*)&td, 0, sizeof(TickData));
         return false;
     }
 
