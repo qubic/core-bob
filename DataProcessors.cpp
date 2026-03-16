@@ -285,26 +285,6 @@ void replyTransaction(QCPtr& conn, uint32_t dejavu, uint8_t* ptr)
     return;
 }
 
-void replyComputorList(QCPtr& conn, uint32_t dejavu, uint8_t* ptr)
-{
-    if (computorsList.epoch != 0)
-    {
-        struct
-        {
-            RequestResponseHeader resp{};
-            Computors comp;
-        } pl;
-
-        pl.resp.setSize(8 + sizeof(Computors));
-        pl.resp.setDejavu(dejavu);
-        pl.resp.setType(RESPOND_COMPUTOR_LIST);
-        memcpy((void*)&pl.comp, &computorsList, sizeof(Computors));
-        conn->enqueueSend((uint8_t *) &pl, sizeof(pl));
-        return;
-    }
-    conn->sendEndPacket(dejavu);
-}
-
 void replyTickVotes(QCPtr& conn, uint32_t dejavu, uint8_t* ptr)
 {
     auto *request = (RequestedQuorumTick *)ptr;
@@ -441,34 +421,6 @@ void replyLogRange(QCPtr& conn, uint32_t dejavu, uint8_t* ptr)
     conn->sendEndPacket(dejavu);
 }
 
-void replyCurrentTickInfo(QCPtr& conn, uint32_t dejavu, uint8_t* ptr)
-{
-    struct
-    {
-        RequestResponseHeader header;
-        CurrentTickInfo currentTickInfo;
-    } pl;
-
-    pl.header.setType(RESPOND_CURRENT_TICK_INFO);
-    pl.header.setSize(sizeof(pl));
-    pl.header.setDejavu(dejavu);
-    if (computorsList.epoch)
-    {
-        pl.currentTickInfo.tickDuration = 0;
-        pl.currentTickInfo.epoch = gCurrentProcessingEpoch;
-        pl.currentTickInfo.tick = gCurrentVerifyLoggingTick - 1;
-        pl.currentTickInfo.numberOfAlignedVotes = 0;
-        pl.currentTickInfo.numberOfMisalignedVotes = 0;
-        pl.currentTickInfo.initialTick = gInitialTick;
-    }
-    else
-    {
-        setMem(&pl.currentTickInfo, sizeof(CurrentTickInfo), 0);
-    }
-    conn->enqueueSend((uint8_t *) &pl, sizeof(pl));
-}
-
-
 void RequestProcessorThread()
 {
     std::vector<uint8_t> buf;
@@ -497,17 +449,11 @@ void RequestProcessorThread()
         if (conn == nullptr) continue;
         switch (type)
         {
-            case REQUEST_COMPUTOR_LIST: // request computors list
-                replyComputorList(conn, header.getDejavu(), ptr);
-                break;
             case RequestedQuorumTick::type: // TickVote
                 replyTickVotes(conn, header.getDejavu(), ptr);
                 break;
             case RequestTickData::type: // TickData
                 replyTickData(conn, header.getDejavu(), ptr);
-                break;
-            case REQUEST_CURRENT_TICK_INFO:
-                replyCurrentTickInfo(conn, header.getDejavu(), ptr);
                 break;
             case REQUEST_TICK_TRANSACTIONS: // Transaction
                 replyTransaction(conn, header.getDejavu(), ptr);
