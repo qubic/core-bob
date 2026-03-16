@@ -301,6 +301,26 @@ static bool isDataType(int type)
     return false;
 }
 
+void replyComputorList(QCPtr& conn, uint32_t dejavu)
+{
+    if (computorsList.epoch != 0)
+    {
+        struct
+        {
+            RequestResponseHeader resp{};
+            Computors comp;
+        } pl;
+
+        pl.resp.setSize(8 + sizeof(Computors));
+        pl.resp.setDejavu(dejavu);
+        pl.resp.setType(RESPOND_COMPUTOR_LIST);
+        memcpy((void*)&pl.comp, &computorsList, sizeof(Computors));
+        conn->enqueueSend((uint8_t *) &pl, sizeof(pl));
+        return;
+    }
+    conn->sendEndPacket(dejavu);
+}
+
 void replyCurrentTickInfo(QCPtr& conn, uint32_t dejavu)
 {
     struct
@@ -378,6 +398,8 @@ void connReceiver(QCPtr conn, const bool isTrustedNode)
                 // some request is very lightweight and should be replied right away instead of queueing - to avoid unnecessary context switch
                 if (hdr.type() == REQUEST_CURRENT_TICK_INFO) {
                     replyCurrentTickInfo(conn, hdr.getDejavu());
+                } else if (hdr.type() == REQUEST_COMPUTOR_LIST) {
+                    replyComputorList(conn, hdr.getDejavu());
                 } else {
                     size_t numReqPackets = MRB_Request.estimateNumberOfRequestPacket();
                     if (numReqPackets < 1000) {
