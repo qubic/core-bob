@@ -193,18 +193,6 @@ int ConnectionPool::smartTickRequest(uint8_t* buffer, int sz, uint8_t type, bool
 }
 
 int ConnectionPool::smartLogRequest(uint8_t* buffer, int passcodeOffset, int sz, uint8_t type, bool randomDejavu) {
-    static uint64_t logCounter = 0;
-    if (logCounter++ % 300 == 0) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        int bmValid = 0, bobValid = 0, bmTotal = 0, bobTotal = 0;
-        for (std::size_t i = 0; i < conns_.size(); ++i) {
-            if (conns_[i]) {
-                if (conns_[i]->isBM()) { bmTotal++; if (conns_[i]->isSocketValid()) bmValid++; }
-                if (conns_[i]->isBob()) { bobTotal++; if (conns_[i]->isSocketValid()) bobValid++; }
-            }
-        }
-        Logger::get()->info("smartLogRequest pool: BM {}/{} valid, bob {}/{} valid", bmValid, bmTotal, bobValid, bobTotal);
-    }
     if (gLastSeenNetworkTick > gCurrentFetchingLogTick + 10) {
         int r0 = sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BM);
         int r1 = sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BOB);

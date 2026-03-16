@@ -179,9 +179,6 @@ void processLogRanges(RequestResponseHeader& header, const uint8_t* ptr)
         if (header_sz == needed_sz)
         {
             const auto* logRange = reinterpret_cast<const LogRangesPerTxInTick*>(ptr);
-            static uint64_t recvCount = 0;
-            if (recvCount++ % 100 == 0)
-                Logger::get()->info("processLogRanges: received logRange for tick {} (count={})", packet.tick, recvCount);
             db_insert_log_range(packet.tick, *logRange);
         }
         else
@@ -416,9 +413,6 @@ void replyLogRange(QCPtr& conn, uint32_t dejavu, uint8_t* ptr)
     RequestAllLogIdRangesFromTick* request = (RequestAllLogIdRangesFromTick*)ptr;
     if (request->tick >= gCurrentVerifyLoggingTick)
     {
-        static uint64_t rejectTickCount = 0;
-        if (rejectTickCount++ % 100 == 0)
-            Logger::get()->debug("replyLogRange: rejected tick {} >= gCurrentVerifyLoggingTick {}", request->tick, gCurrentVerifyLoggingTick.load());
         conn->sendEndPacket();
         return;
     }
@@ -427,7 +421,6 @@ void replyLogRange(QCPtr& conn, uint32_t dejavu, uint8_t* ptr)
         request->passcode[2] != 0 ||
         request->passcode[3] != 0)
     {
-        Logger::get()->debug("replyLogRange: rejected tick {} due to non-zero passcode", request->tick);
         conn->sendEndPacket();
         return;
     }
@@ -445,9 +438,6 @@ void replyLogRange(QCPtr& conn, uint32_t dejavu, uint8_t* ptr)
         conn->enqueueSend((uint8_t *) &pl, sizeof(pl));
         return;
     }
-    static uint64_t notFoundCount = 0;
-    if (notFoundCount++ % 100 == 0)
-        Logger::get()->debug("replyLogRange: no data for tick {} (count={})", tick, notFoundCount);
     conn->sendEndPacket(dejavu);
 }
 

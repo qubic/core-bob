@@ -363,20 +363,14 @@ void connReceiver(QCPtr conn, const bool isTrustedNode)
 
         } catch (const std::logic_error& ex) {
             if (gStopFlag.load(std::memory_order_relaxed)) return;
-            if (!conn->isReconnectable()) {
-                Logger::get()->debug("connReceiver: non-reconnectable connection closed ({}): {}", conn->getNodeIp(), ex.what());
-                return;
-            }
+            if (!conn->isReconnectable()) return;
             Logger::get()->trace("connReceiver error on : {}. Disconnecting", conn->getNodeIp());
             conn->disconnect();
             SLEEP(errorBackoff);
             conn->reconnect();
         } catch (...) {
             if (gStopFlag.load(std::memory_order_relaxed)) return;
-            if (!conn->isReconnectable()) {
-                Logger::get()->debug("connReceiver: non-reconnectable connection closed ({}): unknown exception", conn->getNodeIp());
-                return;
-            }
+            if (!conn->isReconnectable()) return;
             Logger::get()->trace("connReceiver unknown exception from ip {}", conn->getNodeIp());
             conn->disconnect();
             SLEEP(errorBackoff);
