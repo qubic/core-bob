@@ -270,7 +270,7 @@ namespace {
 
                 // Set accept timeout for periodic cleanup
                 struct timeval tv;
-                tv.tv_sec = 1;
+                tv.tv_sec = 10;
                 tv.tv_usec = 0;
                 ::setsockopt(listen_fd_, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
