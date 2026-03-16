@@ -108,6 +108,7 @@ QubicConnection::~QubicConnection()
 int QubicConnection::receiveData(uint8_t* buffer, int sz)
 {
     int count = 0;
+    int retry = 0;
     while (sz > 0)
     {
         auto ret = recv(mSocket, (char*)buffer + count, std::min(1024, sz), 0);
@@ -117,6 +118,7 @@ int QubicConnection::receiveData(uint8_t* buffer, int sz)
             {
                 // Timeout or interrupted — not a real error, just retry
                 if (shouldStop) return -1;
+                if (retry++ > 5) return -1; // maximum retry 5 times
                 continue;
             }
             return ret;
@@ -293,7 +295,10 @@ void QubicConnection::getBootstrapTickInfo(uint32_t& tick, uint16_t& epoch)
             enqueueSend((uint8_t *) &header, 8);
         }
         RequestResponseHeader header{};
-        receiveAFullPacket(header, packet);
+        try {
+            receiveAFullPacket(header, packet);
+        } catch (std::logic_error& e) {}
+
         if (!packet.empty())
         {
             memcpy((void*)&header, packet.data(), 8);
@@ -337,6 +342,7 @@ bool QubicConnection::reconnect()
     int newSocket = do_connect(mNodeIp, mNodePort);
     if (newSocket < 0) {
         Logger::get()->trace("Failed to reconnect {}:{}", mNodeIp, mNodePort);
+        mSocket = -1;
         return false;
     }
 
@@ -476,6 +482,7 @@ void doHandshakeAndGetBootstrapInfo(ConnectionPool& cp, bool isTrusted, uint32_t
         QCPtr conn = nullptr;
         if (!cp.get(i, conn)) continue;
         try {
+            conn->reconnect();
             if (conn->isSocketValid())
             {
                 uint32_t initTick = 0;
@@ -487,16 +494,9 @@ void doHandshakeAndGetBootstrapInfo(ConnectionPool& cp, bool isTrusted, uint32_t
                 maxInitTick = std::max(maxInitTick, initTick);
                 maxInitEpoch = std::max(maxInitEpoch, initEpoch);
             }
-            else
-            {
-                SLEEP(errorBackoff);
-                conn->reconnect();
-            }
         }
         catch (...)
         {
-            SLEEP(errorBackoff);
-            conn->reconnect();
         }
     }
 }
@@ -507,6 +507,7 @@ void getComputorList(ConnectionPool& cp, std::string arbitratorIdentity)
     for (int i = 0; i < cp.size(); i++) {
         QCPtr conn = nullptr;
         if (!cp.get(i, conn)) continue;
+        if (!conn->isSocketValid()) continue;
         try {
             if (computorsList.epoch != gCurrentProcessingEpoch.load())
             {
@@ -537,6 +538,7 @@ void getComputorList(ConnectionPool& cp, std::string arbitratorIdentity)
                     {
                         db_insert_computors(comp);
                         computorsList = comp;
+                        Logger::get()->info("Computor list updated successfully");
                     }
                     else
                     {
