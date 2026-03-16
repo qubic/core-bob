@@ -281,17 +281,19 @@ void QubicConnection::getBootstrapTickInfo(uint32_t& tick, uint16_t& epoch)
     RequestResponseHeader header{};
     std::vector<uint8_t> packet;
     int count = 0;
-    while (1)
+    const int maxAttempts = 200; // give up after ~200 receive attempts
+    while (count < maxAttempts)
     {
         // trying to get until tickinfo packet arrive
         // resend each 20 packets
-        if ( count++ % 20 == 0 )
+        if ( count % 20 == 0 )
         {
             header.setSize(sizeof(header));
             header.randomizeDejavu();
             header.setType(REQUEST_CURRENT_TICK_INFO);
             enqueueSend((uint8_t *) &header, 8);
         }
+        count++;
         RequestResponseHeader header{};
         try {
             receiveAFullPacket(header, packet);
@@ -308,11 +310,12 @@ void QubicConnection::getBootstrapTickInfo(uint32_t& tick, uint16_t& epoch)
                     memcpy((void*)&ctick, packet.data()+8, sizeof(CurrentTickInfo));
                     tick = ctick.initialTick;
                     epoch = ctick.epoch;
-                    break;
+                    return;
                 }
             }
         }
     }
+    Logger::get()->warn("getBootstrapTickInfo: timed out waiting for response from {}:{}", mNodeIp, mNodePort);
 }
 
 void QubicConnection::disconnect()
