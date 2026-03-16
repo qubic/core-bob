@@ -181,6 +181,10 @@ void processLogRanges(RequestResponseHeader& header, const uint8_t* ptr)
             const auto* logRange = reinterpret_cast<const LogRangesPerTxInTick*>(ptr);
             db_insert_log_range(packet.tick, *logRange);
         }
+        else
+        {
+            Logger::get()->debug("processLogRanges: size mismatch for tick {}: got {} expected {}", packet.tick, header_sz, needed_sz);
+        }
     }
     else
     {
@@ -469,7 +473,6 @@ void RequestProcessorThread()
 {
     std::vector<uint8_t> buf;
     buf.resize(RequestResponseHeader::max_size, 0);
-    uint8_t* ptr = buf.data();
     while (!gStopFlag.load())
     {
         uint32_t packet_size = 0;
@@ -484,9 +487,9 @@ void RequestProcessorThread()
             continue;
         }
         RequestResponseHeader header{};
-        memcpy((void*)&header, ptr, 8);
+        memcpy((void*)&header, buf.data(), 8);
         auto type = header.type();
-        ptr += 8;
+        uint8_t* ptr = buf.data() + 8;
 
         std::vector<uint8_t> ignore;
         QCPtr conn;

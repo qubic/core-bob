@@ -2,6 +2,7 @@
 #include <mutex>
 
 #include "shim.h"
+#include "Logger.h"
 
 ConnectionPool::ConnectionPool()
         : rng_(std::random_device{}()) {}
@@ -49,6 +50,18 @@ void ConnectionPool::randomlyRemove() {
     std::uniform_int_distribution<std::size_t> dist(0, conns_.size() - 1);
     auto idx = dist(rng_);
     conns_.erase(conns_.begin() + idx);
+}
+
+void ConnectionPool::randomlyRemoveBob() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<std::size_t> bobIdx;
+    for (std::size_t i = 0; i < conns_.size(); ++i) {
+        if (conns_[i] && conns_[i]->isBob()) bobIdx.push_back(i);
+    }
+    if (bobIdx.empty()) return;
+    std::uniform_int_distribution<std::size_t> dist(0, bobIdx.size() - 1);
+    auto chosen = bobIdx[dist(rng_)];
+    conns_.erase(conns_.begin() + chosen);
 }
 
 // Sends to one random valid connection. Returns bytes sent, or -1 if none could be used.
