@@ -301,6 +301,32 @@ static bool isDataType(int type)
     return false;
 }
 
+void replyCurrentTickInfo(QCPtr& conn, uint32_t dejavu)
+{
+    struct
+    {
+        RequestResponseHeader header;
+        CurrentTickInfo currentTickInfo;
+    } pl;
+
+    pl.header.setType(RESPOND_CURRENT_TICK_INFO);
+    pl.header.setSize(sizeof(pl));
+    pl.header.setDejavu(dejavu);
+    if (computorsList.epoch)
+    {
+        pl.currentTickInfo.tickDuration = 0;
+        pl.currentTickInfo.epoch = gCurrentProcessingEpoch;
+        pl.currentTickInfo.tick = gCurrentVerifyLoggingTick - 1;
+        pl.currentTickInfo.numberOfAlignedVotes = 0;
+        pl.currentTickInfo.numberOfMisalignedVotes = 0;
+        pl.currentTickInfo.initialTick = gInitialTick;
+    }
+    else
+    {
+        setMem(&pl.currentTickInfo, sizeof(CurrentTickInfo), 0);
+    }
+    conn->enqueueSend((uint8_t *) &pl, sizeof(pl));
+}
 
 // Receiver thread: continuously receives full packets and enqueues them into the global round buffer (MRB).
 void connReceiver(QCPtr conn, const bool isTrustedNode)
@@ -349,15 +375,23 @@ void connReceiver(QCPtr conn, const bool isTrustedNode)
 
             if (isRequestType(hdr.type()))
             {
-                bool ok = MRB_Request.EnqueuePacket(packet.data());
-                if (!ok) {
-                    Logger::get()->warn("connReceiver: failed to enqueue packet (size={}, type={}). Dropped.",
-                                        packet.size(),
-                                        static_cast<unsigned>(hdr.type()));
-                }
-                else
-                {
-                    requestMapperTo.add(hdr.getDejavu(), nullptr, 0, conn);
+                // some request is very lightweight and should be replied right away instead of queueing - to avoid unnecessary context switch
+                if (hdr.type() == REQUEST_CURRENT_TICK_INFO) {
+                    replyCurrentTickInfo(conn, hdr.getDejavu());
+                } else {
+                    size_t numReqPackets = MRB_Request.estimateNumberOfRequestPacket();
+                    if (numReqPackets < 1000) {
+                        bool ok = MRB_Request.EnqueuePacket(packet.data());
+                        if (!ok) {
+                            Logger::get()->warn("connReceiver: failed to enqueue packet (size={}, type={}). Dropped.",
+                                                packet.size(),
+                                                static_cast<unsigned>(hdr.type()));
+                        }
+                        else
+                        {
+                            requestMapperTo.add(hdr.getDejavu(), nullptr, 0, conn);
+                        }
+                    }
                 }
             }
 
