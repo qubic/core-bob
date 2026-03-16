@@ -460,6 +460,9 @@ void parseConnection(ConnectionPool& connPoolAll,
         if (has_passcode) {
             conn->updatePasscode(passcode_arr);
         }
+        if (!conn->isSocketValid()) {
+            Logger::get()->warn("Failed to connect to node {}. Will try to reconnect later", endpoint);
+        }
         connPoolAll.add(conn);
         Logger::get()->info("Added {} node {}:{}{}", nodeType, ip, port, has_passcode ? " (trusted)" : "");
     }
