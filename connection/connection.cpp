@@ -3,11 +3,11 @@
 #include <stdexcept>
 #include <algorithm> // For std::min
 #include <thread>
-
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <atomic>
 #include <cstring>
 #include <cerrno>  // for errno
 #include <fcntl.h>
@@ -117,7 +117,7 @@ int QubicConnection::receiveData(uint8_t* buffer, int sz)
             {
                 // Timeout or interrupted — not a real error, just retry
                 if (shouldStop) return -1;
-                continue;
+                return -1; // timeout is large enough to consider this as failure
             }
             return ret;
         }
@@ -293,7 +293,10 @@ void QubicConnection::getBootstrapTickInfo(uint32_t& tick, uint16_t& epoch)
             enqueueSend((uint8_t *) &header, 8);
         }
         RequestResponseHeader header{};
-        receiveAFullPacket(header, packet);
+        try {
+            receiveAFullPacket(header, packet);
+        } catch (std::logic_error& e) {}
+
         if (!packet.empty())
         {
             memcpy((void*)&header, packet.data(), 8);
@@ -337,6 +340,7 @@ bool QubicConnection::reconnect()
     int newSocket = do_connect(mNodeIp, mNodePort);
     if (newSocket < 0) {
         Logger::get()->trace("Failed to reconnect {}:{}", mNodeIp, mNodePort);
+        mSocket = -1;
         return false;
     }
 
@@ -354,7 +358,7 @@ QubicConnection::QubicConnection(int existingSocket)
     if (mSocket >= 0) {
         // Configure timeouts (best-effort)
         struct timeval tv;
-        tv.tv_sec = 2;
+        tv.tv_sec = 10;
         tv.tv_usec = 0;
         if (setsockopt(mSocket, SOL_SOCKET, SO_RCVTIMEO, (const void*)&tv, sizeof tv) < 0) {
             Logger::get()->warn("setsockopt(SO_RCVTIMEO) failed: {} ({})", errno, strerror(errno));
@@ -374,7 +378,18 @@ QubicConnection::QubicConnection(int existingSocket)
 void parseConnection(ConnectionPool& connPoolAll,
                      std::vector<std::string>& endpoints)
 {
-    // Try endpoints in order, connect to the first that works
+    struct ParsedEndpoint
+    {
+        std::string endpoint;
+        std::string nodeType;
+        std::string ip;
+        int port = 0;
+        bool has_passcode = false;
+        uint64_t passcode_arr[4] = {0, 0, 0, 0};
+    };
+
+    std::vector<ParsedEndpoint> parsedEndpoints;
+    parsedEndpoints.reserve(endpoints.size());
 
     for (const auto& endpoint : endpoints) {
         // Expected format: nodeType:ip:port[:pass0-pass1-pass2-pass3]
@@ -424,12 +439,15 @@ void parseConnection(ConnectionPool& connPoolAll,
             continue;
         }
 
+        ParsedEndpoint parsed;
+        parsed.endpoint = endpoint;
+        parsed.nodeType = nodeType;
+        parsed.ip = ip;
+        parsed.port = port;
+
         // Optional passcode parsing
-        bool has_passcode = false;
-        uint64_t passcode_arr[4] = {0,0,0,0};
         if (!passcode_str.empty()) {
-            // Split by '-'
-            uint64_t parsed[4];
+            uint64_t parsedPasscode[4] = {0,0,0,0};
             size_t start = 0;
             int idx = 0;
             while (idx < 4 && start <= passcode_str.size()) {
@@ -437,9 +455,9 @@ void parseConnection(ConnectionPool& connPoolAll,
                 auto token = passcode_str.substr(start, (dash == std::string::npos) ? std::string::npos : (dash - start));
                 if (token.empty()) break;
                 try {
-                    parsed[idx] = static_cast<uint64_t>(std::stoull(token, nullptr, 10));
+                    parsedPasscode[idx] = static_cast<uint64_t>(std::stoull(token, nullptr, 10));
                 } catch (...) {
-                    idx = -1; // mark error
+                    idx = -1;
                     break;
                 }
                 idx++;
@@ -447,53 +465,137 @@ void parseConnection(ConnectionPool& connPoolAll,
                 start = dash + 1;
             }
             if (idx == 4) {
-                memcpy(passcode_arr, parsed, sizeof(parsed));
-                has_passcode = true;
+                memcpy(parsed.passcode_arr, parsedPasscode, sizeof(parsedPasscode));
+                parsed.has_passcode = true;
             } else {
                 Logger::get()->warn("Skipping endpoint '{}': invalid passcode format, expected 4 uint64 separated by '-'", endpoint);
                 continue;
             }
         }
 
-        QCPtr conn = make_qc(ip.c_str(), port);
-        conn->setNodeType(nodeType);
-        if (has_passcode) {
-            conn->updatePasscode(passcode_arr);
+        parsedEndpoints.push_back(std::move(parsed));
+    }
+
+    if (parsedEndpoints.empty()) {
+        return;
+    }
+
+    std::vector<QCPtr> createdConnections(parsedEndpoints.size());
+    std::atomic<size_t> nextIndex{0};
+
+    unsigned int workerCount = parsedEndpoints.size();
+
+    std::vector<std::thread> workers;
+    workers.reserve(workerCount);
+
+    for (unsigned int worker = 0; worker < workerCount; ++worker) {
+        workers.emplace_back([&]() {
+            while (true) {
+                size_t index = nextIndex.fetch_add(1);
+                if (index >= parsedEndpoints.size()) {
+                    break;
+                }
+
+                const auto& ep = parsedEndpoints[index];
+                QCPtr conn = make_qc(ep.ip.c_str(), ep.port);
+                conn->setNodeType(ep.nodeType);
+                if (ep.has_passcode) {
+                    conn->updatePasscode(const_cast<uint64_t*>(ep.passcode_arr));
+                }
+                createdConnections[index] = conn;
+            }
+        });
+    }
+
+    for (auto& worker : workers) {
+        if (worker.joinable()) {
+            worker.join();
+        }
+    }
+
+    for (size_t i = 0; i < parsedEndpoints.size(); ++i) {
+        const auto& ep = parsedEndpoints[i];
+        QCPtr& conn = createdConnections[i];
+        if (!conn) {
+            Logger::get()->warn("Failed to create connection object for node {}", ep.endpoint);
+            continue;
+        }
+        if (!conn->isSocketValid()) {
+            Logger::get()->warn("Failed to connect to node {}. Will try to reconnect later", ep.endpoint);
         }
         connPoolAll.add(conn);
-        Logger::get()->info("Added {} node {}:{}{}", nodeType, ip, port, has_passcode ? " (trusted)" : "");
+        Logger::get()->info("Added {} node {}:{}{}", ep.nodeType, ep.ip, ep.port, ep.has_passcode ? " (trusted)" : "");
     }
 }
 
 void doHandshakeAndGetBootstrapInfo(ConnectionPool& cp, bool isTrusted, uint32_t& maxInitTick, uint16_t& maxInitEpoch)
 {
-    const auto errorBackoff = 1000;
+    std::vector<QCPtr> connections;
+    connections.reserve(cp.size());
+
     for (int i = 0; i < cp.size(); i++)
     {
         QCPtr conn = nullptr;
         if (!cp.get(i, conn)) continue;
-        try {
-            if (conn->isSocketValid())
+        if (!conn) continue;
+        connections.push_back(conn);
+    }
+
+    if (connections.empty()) {
+        return;
+    }
+
+    std::atomic<size_t> nextIndex{0};
+    std::mutex maxMutex;
+
+    unsigned int workerCount = connections.size();
+
+    std::vector<std::thread> workers;
+    workers.reserve(workerCount);
+
+    for (unsigned int worker = 0; worker < workerCount; ++worker)
+    {
+        workers.emplace_back([&]() {
+            uint32_t localMaxTick = 0;
+            uint16_t localMaxEpoch = 0;
+
             {
-                uint32_t initTick = 0;
-                uint16_t initEpoch = 0;
-                if (conn->isBM()) {
-                    conn->doHandshake();
+                size_t index = nextIndex.fetch_add(1);
+                if (index >= connections.size()) {
+                    return;
                 }
-                conn->getBootstrapTickInfo(initTick, initEpoch);
-                maxInitTick = std::max(maxInitTick, initTick);
-                maxInitEpoch = std::max(maxInitEpoch, initEpoch);
+
+                QCPtr conn = connections[index];
+                try {
+                    if (!conn->isSocketValid()) conn->reconnect(); // try reconnecting one more time
+                    if (conn->isSocketValid())
+                    {
+                        uint32_t initTick = 0;
+                        uint16_t initEpoch = 0;
+                        if (conn->isBM()) {
+                            conn->doHandshake();
+                        }
+                        conn->getBootstrapTickInfo(initTick, initEpoch);
+                        localMaxTick = std::max(localMaxTick, initTick);
+                        localMaxEpoch = std::max(localMaxEpoch, initEpoch);
+                    }
+                }
+                catch (...)
+                {
+                    return;
+                }
             }
-            else
-            {
-                SLEEP(errorBackoff);
-                conn->reconnect();
-            }
-        }
-        catch (...)
-        {
-            SLEEP(errorBackoff);
-            conn->reconnect();
+
+            std::lock_guard<std::mutex> lock(maxMutex);
+            maxInitTick = std::max(maxInitTick, localMaxTick);
+            maxInitEpoch = std::max(maxInitEpoch, localMaxEpoch);
+        });
+    }
+
+    for (auto& worker : workers)
+    {
+        if (worker.joinable()) {
+            worker.join();
         }
     }
 }
@@ -504,6 +606,7 @@ void getComputorList(ConnectionPool& cp, std::string arbitratorIdentity)
     for (int i = 0; i < cp.size(); i++) {
         QCPtr conn = nullptr;
         if (!cp.get(i, conn)) continue;
+        if (!conn->isSocketValid()) continue;
         try {
             if (computorsList.epoch != gCurrentProcessingEpoch.load())
             {
@@ -534,6 +637,7 @@ void getComputorList(ConnectionPool& cp, std::string arbitratorIdentity)
                     {
                         db_insert_computors(comp);
                         computorsList = comp;
+                        Logger::get()->info("Computor list updated successfully");
                     }
                     else
                     {

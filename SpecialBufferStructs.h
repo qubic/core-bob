@@ -89,6 +89,11 @@ public:
         return true;
     }
 
+    size_t estimateNumberOfRequestPacket() {
+        if (tail_ >= head_) return (tail_ - head_) / 20; // 8 bytes of header and some extrainfo
+        return ((tail_ + capacity_) - head_) / 20;
+    }
+
     bool TryGetPacket(uint8_t *out_ptr, uint32_t &size) {
         if (!out_ptr) {
             return false;

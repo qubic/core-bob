@@ -15,7 +15,7 @@ std::vector<std::string> GetPeerFromDNS()
     auto client = drogon::HttpClient::newHttpClient("https://api.qubic.global");
     auto req = drogon::HttpRequest::newHttpRequest();
     req->setMethod(drogon::Get);
-    req->setPath("/random-peers?service=bobNode&litePeers=3&bobPeers=3");
+    req->setPath("/random-peers?service=bobNode&litePeers=1&bobPeers=5");
 
     auto [result, response] = client->sendRequest(req);
 
@@ -71,8 +71,8 @@ bool DownloadStateFiles(uint16_t epoch)
     {
         return false;
     }
-
-    std::string unzipCmd = "unzip -o -q " + zipFile;
+    std::string fileNames = "spectrum." + std::to_string(epoch) + " universe." + std::to_string(epoch);
+    std::string unzipCmd = "unzip -o -q " + zipFile + " " + fileNames;
     int unzipResult = std::system(unzipCmd.c_str());
 
     if (unzipResult != 0)
