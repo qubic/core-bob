@@ -567,6 +567,7 @@ void doHandshakeAndGetBootstrapInfo(ConnectionPool& cp, bool isTrusted, uint32_t
 
                 QCPtr conn = connections[index];
                 try {
+                    if (!conn->isSocketValid()) conn->reconnect(); // try reconnecting one more time
                     if (conn->isSocketValid())
                     {
                         uint32_t initTick = 0;
