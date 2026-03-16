@@ -108,7 +108,6 @@ QubicConnection::~QubicConnection()
 int QubicConnection::receiveData(uint8_t* buffer, int sz)
 {
     int count = 0;
-    int retry = 0;
     while (sz > 0)
     {
         auto ret = recv(mSocket, (char*)buffer + count, std::min(1024, sz), 0);
@@ -118,8 +117,7 @@ int QubicConnection::receiveData(uint8_t* buffer, int sz)
             {
                 // Timeout or interrupted — not a real error, just retry
                 if (shouldStop) return -1;
-                if (retry++ > 5) return -1; // maximum retry 5 times
-                continue;
+                return -1; // timeout is large enough to consider this as failure
             }
             return ret;
         }
@@ -532,27 +530,71 @@ void parseConnection(ConnectionPool& connPoolAll,
 
 void doHandshakeAndGetBootstrapInfo(ConnectionPool& cp, bool isTrusted, uint32_t& maxInitTick, uint16_t& maxInitEpoch)
 {
-    const auto errorBackoff = 1000;
+    std::vector<QCPtr> connections;
+    connections.reserve(cp.size());
+
     for (int i = 0; i < cp.size(); i++)
     {
         QCPtr conn = nullptr;
         if (!cp.get(i, conn)) continue;
-        try {
-            conn->reconnect();
-            if (conn->isSocketValid())
+        if (!conn) continue;
+        connections.push_back(conn);
+    }
+
+    if (connections.empty()) {
+        return;
+    }
+
+    std::atomic<size_t> nextIndex{0};
+    std::mutex maxMutex;
+
+    unsigned int workerCount = connections.size();
+
+    std::vector<std::thread> workers;
+    workers.reserve(workerCount);
+
+    for (unsigned int worker = 0; worker < workerCount; ++worker)
+    {
+        workers.emplace_back([&]() {
+            uint32_t localMaxTick = 0;
+            uint16_t localMaxEpoch = 0;
+
             {
-                uint32_t initTick = 0;
-                uint16_t initEpoch = 0;
-                if (conn->isBM()) {
-                    conn->doHandshake();
+                size_t index = nextIndex.fetch_add(1);
+                if (index >= connections.size()) {
+                    return;
                 }
-                conn->getBootstrapTickInfo(initTick, initEpoch);
-                maxInitTick = std::max(maxInitTick, initTick);
-                maxInitEpoch = std::max(maxInitEpoch, initEpoch);
+
+                QCPtr conn = connections[index];
+                try {
+                    if (conn->isSocketValid())
+                    {
+                        uint32_t initTick = 0;
+                        uint16_t initEpoch = 0;
+                        if (conn->isBM()) {
+                            conn->doHandshake();
+                        }
+                        conn->getBootstrapTickInfo(initTick, initEpoch);
+                        localMaxTick = std::max(localMaxTick, initTick);
+                        localMaxEpoch = std::max(localMaxEpoch, initEpoch);
+                    }
+                }
+                catch (...)
+                {
+                    return;
+                }
             }
-        }
-        catch (...)
-        {
+
+            std::lock_guard<std::mutex> lock(maxMutex);
+            maxInitTick = std::max(maxInitTick, localMaxTick);
+            maxInitEpoch = std::max(maxInitEpoch, localMaxEpoch);
+        });
+    }
+
+    for (auto& worker : workers)
+    {
+        if (worker.joinable()) {
+            worker.join();
         }
     }
 }
