@@ -62,7 +62,7 @@ bool db_insert_tick_data(const TickData& data) {
     try {
         std::string key = "tick_data:" + std::to_string(data.tick);
         sw::redis::StringView val(reinterpret_cast<const char*>(&data), sizeof(data));
-        g_redis->set(key, val);
+        g_redis->set(key, val, std::chrono::milliseconds(0), sw::redis::UpdateType::NOT_EXIST);
     } catch (const sw::redis::Error& e) {
         Logger::get()->error("Redis error: {}\n", e.what());
         return false;
