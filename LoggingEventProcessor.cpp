@@ -544,7 +544,8 @@ void verifyLoggingEvent()
         while (gCurrentVerifyLoggingTick > (gCurrentFetchingLogTick - 1) && !gStopFlag.load()) SLEEP(100);
         if (gStopFlag.load()) return;
         uint32_t processFromTick = gCurrentVerifyLoggingTick;
-        uint32_t processToTick = std::min(gCurrentVerifyLoggingTick + BATCH_VERIFICATION, gCurrentFetchingLogTick - 1);
+        uint32_t maxVerifiableTick = std::min(gCurrentFetchingLogTick - 1, gCurrentFetchingTick - 1);
+        uint32_t processToTick = std::min(gCurrentVerifyLoggingTick + BATCH_VERIFICATION, maxVerifiableTick);
         // detect END_EPOCH
         for (uint32_t tick = processFromTick; tick <= processToTick; tick++)
         {
