@@ -9,6 +9,9 @@
 #include "Logger.h"
 #include "shim.h"
 
+// Default http timeout for external API calls (in seconds)
+static constexpr double HTTP_TIMEOUT_SEC = 10.0;
+
 std::vector<std::string> GetPeerFromDNS()
 {
     std::vector<std::string> results;
@@ -17,7 +20,7 @@ std::vector<std::string> GetPeerFromDNS()
     req->setMethod(drogon::Get);
     req->setPath("/random-peers?service=bobNode&litePeers=1&bobPeers=5");
 
-    auto [result, response] = client->sendRequest(req);
+    auto [result, response] = client->sendRequest(req, HTTP_TIMEOUT_SEC);
 
     if (result == drogon::ReqResult::Ok && response)
     {
@@ -92,7 +95,7 @@ void GetLatestTickFromExternalSources(uint32_t& tick, uint16_t& epoch)
     req1->setMethod(drogon::Get);
     req1->setPath("/currenttick");
 
-    auto [result1, response1] = client1->sendRequest(req1);
+    auto [result1, response1] = client1->sendRequest(req1, HTTP_TIMEOUT_SEC);
 
     if (result1 == drogon::ReqResult::Ok && response1)
     {
@@ -111,7 +114,7 @@ void GetLatestTickFromExternalSources(uint32_t& tick, uint16_t& epoch)
     req2->setMethod(drogon::Get);
     req2->setPath("/public/currenttick");
 
-    auto [result2, response2] = client2->sendRequest(req2);
+    auto [result2, response2] = client2->sendRequest(req2, HTTP_TIMEOUT_SEC);
 
     if (result2 == drogon::ReqResult::Ok && response2)
     {
@@ -130,7 +133,7 @@ void GetLatestTickFromExternalSources(uint32_t& tick, uint16_t& epoch)
     req3->setMethod(drogon::Get);
     req3->setPath("/live/v1/tick-info");
 
-    auto [result3, response3] = client3->sendRequest(req3);
+    auto [result3, response3] = client3->sendRequest(req3, HTTP_TIMEOUT_SEC);
 
     if (result3 == drogon::ReqResult::Ok && response3)
     {
@@ -170,7 +173,7 @@ void CheckInQubicGlobal()
     req->setBody(jsonData);
 
     // Send the request
-    auto [result, response] = client->sendRequest(req);
+    auto [result, response] = client->sendRequest(req, HTTP_TIMEOUT_SEC);
 
     if (result == drogon::ReqResult::Ok && response)
     {
