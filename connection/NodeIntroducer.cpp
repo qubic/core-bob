@@ -12,13 +12,17 @@
 // Default http timeout for external API calls (in seconds)
 static constexpr double HTTP_TIMEOUT_SEC = 10.0;
 
-std::vector<std::string> GetPeerFromDNS()
+std::vector<std::string> GetPeerFromDNS(const int nLite, const int nBob, const std::string mode)
 {
     std::vector<std::string> results;
     auto client = drogon::HttpClient::newHttpClient("https://api.qubic.global");
     auto req = drogon::HttpRequest::newHttpRequest();
     req->setMethod(drogon::Get);
-    req->setPath("/random-peers?service=bobNode&litePeers=3&bobPeers=3");
+    std::string path = "/random-peers?service=bobNode&litePeers=" + std::to_string(nLite) + "&bobPeers=" + std::to_string(nBob);
+    if (mode == "closest") {
+        path += "&mode=closest";
+    }
+    req->setPath(path.c_str());
 
     auto [result, response] = client->sendRequest(req, HTTP_TIMEOUT_SEC);
 

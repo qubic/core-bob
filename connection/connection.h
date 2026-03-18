@@ -119,7 +119,7 @@ void parseConnection(ConnectionPool& connPoolAll,
                      std::vector<std::string>& endpoints);
 void doHandshakeAndGetBootstrapInfo(ConnectionPool& cp, bool isTrusted, uint32_t& maxInitTick, uint16_t& maxInitEpoch);
 void getComputorList(ConnectionPool& cp, std::string arbitratorIdentity);
-std::vector<std::string> GetPeerFromDNS();
+std::vector<std::string> GetPeerFromDNS(const int nLite, const int nBob, const std::string mode);
 bool DownloadStateFiles(uint16_t epoch);
 void GetLatestTickFromExternalSources(uint32_t& tick, uint16_t& epoch);
 void CheckInQubicGlobal();
