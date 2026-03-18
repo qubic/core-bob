@@ -18,7 +18,7 @@ std::vector<std::string> GetPeerFromDNS()
     auto client = drogon::HttpClient::newHttpClient("https://api.qubic.global");
     auto req = drogon::HttpRequest::newHttpRequest();
     req->setMethod(drogon::Get);
-    req->setPath("/random-peers?service=bobNode&litePeers=1&bobPeers=5");
+    req->setPath("/random-peers?service=bobNode&litePeers=3&bobPeers=3");
 
     auto [result, response] = client->sendRequest(req, HTTP_TIMEOUT_SEC);
 
