@@ -1045,7 +1045,8 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
                 }
                 SLEEP(1000);
             }
-            if (gCurrentFetchingLogTick >= (gCurrentFetchingTick))
+            // note: need this to allow bob to get the last virtual tick of END_EPOCH
+            if (gCurrentFetchingLogTick >= (gCurrentFetchingTick+1))
             {
                 SLEEP(100);
                 continue;
