@@ -327,6 +327,15 @@ void QubicConnection::disconnect()
     }
 }
 
+void QubicConnection::trackLastActivity()
+{
+    lastActivityTimestamp.store(std::time(nullptr), std::memory_order_relaxed);
+}
+uint64_t QubicConnection::getLastActivityTimestamp()
+{
+    return lastActivityTimestamp.load(std::memory_order_relaxed);
+}
+
 bool QubicConnection::reconnect()
 {
     // Disallow reconnect if this connection was created from an external socket

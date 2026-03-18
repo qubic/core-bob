@@ -49,7 +49,11 @@ public:
         return nodeType == "BM";
     }
     bool isBob(){ return nodeType == "bob";}
+    void trackLastActivity();
+    uint64_t getLastActivityTimestamp();
+
 private:
+    std::atomic<uint64_t> lastActivityTimestamp;
     char mNodeIp[32];
     int mNodePort;
     int mSocket;
