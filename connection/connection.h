@@ -5,11 +5,21 @@
 #include <memory>
 #include <random>
 #include <algorithm>
+#include <atomic>
 #include "structs.h"
 #include "SpecialBufferStructs.h"
 #define NODE_TYPE_ANY 0
 #define NODE_TYPE_BOB 1
 #define NODE_TYPE_BM 2
+struct ParsedEndpoint
+{
+    std::string endpoint;
+    std::string nodeType;
+    std::string ip;
+    int port = 0;
+    bool has_passcode = false;
+    uint64_t passcode_arr[4] = {0, 0, 0, 0};
+};
 // Not thread safe
 class QubicConnection
 {
@@ -27,6 +37,7 @@ public:
         return mSocket>=0;
     }
     char* getNodeIp() { return mNodeIp;}
+    uint16_t getNodePort() { return mNodePort;}
     void updatePasscode(const uint64_t passcode[4]){ memcpy(mPasscode, passcode, 8*4); }
     void getPasscode(uint64_t* passcode){ memcpy(passcode, mPasscode, 8*4); }
     // Construct from an already-open socket; this connection is NON-reconnectable.
@@ -37,13 +48,6 @@ public:
         return mReconnectable;
     }
 
-    // non-thread safe operation, only use these functions for bootstrap
-    void getBootstrapTickInfo(uint32_t& tick, uint16_t& epoch);
-    void getBootstrapInfo(uint32_t& tick, uint16_t& epoch);
-    void doHandshake();
-    void getComputorList(const uint16_t epoch, Computors& compList);
-    void sendEndPacket(uint32_t dejavu = 0xffffffff);
-    void setNodeType(std::string _nodeType) { nodeType = std::move(_nodeType); }
     bool isBM()
     {
         return nodeType == "BM";
@@ -51,7 +55,19 @@ public:
     bool isBob(){ return nodeType == "bob";}
     void trackLastActivity();
     uint64_t getLastActivityTimestamp();
+    void replacePeer(const std::string& ip, const uint16_t port) {
+        memset(mNodeIp, 0, 32);
+        memcpy(mNodeIp, ip.c_str(), ip.size());
+        mNodePort = port;
+    }
 
+    // non-thread safe operation, only use these functions for bootstrap
+    void getBootstrapTickInfo(uint32_t& tick, uint16_t& epoch);
+    void getBootstrapInfo(uint32_t& tick, uint16_t& epoch);
+    void doHandshake();
+    void getComputorList(const uint16_t epoch, Computors& compList);
+    void sendEndPacket(uint32_t dejavu = 0xffffffff);
+    void setNodeType(std::string _nodeType) { nodeType = std::move(_nodeType); }
 private:
     std::atomic<uint64_t> lastActivityTimestamp;
     char mNodeIp[32];
@@ -118,7 +134,7 @@ private:
     std::mt19937 rng_;
     mutable std::mutex mutex_;
 };
-
+bool parseEndpoint(const std::string endpoint, ParsedEndpoint& parsed);
 void parseConnection(ConnectionPool& connPoolAll,
                      std::vector<std::string>& endpoints);
 void doHandshakeAndGetBootstrapInfo(ConnectionPool& cp, bool isTrusted, uint32_t& maxInitTick, uint16_t& maxInitEpoch);
@@ -127,3 +143,4 @@ std::vector<std::string> GetPeerFromDNS(const int nLite, const int nBob, const s
 bool DownloadStateFiles(uint16_t epoch);
 void GetLatestTickFromExternalSources(uint32_t& tick, uint16_t& epoch);
 void CheckInQubicGlobal();
+void peerWatchdog(ConnectionPool& conns_);

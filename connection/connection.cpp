@@ -387,104 +387,98 @@ QubicConnection::QubicConnection(int existingSocket)
     nodeType = "client";
 }
 
+bool parseEndpoint(const std::string endpoint, ParsedEndpoint& parsed) {
+    auto p0 = endpoint.find(':');
+    if (p0 == std::string::npos || p0 == 0 || p0 == endpoint.size() - 1) {
+        Logger::get()->warn("Skipping invalid endpoint '{}', expected nodeType:ip:port or nodeType:ip:port:pass0-pass1-pass2-pass3", endpoint);
+        return false;
+    }
+    std::string nodeType = endpoint.substr(0, p0);
+    if (nodeType != "BM" && nodeType != "bob") {
+        Logger::get()->warn("Skipping endpoint '{}': nodeType must be 'BM' or 'bob'", endpoint);
+        return false;
+    }
+    std::string rest = endpoint.substr(p0 + 1);
+
+    // Parse ip:port[:pass0-pass1-pass2-pass3] from rest
+    auto p1 = rest.find(':');
+    if (p1 == std::string::npos || p1 == 0 || p1 == rest.size() - 1) {
+        Logger::get()->warn("Skipping invalid endpoint '{}', expected nodeType:ip:port or nodeType:ip:port:pass0-pass1-pass2-pass3", endpoint);
+        return false;
+    }
+    auto p2 = rest.find(':', p1 + 1);
+    std::string ip = rest.substr(0, p1);
+    std::string port_str;
+    std::string passcode_str;
+
+    if (p2 == std::string::npos) {
+        port_str = rest.substr(p1 + 1);
+    } else {
+        if (p2 == rest.size() - 1) {
+            Logger::get()->warn("Skipping endpoint '{}': missing passcode after second ':'", endpoint);
+            return false;
+        }
+        port_str = rest.substr(p1 + 1, p2 - (p1 + 1));
+        passcode_str = rest.substr(p2 + 1);
+    }
+
+    int port = 0;
+    try {
+        port = std::stoi(port_str);
+        if (port <= 0 || port > 65535) {
+            throw std::out_of_range("port out of range");
+        }
+    } catch (...) {
+        Logger::get()->warn("Skipping endpoint '{}': invalid port '{}'", endpoint, port_str);
+        return false;
+    }
+
+    parsed.endpoint = endpoint;
+    parsed.nodeType = nodeType;
+    parsed.ip = ip;
+    parsed.port = port;
+
+    // Optional passcode parsing
+    if (!passcode_str.empty()) {
+        uint64_t parsedPasscode[4] = {0,0,0,0};
+        size_t start = 0;
+        int idx = 0;
+        while (idx < 4 && start <= passcode_str.size()) {
+            size_t dash = passcode_str.find('-', start);
+            auto token = passcode_str.substr(start, (dash == std::string::npos) ? std::string::npos : (dash - start));
+            if (token.empty()) break;
+            try {
+                parsedPasscode[idx] = static_cast<uint64_t>(std::stoull(token, nullptr, 10));
+            } catch (...) {
+                idx = -1;
+                break;
+            }
+            idx++;
+            if (dash == std::string::npos) break;
+            start = dash + 1;
+        }
+        if (idx == 4) {
+            memcpy(parsed.passcode_arr, parsedPasscode, sizeof(parsedPasscode));
+            parsed.has_passcode = true;
+        } else {
+            Logger::get()->warn("Skipping endpoint '{}': invalid passcode format, expected 4 uint64 separated by '-'", endpoint);
+            return false;
+        }
+    }
+    return true;
+}
+
 void parseConnection(ConnectionPool& connPoolAll,
                      std::vector<std::string>& endpoints)
 {
-    struct ParsedEndpoint
-    {
-        std::string endpoint;
-        std::string nodeType;
-        std::string ip;
-        int port = 0;
-        bool has_passcode = false;
-        uint64_t passcode_arr[4] = {0, 0, 0, 0};
-    };
-
     std::vector<ParsedEndpoint> parsedEndpoints;
     parsedEndpoints.reserve(endpoints.size());
 
     for (const auto& endpoint : endpoints) {
-        // Expected format: nodeType:ip:port[:pass0-pass1-pass2-pass3]
-        // nodeType must be "BM" (baremetal) or "bob"
-        auto p0 = endpoint.find(':');
-        if (p0 == std::string::npos || p0 == 0 || p0 == endpoint.size() - 1) {
-            Logger::get()->warn("Skipping invalid endpoint '{}', expected nodeType:ip:port or nodeType:ip:port:pass0-pass1-pass2-pass3", endpoint);
+        ParsedEndpoint parsed{};
+        if (!parseEndpoint(endpoint, parsed)) {
             continue;
         }
-        std::string nodeType = endpoint.substr(0, p0);
-        if (nodeType != "BM" && nodeType != "bob") {
-            Logger::get()->warn("Skipping endpoint '{}': nodeType must be 'BM' or 'bob'", endpoint);
-            continue;
-        }
-        std::string rest = endpoint.substr(p0 + 1);
-
-        // Parse ip:port[:pass0-pass1-pass2-pass3] from rest
-        auto p1 = rest.find(':');
-        if (p1 == std::string::npos || p1 == 0 || p1 == rest.size() - 1) {
-            Logger::get()->warn("Skipping invalid endpoint '{}', expected nodeType:ip:port or nodeType:ip:port:pass0-pass1-pass2-pass3", endpoint);
-            continue;
-        }
-        auto p2 = rest.find(':', p1 + 1);
-        std::string ip = rest.substr(0, p1);
-        std::string port_str;
-        std::string passcode_str;
-
-        if (p2 == std::string::npos) {
-            port_str = rest.substr(p1 + 1);
-        } else {
-            if (p2 == rest.size() - 1) {
-                Logger::get()->warn("Skipping endpoint '{}': missing passcode after second ':'", endpoint);
-                continue;
-            }
-            port_str = rest.substr(p1 + 1, p2 - (p1 + 1));
-            passcode_str = rest.substr(p2 + 1);
-        }
-
-        int port = 0;
-        try {
-            port = std::stoi(port_str);
-            if (port <= 0 || port > 65535) {
-                throw std::out_of_range("port out of range");
-            }
-        } catch (...) {
-            Logger::get()->warn("Skipping endpoint '{}': invalid port '{}'", endpoint, port_str);
-            continue;
-        }
-
-        ParsedEndpoint parsed;
-        parsed.endpoint = endpoint;
-        parsed.nodeType = nodeType;
-        parsed.ip = ip;
-        parsed.port = port;
-
-        // Optional passcode parsing
-        if (!passcode_str.empty()) {
-            uint64_t parsedPasscode[4] = {0,0,0,0};
-            size_t start = 0;
-            int idx = 0;
-            while (idx < 4 && start <= passcode_str.size()) {
-                size_t dash = passcode_str.find('-', start);
-                auto token = passcode_str.substr(start, (dash == std::string::npos) ? std::string::npos : (dash - start));
-                if (token.empty()) break;
-                try {
-                    parsedPasscode[idx] = static_cast<uint64_t>(std::stoull(token, nullptr, 10));
-                } catch (...) {
-                    idx = -1;
-                    break;
-                }
-                idx++;
-                if (dash == std::string::npos) break;
-                start = dash + 1;
-            }
-            if (idx == 4) {
-                memcpy(parsed.passcode_arr, parsedPasscode, sizeof(parsedPasscode));
-                parsed.has_passcode = true;
-            } else {
-                Logger::get()->warn("Skipping endpoint '{}': invalid passcode format, expected 4 uint64 separated by '-'", endpoint);
-                continue;
-            }
-        }
-
         parsedEndpoints.push_back(std::move(parsed));
     }
 

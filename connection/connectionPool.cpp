@@ -204,3 +204,70 @@ int ConnectionPool::smartLogRequest(uint8_t* buffer, int passcodeOffset, int sz,
     }
     return sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BOB);
 }
+
+void peerWatchdog(ConnectionPool& conns_)
+{
+    std::chrono::seconds checkPeriod = std::chrono::seconds(300); // 5 minutes
+    auto lastCheck = std::chrono::high_resolution_clock::now();
+    while (!gStopFlag.load(std::memory_order_relaxed)) {
+        auto now = std::chrono::high_resolution_clock::now();
+        if (now - lastCheck >= checkPeriod) {
+            lastCheck = now;
+            uint64_t nowTimestamp = std::time(nullptr);
+            uint64_t oldest = std::numeric_limits<uint64_t>::max();
+            QCPtr worst = nullptr;
+            int N = conns_.size();
+            for (int i = 0; i < N; i++) {
+                QCPtr qc;
+                if (conns_.get(i,qc)) {
+                    if (qc) {
+                        if (!qc->isSocketValid()) {
+                            worst = qc;
+                            break;
+                        }
+                        uint64_t lastActivityTimestamp = qc->getLastActivityTimestamp();
+                        // if a connection has not been active for more than 30 seconds, consider it for removal
+                        if (lastActivityTimestamp < nowTimestamp - 30) {
+                            if (oldest > lastActivityTimestamp) {
+                                worst = qc;
+                                oldest = lastActivityTimestamp;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // if there is no worst, randomly pick 1
+            if (!worst) {
+                if (N > 0) {
+                    std::random_device rd;
+                    std::mt19937 gen(rd());
+                    std::uniform_int_distribution<int> dist(0, N - 1);
+                    int randomIdx = dist(gen);
+                    conns_.get(randomIdx, worst);
+                }
+            }
+            if (worst) {
+                std::vector<std::string> newPeer;
+                if (worst->isBM()) {
+                    newPeer = GetPeerFromDNS(1, 0, "closest");
+                } else {
+                    newPeer = GetPeerFromDNS(0, 1, "random");
+                }
+                ParsedEndpoint parsed;
+                if (!newPeer.empty() && parseEndpoint(newPeer[0], parsed)) {
+                    Logger::get()->info("Replaced peer {}:{} with {}:{}", worst->getNodeIp(), worst->getNodePort(),
+                                                                             parsed.ip, parsed.port);
+                    worst->replacePeer(parsed.ip, parsed.port);
+                    worst->setNodeType(parsed.nodeType);
+                    if (parsed.has_passcode) {
+                        worst->updatePasscode(parsed.passcode_arr);
+                    }
+                    worst->disconnect(); // this will be auto reconnect in the IO loop
+                }
+            }
+        }
+        SLEEP(1000);
+    }
+    Logger::get()->info("Peer watchdog thread stopped gracefully");
+}

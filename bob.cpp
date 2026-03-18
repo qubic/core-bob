@@ -305,7 +305,10 @@ int runBob(int argc, char *argv[])
     {
         garbage_thread = std::thread(garbageCleaner);
     }
-
+    std::thread peerWatchdogThread;
+    if (!gIsTestnet) {
+        peerWatchdogThread = std::thread(peerWatchdog, std::ref(connPool));
+    }
     {
         // update last seen network tick
         uint32_t network_latest_tick;
@@ -446,7 +449,9 @@ int runBob(int argc, char *argv[])
         Logger::get()->info("Exiting garbage cleaner");
         garbage_thread.join();
     }
-
+    if (!gIsTestnet) {
+        if (peerWatchdogThread.joinable()) peerWatchdogThread.join();
+    }
     stopRESTServer();
     Logger::get()->info("Closed REST server at port {}", gRpcPort);
 
