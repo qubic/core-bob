@@ -236,23 +236,23 @@ void peerWatchdog(ConnectionPool& conns_)
                     }
                 }
             }
-
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            std::uniform_int_distribution<int> dist(0, N - 1);
             // if there is no worst, randomly pick 1
             if (!worst) {
                 if (N > 0) {
-                    std::random_device rd;
-                    std::mt19937 gen(rd());
-                    std::uniform_int_distribution<int> dist(0, N - 1);
                     int randomIdx = dist(gen);
                     conns_.get(randomIdx, worst);
                 }
             }
             if (worst) {
                 std::vector<std::string> newPeer;
+                std::string mode = dist(gen) % 2 == 0 ? "closest" : "random";
                 if (worst->isBM()) {
-                    newPeer = GetPeerFromDNS(1, 0, "closest");
+                    newPeer = GetPeerFromDNS(1, 0, mode);
                 } else {
-                    newPeer = GetPeerFromDNS(0, 1, "random");
+                    newPeer = GetPeerFromDNS(0, 1, mode);
                 }
                 ParsedEndpoint parsed;
                 if (!newPeer.empty() && parseEndpoint(newPeer[0], parsed)) {
