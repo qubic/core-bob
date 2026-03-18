@@ -207,7 +207,7 @@ int ConnectionPool::smartLogRequest(uint8_t* buffer, int passcodeOffset, int sz,
 
 void peerWatchdog(ConnectionPool& conns_)
 {
-    std::chrono::seconds checkPeriod = std::chrono::seconds(300); // 5 minutes
+    std::chrono::seconds checkPeriod = std::chrono::seconds(180); // 3 minutes
     auto lastCheck = std::chrono::high_resolution_clock::now();
     while (!gStopFlag.load(std::memory_order_relaxed)) {
         auto now = std::chrono::high_resolution_clock::now();

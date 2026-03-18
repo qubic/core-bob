@@ -142,10 +142,7 @@ int runBob(int argc, char *argv[])
     if (cfg.p2p_nodes.empty())
     {
         Logger::get()->info("Getting peers info from qubic.global");
-        auto p2p_nodes_lite = GetPeerFromDNS(3, 0, "closest");
-        auto p2p_nodes_bob = GetPeerFromDNS(0, 3, "random");
-        p2p_nodes_lite.insert(p2p_nodes_lite.end(), p2p_nodes_bob.begin(), p2p_nodes_bob.end());
-        cfg.p2p_nodes = p2p_nodes_lite;
+        cfg.p2p_nodes = GetPeerFromDNS(3, 3, "closest");
         needPeerWatchdog = true;
     }
     parseConnection(connPool, cfg.p2p_nodes);
