@@ -159,7 +159,7 @@ static void cleanOnce(long long& lastCleanTickData, long long& lastCleanTransact
     }
     else if (gTickStorageMode == TickStorageMode::Kvrocks)
     {
-        long long cleanToTick = (long long)(gCurrentIndexingTick.load()) - 5;
+        long long cleanToTick = (long long)(gCurrentIndexingTick.load()) - gNTickDataToStore;
         if (lastCleanTickData < cleanToTick)
         {
             // Process in smaller batches and update checkpoint frequently

@@ -86,6 +86,8 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
         out.indexer_max_activities_per_key = root["indexer-max-activities-per-key"].asUInt64();
     }
 
+    // this config is use in kvrocks mode only, it will determine how many tickData stays on RAM
+    // usually use by core BOB for faster distribution
     if (root.isMember("n-tickdata-to-store")) {
         const auto& v = root["n-tickdata-to-store"];
         if (v.isUInt()) {
