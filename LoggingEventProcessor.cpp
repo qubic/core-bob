@@ -782,7 +782,7 @@ gatherAllLoggingEvents:
                         {
                             gIsEndEpoch = true;
                             lastQuorumTick = le.getTick() - 1;
-                            Logger::get()->info("Detect END_EPOCH message at tick {}", lastQuorumTick);
+                            Logger::get()->info("Detect END_EPOCH message at tick {}", le.getTick());
                             break;
                         }
                         break;
@@ -795,7 +795,7 @@ gatherAllLoggingEvents:
 
 verifyNodeStateDigest:
         if (gIsEndEpoch) break;
-        while (gCurrentVerifyLoggingTick == gCurrentFetchingTick)
+        while (processToTick >= gCurrentFetchingTick)
         {
             SLEEP(100); // need to wait until tick data and votes arrive
             if (gStopFlag.load(std::memory_order_relaxed)) return;
