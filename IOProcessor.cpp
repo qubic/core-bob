@@ -385,6 +385,7 @@ void connReceiver(QCPtr conn, const bool isTrustedNode)
             // trusted conn allowed all packets
             if (isDataType(hdr.type()))
             {
+                conn->trackLastActivity(); // track it when this peer sends something meaningful
                 // Enqueue the packet into the global MutexRoundBuffer.
                 bool ok = MRB_Data.EnqueuePacket(packet.data());
                 if (!ok) {
