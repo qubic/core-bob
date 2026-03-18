@@ -1045,7 +1045,7 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
                 }
                 SLEEP(1000);
             }
-            if (gCurrentFetchingLogTick >= (gCurrentFetchingTick+1))
+            if (gCurrentFetchingLogTick >= (gCurrentFetchingTick))
             {
                 SLEEP(100);
                 continue;
