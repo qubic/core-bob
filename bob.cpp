@@ -137,6 +137,7 @@ int runBob(int argc, char *argv[])
     }
     // Collect endpoints from config
     ConnectionPool connPool; // conn pool with passcode
+    bool needPeerWatchdog = false;
     if (cfg.p2p_nodes.empty())
     {
         Logger::get()->info("Getting peers info from qubic.global");
@@ -144,6 +145,7 @@ int runBob(int argc, char *argv[])
         auto p2p_nodes_bob = GetPeerFromDNS(0, 3, "random");
         p2p_nodes_lite.insert(p2p_nodes_lite.end(), p2p_nodes_bob.begin(), p2p_nodes_bob.end());
         cfg.p2p_nodes = p2p_nodes_lite;
+        needPeerWatchdog = true;
     }
     parseConnection(connPool, cfg.p2p_nodes);
 
@@ -306,7 +308,7 @@ int runBob(int argc, char *argv[])
         garbage_thread = std::thread(garbageCleaner);
     }
     std::thread peerWatchdogThread;
-    if (!gIsTestnet) {
+    if (!gIsTestnet && needPeerWatchdog) {
         peerWatchdogThread = std::thread(peerWatchdog, std::ref(connPool));
     }
     {
@@ -449,7 +451,7 @@ int runBob(int argc, char *argv[])
         Logger::get()->info("Exiting garbage cleaner");
         garbage_thread.join();
     }
-    if (!gIsTestnet) {
+    if (!gIsTestnet && needPeerWatchdog) {
         if (peerWatchdogThread.joinable()) peerWatchdogThread.join();
     }
     stopRESTServer();
