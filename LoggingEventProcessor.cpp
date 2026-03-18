@@ -544,7 +544,10 @@ void verifyLoggingEvent()
         while (gCurrentVerifyLoggingTick > (gCurrentFetchingLogTick - 1) && !gStopFlag.load()) SLEEP(100);
         if (gStopFlag.load()) return;
         uint32_t processFromTick = gCurrentVerifyLoggingTick;
-        uint32_t maxVerifiableTick = std::min(gCurrentFetchingLogTick - 1, gCurrentFetchingTick - 1);
+        // NOTE: need to this to allow bob to verify the last virtual tick END_EPOCH
+        // but this will create warnings while syncing.
+        // TODO: fix warning or find another way to detect END_EPOCH
+        uint32_t maxVerifiableTick = gCurrentFetchingLogTick - 1;//std::min(gCurrentFetchingLogTick - 1, gCurrentFetchingTick - 1);
         uint32_t processToTick = std::min(gCurrentVerifyLoggingTick + BATCH_VERIFICATION, maxVerifiableTick);
         // detect END_EPOCH
         for (uint32_t tick = processFromTick; tick <= processToTick; tick++)
