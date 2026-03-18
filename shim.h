@@ -40,6 +40,7 @@
 #define gNodeAlias (GS().nodeAlias)
 #define gTickStorageMode                 (GS().gTickStorageMode)
 #define gLastNTickStorage                 (GS().gLastNTickStorage)
+#define gNTickDataToStore                 (GS().gNTickDataToStore)
 
 #define gTxStorageMode                 (GS().gTxStorageMode)
 #define gTxTickToLive                 (GS().gTxTickToLive)

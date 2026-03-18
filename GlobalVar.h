@@ -65,6 +65,7 @@ struct GlobalState {
 
     TickStorageMode gTickStorageMode = TickStorageMode::LastNTick;
     unsigned gLastNTickStorage = 1000;              // used when mode is LastNTick
+    unsigned gNTickDataToStore = 5;
 
     int gMaxThreads = std::thread::hardware_concurrency();
 

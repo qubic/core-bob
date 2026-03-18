@@ -87,6 +87,7 @@ int runBob(int argc, char *argv[])
     }
     gTickStorageMode = cfg.tick_storage_mode;
     gLastNTickStorage = cfg.last_n_tick_storage;
+    gNTickDataToStore = cfg.n_tickdata_to_store;
     gTxStorageMode = cfg.tx_storage_mode;
     gTxTickToLive = cfg.tx_tick_to_live;
     gSpamThreshold = cfg.spam_qu_threshold;

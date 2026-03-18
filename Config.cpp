@@ -86,6 +86,25 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
         out.indexer_max_activities_per_key = root["indexer-max-activities-per-key"].asUInt64();
     }
 
+    if (root.isMember("n-tickdata-to-store")) {
+        const auto& v = root["n-tickdata-to-store"];
+        if (v.isUInt()) {
+            out.n_tickdata_to_store = v.asUInt();
+        } else if (v.isInt()) {
+            int i = v.asInt();
+            if (i < 0) {
+                error = "Negative integer is invalid for key 'n-tickdata-to-store'";
+                return false;
+            }
+            out.n_tickdata_to_store = static_cast<unsigned>(i);
+        } else {
+            error = "Invalid type: unsigned integer required for key 'n-tickdata-to-store'";
+            return false;
+        }
+    } else {
+        out.n_tickdata_to_store = 5;
+    }
+
     if (root.isMember("arbitrator-identity")) {
         if (!root["arbitrator-identity"].isString()) {
             error = "Invalid type: string required for key 'arbitrator-identity'";

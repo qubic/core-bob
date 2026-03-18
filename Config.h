@@ -36,6 +36,7 @@ struct AppConfig {
     unsigned last_n_tick_storage = 1000;              // used when mode is LastNTick
     std::string kvrocks_url = "tcp://127.0.0.1:6666"; // used when mode is Kvrocks
     uint64_t indexer_max_activities_per_key = 100000; // indexing 100k activities per key
+    unsigned n_tickdata_to_store = 5;
 
     unsigned max_thread = 0;
     // Spam/Junk detection threshold for QU transfers (amount <= threshold and no input)
