@@ -1103,7 +1103,30 @@ namespace {
             if (g_started.exchange(true)) return;
 
             registerRoutes();
+            // Global CORS: add headers to every response & handle preflight
+            drogon::app().registerPreHandlingAdvice(
+                [](const drogon::HttpRequestPtr& req,
+                   drogon::AdviceCallback&& callback,
+                   drogon::AdviceChainCallback&& chainCallback) {
+                    if (req->method() == drogon::Options) {
+                        auto resp = drogon::HttpResponse::newHttpResponse();
+                        resp->setStatusCode(drogon::k204NoContent);
+                        resp->addHeader("Access-Control-Allow-Origin", "*");
+                        resp->addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+                        resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+                        resp->addHeader("Access-Control-Max-Age", "86400");
+                        callback(resp);
+                        return;
+                    }
+                    chainCallback();
+                });
 
+            drogon::app().registerPostHandlingAdvice(
+                [](const drogon::HttpRequestPtr& req, const drogon::HttpResponsePtr& resp) {
+                    resp->addHeader("Access-Control-Allow-Origin", "*");
+                    resp->addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+                    resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+                });
             // Configure and start Drogon
             drogon::app()
                 .setLogLevel(trantor::Logger::kInfo)
