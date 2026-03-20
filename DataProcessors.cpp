@@ -289,11 +289,7 @@ void replyTickVotes(QCPtr& conn, uint32_t dejavu, uint8_t* ptr)
 {
     auto *request = (RequestedQuorumTick *)ptr;
     uint32_t tick = request->tick;
-    if (tick >= gCurrentVerifyLoggingTick)
-    {
-        conn->sendEndPacket();
-        return;
-    }
+    // since all votes have valid signatures, we can allow bob to broadcast not-yet-verified votes
     auto votes = db_try_get_tick_vote(tick);
     for (auto& tv : votes)
     {
@@ -324,11 +320,7 @@ void replyTickData(QCPtr& conn, uint32_t dejavu, uint8_t* ptr)
 {
     uint32_t tick;
     memcpy((void*)&tick, ptr, 4);
-    if (tick >= gCurrentVerifyLoggingTick)
-    {
-        conn->sendEndPacket();
-        return;
-    }
+    // since tick data has a valid signature, we can allow bob to broadcast not-yet-verified tick data
     TickData td;
     if (!db_try_get_tick_data(tick, td))
     {
