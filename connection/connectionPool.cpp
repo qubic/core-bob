@@ -240,11 +240,9 @@ bool ConnectionPool::checkExistIp(const std::string& ip) const {
     if (conns_.empty()) return false;
     int N = conns_.size();
     for (int i = 0; i < N; ++i) {
-        if (conns_[i]->isSocketValid()) {
-            std::string ipStr = conns_[i]->getNodeIp();
-            if (ipStr == ip) {
-                return true;
-            }
+        std::string ipStr = conns_[i]->getNodeIp();
+        if (ipStr == ip) {
+            return true;
         }
     }
     return false;
