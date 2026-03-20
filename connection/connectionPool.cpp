@@ -251,7 +251,7 @@ bool ConnectionPool::checkExistIp(const std::string& ip) const {
 void peerWatchdog(ConnectionPool& conns_)
 {
     std::chrono::seconds checkPeriodPeerRefresh = std::chrono::seconds(180); // 3 minutes
-    std::chrono::seconds checkPeriodLastTick = std::chrono::seconds(5); // 5 sec
+    std::chrono::seconds checkPeriodLastTick = std::chrono::seconds(60); // 1 min
     auto lastCheckPeerRefresh = std::chrono::high_resolution_clock::now();
     auto lastCheckLastTick = std::chrono::high_resolution_clock::now();
     while (!gStopFlag.load(std::memory_order_relaxed)) {

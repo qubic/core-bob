@@ -374,8 +374,8 @@ int runBob(int argc, char *argv[])
             for (int i = 0; i < connPool.size(); i++) {
                 QCPtr qc;
                 connPool.get(i,qc);
-                Logger::get()->info("Peer {}:{} => Latest Tick: {} | Last Activity: {} seconds ago",
-                    qc->getNodeIp(), qc->getNodePort(), qc->getLatestTick(), (uint32_t)(time(nullptr) - qc->getLastActivityTimestamp()));
+                Logger::get()->info("Peer {}:{} => Last Activity: {} seconds ago",
+                    qc->getNodeIp(), qc->getNodePort(), (uint32_t)(time(nullptr) - qc->getLastActivityTimestamp()));
             }
             Logger::get()->info("-----[---------]-----");
         }
