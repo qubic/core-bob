@@ -370,6 +370,13 @@ int runBob(int argc, char *argv[])
                                 gCurrentVerifyLoggingTick.load() -1,
                                 network_latest_tick,
                                 network_epoch);
+            Logger::get()->info("-----[PEER INFO]-----");
+            for (int i = 0; i < connPool.size(); i++) {
+                QCPtr qc;
+                connPool.get(i,qc);
+                Logger::get()->info("Peer {}:{} => LatestTick: {}", qc->getNodeIp(), qc->getNodePort(), qc->getLatestTick());
+            }
+            Logger::get()->info("-----[---------]-----");
         }
         if (checkInQubicGlobalCount++ >= 361 && gAllowCheckInQubicGlobal)
         {
