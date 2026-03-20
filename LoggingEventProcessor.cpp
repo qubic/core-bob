@@ -419,7 +419,8 @@ void saveFiles(const std::string tickSpectrum, const std::string tickUniverse)
         Logger::get()->error("Failed to open spectrum file for writing: {}", tickSpectrum);
     } else {
         if (fwrite(spectrum, sizeof(EntityRecord), SPECTRUM_CAPACITY, f) != SPECTRUM_CAPACITY) {
-            Logger::get()->error("Failed to write spectrum file: {}", tickSpectrum);
+            Logger::get()->critical("Failed to write spectrum file: {}", tickSpectrum);
+            exit(3);
         }
         fclose(f);
     }
@@ -429,7 +430,8 @@ void saveFiles(const std::string tickSpectrum, const std::string tickUniverse)
         Logger::get()->error("Failed to open universe file for writing: {}", tickUniverse);
     } else {
         if (fwrite(assets, sizeof(AssetRecord), ASSETS_CAPACITY, f) != ASSETS_CAPACITY) {
-            Logger::get()->error("Failed to write universe file: {}", tickUniverse);
+            Logger::get()->critical("Failed to write universe file: {}", tickUniverse);
+            exit(3);
         }
         fclose(f);
     }
