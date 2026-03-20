@@ -32,6 +32,9 @@ void processTickVote(uint8_t* ptr)
     {
         return; // already verified
     }
+    if (vote->tick > gCurrentVerifyLoggingTick + 2000) {
+        return; // too far in the future, this may cause bob crashing because out of memory
+    }
     uint8_t* compPubkey = computorsList.publicKeys[vote->computorIndex].m256i_u8;
     vote->computorIndex ^= 3;
     bool ok = verifySignature((void *) vote, compPubkey, sizeof(TickVote));
@@ -58,6 +61,9 @@ void processTickData(uint8_t* ptr)
     if (data->tick < gCurrentVerifyLoggingTick - 1)
     {
         return; // already verified
+    }
+    if (data->tick > gCurrentVerifyLoggingTick + 2000) {
+        return; // too far in the future, this may cause bob crashing because out of memory
     }
     uint8_t* compPubkey = computorsList.publicKeys[data->computorIndex].m256i_u8;
     data->computorIndex ^= 8;
