@@ -299,6 +299,7 @@ static bool isDataType(int type)
     if (type == RespondLog::type()) return true;                      // log
     if (type == LogRangesPerTxInTick::type()) return true;  // logrange
     if (type == RespondContractFunction::type) return true;
+    if (type == RESPOND_CURRENT_TICK_INFO) return true;
     return false;
 }
 
