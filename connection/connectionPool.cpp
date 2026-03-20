@@ -122,6 +122,18 @@ int ConnectionPool::sendToBestBM(uint8_t* buffer, int sz) {
     return -1;
 }
 
+// Sends to the ALL BM connections
+void ConnectionPool::sendToAllBM(uint8_t* buffer, int sz) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (conns_.empty()) return;
+    for (int i = 0; i < conns_.size(); ++i) {
+        if (conns_[i] && conns_[i]->isSocketValid() && conns_[i]->isBM()) {
+            conns_[i]->enqueueSend(buffer, sz);
+        }
+    }
+    return;
+}
+
 // Sends to one random valid connection. Returns bytes sent, or -1 if none could be used.
 int ConnectionPool::sendToRandom(uint8_t* buffer, int sz, uint8_t type, bool randomDejavu) {
     std::lock_guard<std::mutex> lock(mutex_);

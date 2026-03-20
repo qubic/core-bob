@@ -24,7 +24,7 @@ void querySmartContractThread(ConnectionPool& connPoolAll)
                     }
                     if (header->type() == BROADCAST_TRANSACTION)
                     {
-                        connPoolAll.sendToBestBM(buffer.data(), buffer.size());
+                        connPoolAll.sendToAllBM(buffer.data(), buffer.size());
                     }
                 }
             }

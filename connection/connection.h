@@ -118,6 +118,8 @@ public:
     int sendToRandomBM(uint8_t* buffer, int sz);
     // Sends to the best BM connection. Returns bytes sent, or -1 if none could be used.
     int sendToBestBM(uint8_t* buffer, int sz);
+    // Sends to the ALL BM connection. Returns bytes sent, or -1 if none could be used.
+    void sendToAllBM(uint8_t* buffer, int sz);
 
     // Sends to one random valid connection. Returns bytes sent, or -1 if none could be used.
     int sendToRandom(uint8_t* buffer, int sz, uint8_t type, bool randomDejavu);
