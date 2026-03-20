@@ -109,12 +109,12 @@ int ConnectionPool::sendToBestBM(uint8_t* buffer, int sz) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (conns_.empty()) return -1;
     int chosen = -1;
-    uint32_t maxTick = 0;
+    uint64_t maxTimestamp = 0;
     for (int i = 0; i < conns_.size(); ++i) {
         if (conns_[i] && conns_[i]->isSocketValid() && conns_[i]->isBM()) {
-            if (conns_[i]->getLatestTick() > maxTick) {
+            if (conns_[i]->getLastActivityTimestamp() > maxTimestamp) {
                 chosen = i;
-                maxTick = conns_[i]->getLatestTick();
+                maxTimestamp = conns_[i]->getLastActivityTimestamp();
             }
         }
     }
