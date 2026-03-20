@@ -634,7 +634,20 @@ namespace {
                 },
                 {Post}
         );
-
+        // OPTIONS /broadcastTransaction - CORS preflight
+        app().registerHandler(
+                "/broadcastTransaction",
+                [](const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)>&& callback) {
+                    auto resp = HttpResponse::newHttpResponse();
+                    resp->setStatusCode(k204NoContent);
+                    resp->addHeader("Access-Control-Allow-Origin", "*");
+                    resp->addHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+                    resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+                    resp->addHeader("Access-Control-Max-Age", "86400");
+                    callback(resp);
+                },
+                {Options}
+        );
         // POST /qubic - Qubic JSON-RPC endpoint (HTTP)
         app().registerHandler(
                 "/qubic",
