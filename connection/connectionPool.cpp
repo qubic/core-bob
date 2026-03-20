@@ -235,10 +235,25 @@ int ConnectionPool::smartLogRequest(uint8_t* buffer, int passcodeOffset, int sz,
     return sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BOB);
 }
 
+bool ConnectionPool::checkExistIp(const std::string& ip) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (conns_.empty()) return false;
+    int N = conns_.size();
+    for (int i = 0; i < N; ++i) {
+        if (conns_[i]->isSocketValid()) {
+            std::string ipStr = conns_[i]->getNodeIp();
+            if (ipStr == ip) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 void peerWatchdog(ConnectionPool& conns_)
 {
     std::chrono::seconds checkPeriodPeerRefresh = std::chrono::seconds(180); // 3 minutes
-    std::chrono::seconds checkPeriodLastTick = std::chrono::seconds(30); // 30 sec
+    std::chrono::seconds checkPeriodLastTick = std::chrono::seconds(5); // 5 sec
     auto lastCheckPeerRefresh = std::chrono::high_resolution_clock::now();
     auto lastCheckLastTick = std::chrono::high_resolution_clock::now();
     while (!gStopFlag.load(std::memory_order_relaxed)) {
@@ -288,14 +303,20 @@ void peerWatchdog(ConnectionPool& conns_)
                 }
                 ParsedEndpoint parsed;
                 if (!newPeer.empty() && parseEndpoint(newPeer[0], parsed)) {
-                    Logger::get()->info("Replaced peer {}:{} with {}:{}", worst->getNodeIp(), worst->getNodePort(),
+                    if (!conns_.checkExistIp(parsed.ip)) {
+                        Logger::get()->info("Replaced peer {}:{} with {}:{}", worst->getNodeIp(), worst->getNodePort(),
                                                                              parsed.ip, parsed.port);
-                    worst->replacePeer(parsed.ip, parsed.port);
-                    worst->setNodeType(parsed.nodeType);
-                    if (parsed.has_passcode) {
-                        worst->updatePasscode(parsed.passcode_arr);
+                        worst->replacePeer(parsed.ip, parsed.port);
+                        worst->setNodeType(parsed.nodeType);
+                        if (parsed.has_passcode) {
+                            worst->updatePasscode(parsed.passcode_arr);
+                        }
+                        worst->disconnect(); // this will be auto reconnect in the IO loop
                     }
-                    worst->disconnect(); // this will be auto reconnect in the IO loop
+                    else {
+                        lastCheckPeerRefresh = now - checkPeriodPeerRefresh - std::chrono::seconds(1); // trigger the refresh again
+                        continue;
+                    }
                 }
             }
         }

@@ -136,6 +136,7 @@ public:
 
     int sendWithPasscodeToRandom(uint8_t* buffer, int passcodeOffset, int sz, uint8_t type, bool randomDejavu, int nodeType);
 
+    bool checkExistIp(const std::string& ip) const;
 private:
     std::vector<QCPtr> conns_;
     std::mt19937 rng_;
