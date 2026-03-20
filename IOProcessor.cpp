@@ -386,12 +386,18 @@ void connReceiver(QCPtr conn, const bool isTrustedNode)
             if (isDataType(hdr.type()))
             {
                 conn->trackLastActivity(); // track it when this peer sends something meaningful
-                // Enqueue the packet into the global MutexRoundBuffer.
-                bool ok = MRB_Data.EnqueuePacket(packet.data());
-                if (!ok) {
-                    Logger::get()->warn("connReceiver: failed to enqueue packet (size={}, type={}). Dropped.",
-                                        packet.size(),
-                                        static_cast<unsigned>(hdr.type()));
+                if (hdr.type() == RESPOND_CURRENT_TICK_INFO) { // peer reports for their latest tick, just need to update here
+                    CurrentTickInfo currentTickInfo;
+                    memcpy(&currentTickInfo, packet.data() + 8, sizeof(currentTickInfo));
+                    conn->updateLatestTick(currentTickInfo.tick);
+                } else {
+                    // Enqueue the packet into the global MutexRoundBuffer.
+                    bool ok = MRB_Data.EnqueuePacket(packet.data());
+                    if (!ok) {
+                        Logger::get()->warn("connReceiver: failed to enqueue packet (size={}, type={}). Dropped.",
+                                            packet.size(),
+                                            static_cast<unsigned>(hdr.type()));
+                    }
                 }
             }
 

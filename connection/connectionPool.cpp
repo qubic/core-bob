@@ -207,12 +207,14 @@ int ConnectionPool::smartLogRequest(uint8_t* buffer, int passcodeOffset, int sz,
 
 void peerWatchdog(ConnectionPool& conns_)
 {
-    std::chrono::seconds checkPeriod = std::chrono::seconds(180); // 3 minutes
-    auto lastCheck = std::chrono::high_resolution_clock::now();
+    std::chrono::seconds checkPeriodPeerRefresh = std::chrono::seconds(180); // 3 minutes
+    std::chrono::seconds checkPeriodLastTick = std::chrono::seconds(30); // 30 sec
+    auto lastCheckPeerRefresh = std::chrono::high_resolution_clock::now();
+    auto lastCheckLastTick = std::chrono::high_resolution_clock::now();
     while (!gStopFlag.load(std::memory_order_relaxed)) {
         auto now = std::chrono::high_resolution_clock::now();
-        if (now - lastCheck >= checkPeriod) {
-            lastCheck = now;
+        if (now - lastCheckPeerRefresh >= checkPeriodPeerRefresh) {
+            lastCheckPeerRefresh = now;
             uint64_t nowTimestamp = std::time(nullptr);
             uint64_t oldest = std::numeric_limits<uint64_t>::max();
             QCPtr worst = nullptr;
@@ -264,6 +266,20 @@ void peerWatchdog(ConnectionPool& conns_)
                         worst->updatePasscode(parsed.passcode_arr);
                     }
                     worst->disconnect(); // this will be auto reconnect in the IO loop
+                }
+            }
+        }
+        if (now - lastCheckLastTick >= checkPeriodLastTick) {
+            lastCheckLastTick = now;
+            int N = conns_.size();
+            for (int i = 0; i < N; i++) {
+                QCPtr qc;
+                if (conns_.get(i,qc)) {
+                    if (qc) {
+                        if (!qc->isSocketValid()) {
+                            qc->askForLatestTick();
+                        }
+                    }
                 }
             }
         }

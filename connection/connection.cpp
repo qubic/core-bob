@@ -95,6 +95,7 @@ QubicConnection::QubicConnection(const char* nodeIp, int nodePort)
     mReconnectable = true;
     initSendThread();
     nodeType = "null";
+    mLatestTick = 0;
 }
 QubicConnection::~QubicConnection()
 {
@@ -276,6 +277,19 @@ void QubicConnection::doHandshake()
     enqueueSend((uint8_t *) &payload, sizeof(payload));
 }
 
+void QubicConnection::askForLatestTick() {
+    RequestResponseHeader header{};
+    header.setSize(sizeof(header));
+    header.randomizeDejavu();
+    header.setType(REQUEST_CURRENT_TICK_INFO);
+    enqueueSend((uint8_t *) &header, 8);
+}
+
+void QubicConnection::updateLatestTick(uint32_t tick)
+{
+    mLatestTick = tick;
+}
+
 void QubicConnection::getBootstrapTickInfo(uint32_t& tick, uint16_t& epoch)
 {
     RequestResponseHeader header{};
@@ -286,15 +300,8 @@ void QubicConnection::getBootstrapTickInfo(uint32_t& tick, uint16_t& epoch)
     {
         // trying to get until tickinfo packet arrive
         // resend each 20 packets
-        if ( count % 20 == 0 )
-        {
-            header.setSize(sizeof(header));
-            header.randomizeDejavu();
-            header.setType(REQUEST_CURRENT_TICK_INFO);
-            enqueueSend((uint8_t *) &header, 8);
-        }
+        if ( count % 20 == 0 ) askForLatestTick();
         count++;
-        RequestResponseHeader header{};
         try {
             receiveAFullPacket(header, packet);
         } catch (std::logic_error& e) {}
@@ -385,6 +392,7 @@ QubicConnection::QubicConnection(int existingSocket)
 
     initSendThread();
     nodeType = "client";
+    mLatestTick = 0;
 }
 
 bool parseEndpoint(const std::string endpoint, ParsedEndpoint& parsed) {

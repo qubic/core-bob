@@ -60,7 +60,8 @@ public:
         memcpy(mNodeIp, ip.c_str(), ip.size());
         mNodePort = port;
     }
-
+    void askForLatestTick();
+    void updateLatestTick(uint32_t tick);
     // non-thread safe operation, only use these functions for bootstrap
     void getBootstrapTickInfo(uint32_t& tick, uint16_t& epoch);
     void getBootstrapInfo(uint32_t& tick, uint16_t& epoch);
@@ -73,6 +74,7 @@ private:
     char mNodeIp[32];
     int mNodePort;
     int mSocket;
+    uint32_t mLatestTick;
     std::unique_ptr<MutexRoundBuffer> mBuffer;
     uint64_t mPasscode[4]; // for loggingEvent
     bool mReconnectable;   // whether reconnect() is allowed
