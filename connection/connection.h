@@ -62,6 +62,7 @@ public:
     }
     void askForLatestTick();
     void updateLatestTick(uint32_t tick);
+    uint32_t getLatestTick(){return mLatestTick;}
     // non-thread safe operation, only use these functions for bootstrap
     void getBootstrapTickInfo(uint32_t& tick, uint16_t& epoch);
     void getBootstrapInfo(uint32_t& tick, uint16_t& epoch);
@@ -115,6 +116,8 @@ public:
 
     // Sends to one random valid connection. Returns bytes sent, or -1 if none could be used.
     int sendToRandomBM(uint8_t* buffer, int sz);
+    // Sends to the best BM connection. Returns bytes sent, or -1 if none could be used.
+    int sendToBestBM(uint8_t* buffer, int sz);
 
     // Sends to one random valid connection. Returns bytes sent, or -1 if none could be used.
     int sendToRandom(uint8_t* buffer, int sz, uint8_t type, bool randomDejavu);

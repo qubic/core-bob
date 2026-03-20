@@ -104,6 +104,24 @@ int ConnectionPool::sendToRandomBM(uint8_t* buffer, int sz) {
     return conns_[chosen]->enqueueSend(buffer, sz);
 }
 
+// Sends to the best BM connection. Returns bytes sent, or -1 if none could be used.
+int ConnectionPool::sendToBestBM(uint8_t* buffer, int sz) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (conns_.empty()) return -1;
+    int chosen = -1;
+    uint32_t maxTick = 0;
+    for (int i = 0; i < conns_.size(); ++i) {
+        if (conns_[i] && conns_[i]->isSocketValid() && conns_[i]->isBM()) {
+            if (conns_[i]->getLatestTick() > maxTick) {
+                chosen = i;
+                maxTick = conns_[i]->getLatestTick();
+            }
+        }
+    }
+    if (chosen != -1) return conns_[chosen]->enqueueSend(buffer, sz);
+    return -1;
+}
+
 // Sends to one random valid connection. Returns bytes sent, or -1 if none could be used.
 int ConnectionPool::sendToRandom(uint8_t* buffer, int sz, uint8_t type, bool randomDejavu) {
     std::lock_guard<std::mutex> lock(mutex_);

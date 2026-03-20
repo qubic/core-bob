@@ -20,11 +20,11 @@ void querySmartContractThread(ConnectionPool& connPoolAll)
                 {
                     if (header->type() == RequestContractFunction::type)
                     {
-                        connPoolAll.sendToRandomBM(buffer.data(), buffer.size());
+                        connPoolAll.sendToBestBM(buffer.data(), buffer.size());
                     }
                     if (header->type() == BROADCAST_TRANSACTION)
                     {
-                        connPoolAll.sendToRandomBM(buffer.data(), buffer.size());
+                        connPoolAll.sendToBestBM(buffer.data(), buffer.size());
                     }
                 }
             }
