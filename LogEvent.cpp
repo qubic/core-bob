@@ -1,6 +1,31 @@
 #include "LogEvent.h"
 #include "database/db.h"
 
+std::string getOracleQueryStatusString(uint8_t status)
+{
+    constexpr uint8_t ORACLE_QUERY_STATUS_PENDING = 1;     ///< Query is being processed.
+    constexpr uint8_t ORACLE_QUERY_STATUS_COMMITTED = 2;   ///< The quorum has committed to a oracle reply, but it has not been revealed yet.
+    constexpr uint8_t ORACLE_QUERY_STATUS_SUCCESS = 3;     ///< The oracle reply has been confirmed and is available.
+    constexpr uint8_t ORACLE_QUERY_STATUS_UNRESOLVABLE = 5;///< No valid oracle reply is available, because computors disagreed about the value.
+    constexpr uint8_t ORACLE_QUERY_STATUS_TIMEOUT = 4;     ///< No valid oracle reply is available and timeout has hit.
+
+    switch (status)
+    {
+        case ORACLE_QUERY_STATUS_PENDING:
+            return "pending";
+        case ORACLE_QUERY_STATUS_COMMITTED:
+            return "committed";
+        case ORACLE_QUERY_STATUS_SUCCESS:
+            return "success";
+        case ORACLE_QUERY_STATUS_UNRESOLVABLE:
+            return "unresolvable";
+        case ORACLE_QUERY_STATUS_TIMEOUT:
+            return "timeout";
+        default:
+            return "unknown";
+    }
+}
+
 Json::Value LogEvent::parseToJson() const
 {
     auto hex_encode = [](const uint8_t* data, size_t len) -> std::string {
@@ -202,6 +227,29 @@ Json::Value LogEvent::parseToJson() const
                 body["deductedAmount"] = Json::UInt64(c->deductedAmount);
                 body["remainingAmount"] = Json::Int64(c->remainingAmount);
                 body["contractIndex"] = c->contractIndex;
+                filled = true;
+            }
+            break;
+        }
+
+        case 14: { // ORACLE_QUERY_STATUS_CHANGE
+            const auto needed = static_cast<uint32_t>(sizeof(OracleQueryStatusChange));
+            if (bodySize < needed) {
+                body["error"] = "body_too_small_for_OracleQueryStatusChange";
+                body["needed"] = needed;
+                body["got"] = bodySize;
+            } else {
+                const OracleQueryStatusChange *c = getStruct<OracleQueryStatusChange>();
+                root["logTypename"] = "ORACLE_QUERY_STATUS_CHANGE";
+                body["queryingEntity"] = c->queryingEntity.toQubicHashUpperCase();
+                body["queryId"] = Json::Int64(c->queryId);
+                body["interfaceIndex"] = c->interfaceIndex;
+                body["type"] = static_cast<unsigned int>(c->type);
+                body["typeStr"] = "unknown";
+                if (c->type == 0) body["typeStr"] = "ORACLE_QUERY_TYPE_CONTRACT_QUERY";
+                if (c->type == 1) body["typeStr"] = "ORACLE_QUERY_TYPE_CONTRACT_SUBSCRIPTION";
+                if (c->type == 2) body["typeStr"] = "ORACLE_QUERY_TYPE_USER_QUERY";
+                body["status"] = getOracleQueryStatusString(c->status);
                 filled = true;
             }
             break;

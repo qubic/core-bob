@@ -487,6 +487,15 @@ struct ContractReserveDeduction
     unsigned int contractIndex;
 };
 
+struct OracleQueryStatusChange
+{
+    m256i queryingEntity;
+    long long queryId;
+    unsigned int interfaceIndex;
+    unsigned char type;
+    unsigned char status;
+};
+
 struct Computors
 {
     // TODO: Padding
