@@ -1,6 +1,9 @@
 #include "LogEvent.h"
 #include "database/db.h"
-
+#include <string>
+#include <cstring>
+#include <sstream>
+#include <iomanip>
 std::string getOracleQueryStatusString(uint8_t status)
 {
     constexpr uint8_t ORACLE_QUERY_STATUS_PENDING = 1;     ///< Query is being processed.
@@ -24,6 +27,28 @@ std::string getOracleQueryStatusString(uint8_t status)
         default:
             return "unknown";
     }
+}
+
+std::string dateAndTimeToString(uint64_t dateAndTime)
+{
+    uint64_t year = dateAndTime >> 46;
+    uint64_t month = (dateAndTime >> 42) & 0b1111;
+    uint64_t day = (dateAndTime >> 37) & 0b11111;
+    uint64_t hour = (dateAndTime >> 32) & 0b11111;
+    uint64_t minute = (dateAndTime >> 26) & 0b111111;
+    uint64_t second = (dateAndTime >> 20) & 0b111111;
+    uint64_t millisecond = (dateAndTime >> 10) & 0b1111111111;
+    uint64_t microsecondDuringMillisecond = dateAndTime & 0b1111111111;
+    std::stringstream ss;
+    ss << std::setfill('0') << year << "-"
+        << std::setw(2) << month << "-"
+        << std::setw(2) << day << " "
+        << std::setw(2) << hour << ":"
+        << std::setw(2) << minute << ":"
+        << std::setw(2) << second << "."
+        << std::setw(3) << millisecond << "'"
+        << std::setw(3) << microsecondDuringMillisecond;
+    return ss.str();
 }
 
 Json::Value LogEvent::parseToJson() const
@@ -250,6 +275,25 @@ Json::Value LogEvent::parseToJson() const
                 if (c->type == 1) body["typeStr"] = "ORACLE_QUERY_TYPE_CONTRACT_SUBSCRIPTION";
                 if (c->type == 2) body["typeStr"] = "ORACLE_QUERY_TYPE_USER_QUERY";
                 body["status"] = getOracleQueryStatusString(c->status);
+                filled = true;
+            }
+            break;
+        }
+
+        case 15: { //ORACLE_SUBSCRIBER_MESSAGE
+            const auto needed = static_cast<uint32_t>(sizeof(OracleSubscriberLogMessage));
+            if (bodySize < needed) {
+                body["error"] = "body_too_small_for_OracleSubscriberLogMessage";
+                body["needed"] = needed;
+                body["got"] = bodySize;
+            } else {
+                const OracleSubscriberLogMessage *c = getStruct<OracleSubscriberLogMessage>();
+                root["logTypename"] = "ORACLE_SUBSCRIBER_MESSAGE";
+                body["subscriptionId"] = c->subscriptionId;
+                body["interfaceIndex"] = c->interfaceIndex;
+                body["contractIndex"] = c->contractIndex;
+                body["periodInMilliseconds"] = c->periodInMilliseconds;
+                body["firstQueryDateAndTime"] = dateAndTimeToString(c->firstQueryDateAndTime);
                 filled = true;
             }
             break;

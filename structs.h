@@ -496,6 +496,15 @@ struct OracleQueryStatusChange
     unsigned char status;
 };
 
+struct OracleSubscriberLogMessage
+{
+    int subscriptionId;
+    unsigned int interfaceIndex;
+    unsigned int contractIndex;
+    unsigned int periodInMilliseconds;    //< 0 means unsubscribe
+    unsigned long long firstQueryDateAndTime;
+};
+
 struct Computors
 {
     // TODO: Padding
