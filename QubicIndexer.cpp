@@ -371,9 +371,61 @@ void indexVerifiedTicks()
         }
         if (gStopFlag.load(std::memory_order_relaxed)) break;
 
-        // Only proceed when the verified-compressed record exists.
-        TickData td;
-        db_try_get_tick_data(nextTick, td);
+        // to make sure WAL has been flushed properly, in this thread, we also need to check all votes
+        // to confirm that TickData is empty/non-empty
+        int retryCount = 0;
+        int voteCount = 0;
+        m256i agreedTransactionDigest = m256i::zero();
+        while (1) {
+            if (retryCount++ >= 1000) {
+                Logger::get()->error(
+                    "QubicIndexer: Failed to get votes for tick {}. Something went wrong. Cannot index data.",
+                    nextTick);
+                retryCount = 0;
+                continue;
+            }
+            if (gStopFlag.load(std::memory_order_relaxed)) return;
+            std::vector<TickVote> votes = db_try_to_get_votes(nextTick);
+            if (votes.size() < 225) {
+                SLEEP(10); // wait for flush
+                continue;
+            }
+
+            // Count votes by transactionDigest
+            std::map<m256i, int> digestCounts;
+            for (const auto &vote: votes) {
+                digestCounts[vote.transactionDigest]++;
+            }
+
+            // Find the digest with maximum votes
+            voteCount = 0;
+            agreedTransactionDigest = m256i::zero();
+            for (const auto &[digest, count]: digestCounts) {
+                if (count > voteCount) {
+                    voteCount = count;
+                    agreedTransactionDigest = digest;
+                }
+            }
+            if (agreedTransactionDigest == m256i::zero() && voteCount >= 226) break;
+            if (agreedTransactionDigest != m256i::zero() && voteCount >= 451) break;
+            SLEEP(10);
+        }
+        // finish getting the votes and quorum, now we can ensure what to do
+        TickData td {};
+        if (agreedTransactionDigest == m256i::zero()) {
+            // empty tick
+        } else {
+            // non-empty tick
+            retryCount = 0;
+            while (!db_try_get_tick_data(nextTick, td)) {
+                if (gStopFlag.load(std::memory_order_relaxed)) return;
+                if (retryCount++ > 1000) {
+                    Logger::get()->error("Cannot get tickdata to index tick {}", nextTick);
+                    retryCount = 0;
+                }
+                SLEEP(10); //wait until tick data is flushed to DB
+            }
+        }
         indexTick(nextTick, td);
 
         // Persist progress.
