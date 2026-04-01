@@ -501,7 +501,7 @@ struct OracleSubscriberLogMessage
     int subscriptionId;
     unsigned int interfaceIndex;
     unsigned int contractIndex;
-    unsigned int periodInMilliseconds;    //< 0 means unsubscribe
+    unsigned int periodInMilliseconds;
     unsigned long long firstQueryDateAndTime;
 };
 
