@@ -1126,7 +1126,7 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
                         for (long long s = fromId; s <= endId; s += BOB_LOG_EVENT_CHUNK_SIZE) {
                             long long e = std::min(endId, s + BOB_LOG_EVENT_CHUNK_SIZE - 1);
                             while (db_log_exists(gCurrentProcessingEpoch, e) && e >= fromId) e--;
-                            if (e < fromId) continue;
+                            if (e < s) continue;
                             RequestLog rl{{0,0,0,0},(unsigned long long)(s),(unsigned long long)(e)};
                             connPoolWithPwd.smartLogRequest((uint8_t *) &rl, 0, sizeof(RequestLog), RequestLog::type(), true);
                             Logger::get()->debug("Requested log {}=>{}", s, e);
