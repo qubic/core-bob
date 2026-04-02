@@ -191,7 +191,8 @@ Json::Value tickDataToQubicTick(uint32_t tick, const TickData& td,
     result["tickNumber"] = tick;
 
     bool hasNoTickData = (td.epoch == 0);
-    bool isSkipped = isTickSkipped(td, !txDigests.empty());
+    bool ignore;
+    bool isSkipped = db_is_tick_empty(tick, ignore);
 
     result["hasNoTickData"] = hasNoTickData;
     result["isSkipped"] = isSkipped;

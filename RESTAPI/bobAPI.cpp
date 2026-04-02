@@ -298,6 +298,8 @@ std::string bobGetTick(const uint32_t tick) {
     tdJson["computorIndex"] = td.computorIndex;
     tdJson["epoch"] = td.epoch;
     tdJson["tick"] = td.tick;
+    bool ignore;
+    tdJson["isSkipped"] = db_is_tick_empty(tick, ignore);
 
     tdJson["millisecond"] = td.millisecond;
     tdJson["second"] = td.second;
