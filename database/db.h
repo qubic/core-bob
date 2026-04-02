@@ -406,6 +406,10 @@ bool db_get_tick_data(uint32_t tick, TickData& data);
  */
 uint64_t db_get_quorum_unixtime_from_votes(uint32_t tick);
 
+// checking if a tick is empty
+// return true if quorum agrees that tick is empty
+// false also mean unknown, notEnoughData will be true in that case
+bool db_is_tick_empty(uint32_t tick, bool& notEnoughData);
 
 /**
  * Retrieve the raw binary data of a transaction by

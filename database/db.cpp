@@ -1847,3 +1847,38 @@ void db_kvrocks_close() {
     Logger::get()->info("Closed kvrocks DB connections");
 }
 
+// return true if quorum agree that this tick is empty
+// false also mean unknown, notEnoughData will be true in that case
+bool db_is_tick_empty(uint32_t tick, bool& notEnoughData) {
+    // TODO: refactor and merge this code in log/indexer processors
+    notEnoughData = false;
+    std::vector<TickVote> votes = db_try_to_get_votes(tick);
+    if (votes.size() < 225) {
+        notEnoughData = true;
+        return false;
+    }
+    std::map<m256i, int> digestCounts;
+    for (const auto &vote: votes) {
+        digestCounts[vote.transactionDigest]++;
+    }
+    int voteCount = 0;
+    m256i agreedTransactionDigest = m256i::zero();
+    for (const auto &[digest, count]: digestCounts) {
+        if (count > voteCount) {
+            voteCount = count;
+            agreedTransactionDigest = digest;
+        }
+    }
+    if (agreedTransactionDigest == m256i::zero() && voteCount >= 226) {
+        // quorum agree empty tick
+        notEnoughData = false; // have enough data
+        return true; // is empty tick
+    }
+    if (agreedTransactionDigest != m256i::zero() && voteCount >= 451) {
+        // quorum agrees non-empty tick
+        notEnoughData = false; // have enough data
+        return false; // is non-empty tick
+    }
+    notEnoughData = true; // not enough data to make a decision
+    return false; // unknown
+}
