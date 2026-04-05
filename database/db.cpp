@@ -636,7 +636,6 @@ std::vector<LogEvent> db_get_logs_by_tick_range(uint16_t epoch, uint32_t start_t
         // We rely on the aggregated range for each tick in [start_tick, end_tick].
         // For each tick, read tick_log_range:<tick> which stores (fromLogId, length) in the new compact format,
         // then fetch logs "log:<epoch>:<logId>" for that contiguous id range.
-        const std::size_t kChunkSize = 1024;
 
         for (uint32_t tick = start_tick; tick <= end_tick; ++tick) {
             long long fromLogId = -1;
