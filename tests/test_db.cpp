@@ -69,10 +69,7 @@ protected:
     testing::NiceMock<MockRedis> mockKvrocks;
 
     void SetUp() override {
-        Logger::init("critical");
-        auto null_sink = std::make_shared<spdlog::sinks::null_sink_mt>();
-        auto null_logger = std::make_shared<spdlog::logger>("null", null_sink);
-        spdlog::set_default_logger(null_logger);
+        Logger::init("off");
         db_inject_redis(&mockRedis, &mockKvrocks);
     }
     void TearDown() override {
@@ -1197,13 +1194,13 @@ TEST_F(DbTest, TryGetLogRangeForTick_RedisThrows_ReturnsFalse) {
 }
 
 namespace {
-    std::string makeLogBlob(uint16_t epoch, uint32_t tick, uint64_t logId, uint32_t bodySize = 0) {
+    std::string makeLogBlob(uint16_t epoch, uint32_t tick, uint64_t logId, uint32_t bodySize = 8, uint8_t type = 10) {
         std::vector<uint8_t> buf(LogEvent::PackedHeaderSize + bodySize, 0);
 
         memcpy(buf.data() + 0,  &epoch,  sizeof(epoch));
         memcpy(buf.data() + 2,  &tick,   sizeof(tick));
 
-        uint32_t combo = (bodySize & 0x00FFFFFFu);
+        uint32_t combo = (bodySize & 0x00FFFFFFu) | (static_cast<uint32_t>(type) << 24);
         memcpy(buf.data() + 6,  &combo,  sizeof(combo));
         memcpy(buf.data() + 10, &logId,  sizeof(logId));
 
@@ -1322,9 +1319,277 @@ TEST_F(DbTest, TryGetLogs_FallsBackToKvrocks) {
     EXPECT_EQ(result[0].getLogId(), logId);
 }
 
+TEST_F(DbTest, GetLogsByTickRange_NoRedis_ReturnsEmpty) {
+    db_inject_redis(nullptr, nullptr);
+    bool success = true;
+    auto result = db_get_logs_by_tick_range(1, 10, 10, success);
+    EXPECT_TRUE(result.empty());
+}
+
+TEST_F(DbTest, GetLogsByTickRange_NoLogsForTick_SuccessTrue) {
+    EXPECT_CALL(mockRedis, hmget(std::string("tick_log_range:10"), _, _))
+        .WillOnce(testing::Invoke([](const std::string&, std::initializer_list<std::string>, std::back_insert_iterator<OptionalStringVec> out) {
+            *out++ = std::string("-1");
+            *out++ = std::string("-1");
+        }));
+
+    bool success = false;
+    auto result = db_get_logs_by_tick_range(1, 10, 10, success);
+    EXPECT_TRUE(result.empty());
+    EXPECT_TRUE(success);
+}
+
+TEST_F(DbTest, GetLogsByTickRange_ZeroLengthRange_SkipsTick) {
+    EXPECT_CALL(mockRedis, hmget(std::string("tick_log_range:10"), _, _))
+        .WillOnce(testing::Invoke([](const std::string&, std::initializer_list<std::string>, std::back_insert_iterator<OptionalStringVec> out) {
+            *out++ = std::string("5");
+            *out++ = std::string("0");
+        }));
+
+    bool success = false;
+    auto result = db_get_logs_by_tick_range(1, 10, 10, success);
+    EXPECT_TRUE(result.empty());
+    EXPECT_TRUE(success);
+}
+
+TEST_F(DbTest, GetLogsByTickRange_HmgetFails_ReturnsEmpty) {
+    EXPECT_CALL(mockRedis, hmget(std::string("tick_log_range:10"), _, _))
+        .WillOnce(testing::Invoke([](const std::string&, std::initializer_list<std::string>, std::back_insert_iterator<OptionalStringVec>) {}));
+    EXPECT_CALL(mockKvrocks, hmget(std::string("tick_log_range:10"), _, _))
+        .WillOnce(testing::Invoke([](const std::string&, std::initializer_list<std::string>, std::back_insert_iterator<OptionalStringVec>) {}));
+
+    bool success = true;
+    auto result = db_get_logs_by_tick_range(1, 10, 10, success);
+    EXPECT_TRUE(result.empty());
+    EXPECT_FALSE(success);
+}
+
+TEST_F(DbTest, GetLogsByTickRange_ValidLog_ReturnsLog) {
+    const uint16_t epoch = 1;
+    const uint32_t tick  = 10;
+    const uint64_t logId = 5;
+
+    EXPECT_CALL(mockRedis, hmget(std::string("tick_log_range:10"), _, _))
+        .WillOnce(testing::Invoke([](const std::string&, std::initializer_list<std::string>, std::back_insert_iterator<OptionalStringVec> out) {
+            *out++ = std::string("5");
+            *out++ = std::string("1");
+        }));
+
+    EXPECT_CALL(mockRedis, get(std::string("log:1:5")))
+        .WillOnce(Return(sw::redis::OptionalString(makeLogBlob(epoch, tick, logId))));
+
+    bool success = false;
+    auto result = db_get_logs_by_tick_range(epoch, tick, tick, success);
+    EXPECT_EQ(result.size(), 1u);
+    EXPECT_EQ(result[0].getLogId(), logId);
+    EXPECT_EQ(result[0].getTick(),  tick);
+    EXPECT_TRUE(success);
+}
+
+TEST_F(DbTest, GetLogsByTickRange_MultiTick_ReturnsAllLogs) {
+    const uint16_t epoch = 1;
+
+    EXPECT_CALL(mockRedis, hmget(std::string("tick_log_range:10"), _, _))
+        .WillOnce(testing::Invoke([](const std::string&, std::initializer_list<std::string>, std::back_insert_iterator<OptionalStringVec> out) {
+            *out++ = std::string("0");
+            *out++ = std::string("1");
+        }));
+    EXPECT_CALL(mockRedis, hmget(std::string("tick_log_range:11"), _, _))
+        .WillOnce(testing::Invoke([](const std::string&, std::initializer_list<std::string>, std::back_insert_iterator<OptionalStringVec> out) {
+            *out++ = std::string("1");
+            *out++ = std::string("1");
+        }));
+
+    EXPECT_CALL(mockRedis, get(std::string("log:1:0")))
+        .WillOnce(Return(sw::redis::OptionalString(makeLogBlob(epoch, 10, 0))));
+    EXPECT_CALL(mockRedis, get(std::string("log:1:1")))
+        .WillOnce(Return(sw::redis::OptionalString(makeLogBlob(epoch, 11, 1))));
+
+    bool success = false;
+    auto result = db_get_logs_by_tick_range(epoch, 10, 11, success);
+    EXPECT_EQ(result.size(), 2u);
+    EXPECT_TRUE(success);
+}
+
+TEST_F(DbTest, GetLogsByTickRange_LogWrongEpoch_ReturnsEmpty) {
+    const uint16_t epoch      = 1;
+    const uint16_t wrongEpoch = 2;
+    const uint32_t tick       = 10;
+
+    EXPECT_CALL(mockRedis, hmget(std::string("tick_log_range:10"), _, _))
+        .WillOnce(testing::Invoke([](const std::string&, std::initializer_list<std::string>, std::back_insert_iterator<OptionalStringVec> out) {
+            *out++ = std::string("5");
+            *out++ = std::string("1");
+        }));
+
+    EXPECT_CALL(mockRedis, get(std::string("log:1:5")))
+        .WillOnce(Return(sw::redis::OptionalString(makeLogBlob(wrongEpoch, tick, 5))));
+
+    bool success = true;
+    auto result = db_get_logs_by_tick_range(epoch, tick, tick, success);
+    EXPECT_TRUE(result.empty());
+}
+
+TEST_F(DbTest, GetLogsByTickRange_LogTickOutOfRange_ReturnsEmpty) {
+    const uint16_t epoch    = 1;
+    const uint32_t tick     = 10;
+    const uint32_t wrongTick = 99;
+
+    EXPECT_CALL(mockRedis, hmget(std::string("tick_log_range:10"), _, _))
+        .WillOnce(testing::Invoke([](const std::string&, std::initializer_list<std::string>, std::back_insert_iterator<OptionalStringVec> out) {
+            *out++ = std::string("5");
+            *out++ = std::string("1");
+        }));
+
+    EXPECT_CALL(mockRedis, get(std::string("log:1:5")))
+        .WillOnce(Return(sw::redis::OptionalString(makeLogBlob(epoch, wrongTick, 5))));
+
+    bool success = true;
+    auto result = db_get_logs_by_tick_range(epoch, tick, tick, success);
+    EXPECT_TRUE(result.empty());
+}
+
+namespace {
+    std::string makeVoteBlob(uint32_t tick, uint16_t computorIndex,
+                             uint16_t year, uint16_t month, uint16_t day,
+                             uint16_t hour, uint16_t minute, uint16_t second,
+                             m256i transactionDigest = m256i::zero()) {
+        TickVote v{};
+        v.tick           = tick;
+        v.computorIndex  = computorIndex;
+        v.year           = year;
+        v.month          = month;
+        v.day            = day;
+        v.hour           = hour;
+        v.minute         = minute;
+        v.second         = second;
+        v.transactionDigest = transactionDigest;
+        return std::string(reinterpret_cast<char*>(&v), sizeof(TickVote));
+    }
+
+    void injectVotes(testing::NiceMock<MockRedis>& mock,
+                     const std::vector<std::string>& voteBlobs) {
+        constexpr int MAX_COMPUTORS = 676;
+        constexpr int BATCH_SIZE    = 128;
+
+        // Pre-build all batch results eagerly
+        auto allBatches = std::make_shared<std::vector<std::vector<sw::redis::OptionalString>>>();
+        int globalIdx = 0;
+        for (int start = 0; start < MAX_COMPUTORS; start += BATCH_SIZE) {
+            const int end = std::min(MAX_COMPUTORS, start + BATCH_SIZE);
+            std::vector<sw::redis::OptionalString> batch;
+            for (int i = start; i < end; ++i) {
+                if (globalIdx < static_cast<int>(voteBlobs.size()))
+                    batch.push_back(sw::redis::OptionalString(voteBlobs[globalIdx++]));
+                else
+                    batch.push_back(sw::redis::OptionalString{});
+            }
+            allBatches->push_back(std::move(batch));
+        }
+
+        auto callCount = std::make_shared<int>(0);
+        EXPECT_CALL(mock, mget(_, _, _))
+            .Times(static_cast<int>(allBatches->size()))
+            .WillRepeatedly(testing::Invoke([allBatches, callCount](
+                std::vector<std::string>::const_iterator,
+                std::vector<std::string>::const_iterator,
+                std::back_insert_iterator<OptStringVec> out) {
+                const auto& batch = (*allBatches)[(*callCount)++];
+                for (const auto& v : batch)
+                    *out++ = v;
+            }));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// db_get_quorum_unixtime_from_votes
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, GetQuorumUnixtimeFromVotes_NoRedis_ReturnsZero) {
+    db_inject_redis(nullptr, nullptr);
+    EXPECT_EQ(db_get_quorum_unixtime_from_votes(1), 0u);
+}
+
+TEST_F(DbTest, GetQuorumUnixtimeFromVotes_NoVotes_ReturnsZero) {
+    constexpr int BATCHES = (676 + 127) / 128;
+    EXPECT_CALL(mockRedis, mget(_, _, _))
+        .Times(BATCHES)
+        .WillRepeatedly(testing::Return());
+    EXPECT_EQ(db_get_quorum_unixtime_from_votes(1), 0u);
+}
+
+TEST_F(DbTest, GetQuorumUnixtimeFromVotes_QuorumReached_ReturnsTimestamp) {
+    constexpr uint32_t tick = 100;
+    std::vector<std::string> blobs;
+    for (int i = 0; i < 451; ++i)
+        blobs.push_back(makeVoteBlob(tick, i, 24, 1, 15, 10, 30, 0));
+    injectVotes(mockRedis, blobs);
+    EXPECT_GT(db_get_quorum_unixtime_from_votes(tick), 0u);
+}
+
+TEST_F(DbTest, GetQuorumUnixtimeFromVotes_BelowQuorum_ReturnsZero) {
+    constexpr uint32_t tick = 100;
+    std::vector<std::string> blobs;
+    for (int i = 0; i < 450; ++i)
+        blobs.push_back(makeVoteBlob(tick, i, 24, 1, 15, 10, 30, 0));
+    injectVotes(mockRedis, blobs);
+    EXPECT_EQ(db_get_quorum_unixtime_from_votes(tick), 0u);
+}
+
+TEST_F(DbTest, GetQuorumUnixtimeFromVotes_SplitTimestamps_ReturnsZero) {
+    constexpr uint32_t tick = 100;
+    std::vector<std::string> blobs;
+    for (int i = 0; i < 300; ++i)
+        blobs.push_back(makeVoteBlob(tick, i, 24, 1, 15, 10, 30, 0));
+    for (int i = 300; i < 600; ++i)
+        blobs.push_back(makeVoteBlob(tick, i, 24, 1, 15, 11, 0, 0));
+    injectVotes(mockRedis, blobs);
+    EXPECT_EQ(db_get_quorum_unixtime_from_votes(tick), 0u);
+}
+
+TEST_F(DbTest, IsTickEmpty_LessThan225Votes_NotEnoughData) {
+    constexpr uint32_t tick = 5;
+    std::vector<std::string> blobs;
+    for (int i = 0; i < 224; ++i)
+        blobs.push_back(makeVoteBlob(tick, i, 24, 1, 15, 10, 0, 0));
+    injectVotes(mockRedis, blobs);
+    bool notEnough = false;
+    EXPECT_FALSE(db_is_tick_empty(tick, notEnough));
+    EXPECT_TRUE(notEnough);
+}
+
+TEST_F(DbTest, IsTickEmpty_QuorumAgreesNonEmpty_ReturnsFalse) {
+    constexpr uint32_t tick = 5;
+    m256i nonZeroDigest{};
+    memset(&nonZeroDigest, 1, sizeof(nonZeroDigest));
+    std::vector<std::string> blobs;
+    for (int i = 0; i < 451; ++i)
+        blobs.push_back(makeVoteBlob(tick, i, 24, 1, 15, 10, 0, 0, nonZeroDigest));
+    injectVotes(mockRedis, blobs);
+    bool notEnough = true;
+    EXPECT_FALSE(db_is_tick_empty(tick, notEnough));
+    EXPECT_FALSE(notEnough);
+}
+
+TEST_F(DbTest, IsTickEmpty_NotEnoughConsensus_NotEnoughData) {
+    constexpr uint32_t tick = 5;
+    m256i digestA{};
+    m256i digestB{};
+    memset(&digestA, 1, sizeof(digestA));
+    memset(&digestB, 2, sizeof(digestB));
+    std::vector<std::string> blobs;
+    for (int i = 0; i < 300; ++i)
+        blobs.push_back(makeVoteBlob(tick, i, 24, 1, 15, 10, 0, 0, digestA));
+    for (int i = 300; i < 500; ++i)
+        blobs.push_back(makeVoteBlob(tick, i, 24, 1, 15, 10, 0, 0, digestB));
+    injectVotes(mockRedis, blobs);
+    bool notEnough = false;
+    EXPECT_FALSE(db_is_tick_empty(tick, notEnough));
+    EXPECT_TRUE(notEnough);
+}
+
 // ---------------------------------------------------------------------------
 // Cannot test (require real Redis/Kvrocks or complex internal state):
-// - db_get_logs_by_tick_range (depends on db_try_get_log_range_for_tick and LogEvent internals)
 // - db_get_quorum_unixtime_from_votes (depends on db_try_to_get_votes + timegm)
 // - db_is_tick_empty (depends on db_try_to_get_votes + m256i)
 // - db_try_to_get_votes (depends on db_get_tick_votes_from_vtick -> db_get_vtick_from_kvrocks -> zstd)
