@@ -354,17 +354,6 @@ bool db_get_tick_votes(uint32_t tick, std::vector<TickVote>& votes);
 long long db_get_tick_transaction_count(uint32_t tick);
 
 /**
- * Retrieve all log events for a transaction hash.
- *
- * Parameters
- * - txHash: Transaction hash string in canonical representation
- *
- * Return Value
- * - Vector of LogEvent. Empty on failure or if none exist.
- */
-std::vector<LogEvent> db_get_logs_by_tx_hash(const std::string& txHash);
-
-/**
  * Retrieve log events within an epoch and tick range [start_tick, end_tick].
  *
  * Parameters
@@ -500,7 +489,6 @@ bool db_get_end_epoch_log_range(uint16_t epoch, long long &fromLogId, long long 
 void db_kvrocks_connect(const std::string &connectionString);
 
 // functions for persistant on disk layer
-void compressTickAndMoveToKVRocks(uint32_t tick);
 bool cleanRawTick(uint32_t fromTick, uint32_t toTick, bool withTransactions);
 bool cleanTransactionLogs(uint32_t tick);
 

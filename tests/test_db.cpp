@@ -709,4 +709,327 @@ TEST_F(DbTest, KeyExists_NoRedis_ReturnsFalse) {
 }
 
 // ---------------------------------------------------------------------------
-// db_
+// db_rename
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, Rename_Success) {
+    EXPECT_CALL(mockRedis, rename("k1", "k2")).Times(1);
+    EXPECT_TRUE(db_rename("k1", "k2"));
+}
+
+TEST_F(DbTest, Rename_Throws_ReturnsFalse) {
+    EXPECT_CALL(mockRedis, rename("k1", "k2")).WillOnce(testing::Throw(sw::redis::Error("fail")));
+    EXPECT_FALSE(db_rename("k1", "k2"));
+}
+
+TEST_F(DbTest, Rename_NoRedis_ReturnsFalse) {
+    db_inject_redis(nullptr, nullptr);
+    EXPECT_FALSE(db_rename("k1", "k2"));
+}
+
+// ---------------------------------------------------------------------------
+// db_copy
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, Copy_Success) {
+    EXPECT_CALL(mockRedis, get("k1")).WillOnce(Return(sw::redis::OptionalString("val")));
+    EXPECT_CALL(mockRedis, set(std::string("k2"), std::string("val"))).Times(1);
+    EXPECT_TRUE(db_copy("k1", "k2"));
+}
+
+TEST_F(DbTest, Copy_SourceNotFound_ReturnsFalse) {
+    EXPECT_CALL(mockRedis, get("k1")).WillOnce(Return(sw::redis::OptionalString{}));
+    EXPECT_FALSE(db_copy("k1", "k2"));
+}
+
+TEST_F(DbTest, Copy_NoRedis_ReturnsFalse) {
+    db_inject_redis(nullptr, nullptr);
+    EXPECT_FALSE(db_copy("k1", "k2"));
+}
+
+// ---------------------------------------------------------------------------
+// db_hcopy
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, Hcopy_Success) {
+    EXPECT_CALL(mockRedis, hgetall("k1", _)).Times(1);
+    EXPECT_TRUE(db_hcopy("k1", "k2"));
+}
+
+TEST_F(DbTest, Hcopy_NoRedis_ReturnsFalse) {
+    db_inject_redis(nullptr, nullptr);
+    EXPECT_FALSE(db_hcopy("k1", "k2"));
+}
+
+// ---------------------------------------------------------------------------
+// db_get_last_indexed_tick / db_update_last_indexed_tick
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, GetLastIndexedTick_Found) {
+    EXPECT_CALL(mockRedis, hget("db_status", "last_indexed_tick"))
+        .WillOnce(Return(sw::redis::OptionalString("500")));
+    EXPECT_EQ(db_get_last_indexed_tick(), 500LL);
+}
+
+TEST_F(DbTest, GetLastIndexedTick_NotFound_ReturnsMinusOne) {
+    EXPECT_CALL(mockRedis, hget("db_status", "last_indexed_tick"))
+        .WillOnce(Return(sw::redis::OptionalString{}));
+    EXPECT_EQ(db_get_last_indexed_tick(), -1LL);
+}
+
+TEST_F(DbTest, GetLastIndexedTick_NoRedis_ReturnsMinusOne) {
+    db_inject_redis(nullptr, nullptr);
+    EXPECT_EQ(db_get_last_indexed_tick(), -1LL);
+}
+
+TEST_F(DbTest, UpdateLastIndexedTick_Success) {
+    EXPECT_CALL(mockRedis, eval_ll(_, _, _, _, _)).WillOnce(Return(1));
+    EXPECT_TRUE(db_update_last_indexed_tick(600));
+}
+
+TEST_F(DbTest, UpdateLastIndexedTick_NoRedis_ReturnsFalse) {
+    db_inject_redis(nullptr, nullptr);
+    EXPECT_FALSE(db_update_last_indexed_tick(600));
+}
+
+// ---------------------------------------------------------------------------
+// db_set_indexed_tx
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, SetIndexedTx_Success) {
+    EXPECT_CALL(mockKvrocks, set(_, _, _)).Times(1);
+    EXPECT_TRUE(db_set_indexed_tx("itx:hash1", 0, 10, 20, 1000, true));
+}
+
+TEST_F(DbTest, SetIndexedTx_NoKvrocks_ReturnsFalse) {
+    db_inject_redis(&mockRedis, nullptr);
+    EXPECT_FALSE(db_set_indexed_tx("itx:hash1", 0, 10, 20, 1000, true));
+}
+
+// ---------------------------------------------------------------------------
+// db_set_many_indexed_tx
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, SetManyIndexedTx_EmptyList_ReturnsTrue) {
+    EXPECT_TRUE(db_set_many_indexed_tx({}));
+}
+
+TEST_F(DbTest, SetManyIndexedTx_NoKvrocks_ReturnsFalse) {
+    db_inject_redis(&mockRedis, nullptr);
+    std::vector<std::tuple<std::string, int, long long, long long, uint64_t, bool>> list = {
+        {"itx:h1", 0, 1, 2, 100, true}
+    };
+    EXPECT_FALSE(db_set_many_indexed_tx(list));
+}
+
+TEST_F(DbTest, SetManyIndexedTx_UsesPipeline) {
+    auto* rawPipe = new MockPipeline();
+    EXPECT_CALL(*rawPipe, set(_, _, _)).WillRepeatedly(testing::ReturnRef(*rawPipe));
+    EXPECT_CALL(*rawPipe, execute()).Times(1);
+    EXPECT_CALL(mockKvrocks, pipeline()).WillOnce(Return(std::unique_ptr<IPipeline>(rawPipe)));
+
+    std::vector<std::tuple<std::string, int, long long, long long, uint64_t, bool>> list = {
+        {"itx:h1", 0, 1, 2, 100, true},
+        {"itx:h2", 1, 3, 4, 200, false}
+    };
+    EXPECT_TRUE(db_set_many_indexed_tx(list));
+}
+
+// ---------------------------------------------------------------------------
+// db_get_indexed_tx
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, GetIndexedTx_FoundInRedis) {
+    indexedTxData data{1, true, 10, 20, 5000};
+    std::string raw(reinterpret_cast<char*>(&data), sizeof(data));
+    EXPECT_CALL(mockRedis, get("itx:hash1")).WillOnce(Return(sw::redis::OptionalString(raw)));
+    int idx; long long from, to; uint64_t ts; bool exec;
+    EXPECT_TRUE(db_get_indexed_tx("hash1", idx, from, to, ts, exec));
+    EXPECT_EQ(idx, 1);
+    EXPECT_TRUE(exec);
+}
+
+TEST_F(DbTest, GetIndexedTx_NotFoundAnywhere_ReturnsFalse) {
+    EXPECT_CALL(mockRedis, get("itx:hash1")).WillOnce(Return(sw::redis::OptionalString{}));
+    EXPECT_CALL(mockKvrocks, get("itx:hash1")).WillOnce(Return(sw::redis::OptionalString{}));
+    int idx; long long from, to; uint64_t ts; bool exec;
+    EXPECT_FALSE(db_get_indexed_tx("hash1", idx, from, to, ts, exec));
+}
+
+// ---------------------------------------------------------------------------
+// db_add_many_indexer
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, AddManyIndexer_EmptyKeys_ReturnsFalse) {
+    EXPECT_FALSE(db_add_many_indexer({}, 100));
+}
+
+TEST_F(DbTest, AddManyIndexer_NoKvrocks_ReturnsFalse) {
+    db_inject_redis(&mockRedis, nullptr);
+    EXPECT_FALSE(db_add_many_indexer({"key1"}, 100));
+}
+
+TEST_F(DbTest, AddManyIndexer_Success) {
+    EXPECT_CALL(mockKvrocks, eval_ll(_, _, _, _, _)).WillOnce(Return(1));
+    EXPECT_TRUE(db_add_many_indexer({"indexed:1", "indexed:2"}, 100));
+}
+
+// ---------------------------------------------------------------------------
+// db_get_combined_log_range_for_ticks
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, GetCombinedLogRangeForTicks_NoRedis_ReturnsFalse) {
+    db_inject_redis(nullptr, nullptr);
+    long long from, len;
+    EXPECT_FALSE(db_get_combined_log_range_for_ticks(1, 5, from, len));
+}
+
+TEST_F(DbTest, GetCombinedLogRangeForTicks_StartGtEnd_ReturnsFalse) {
+    long long from, len;
+    EXPECT_FALSE(db_get_combined_log_range_for_ticks(10, 5, from, len));
+}
+
+// ---------------------------------------------------------------------------
+// db_copy_transaction_to_kvrocks
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, CopyTransactionToKvrocks_NotFoundInRedis_ReturnsFalse) {
+    EXPECT_CALL(mockRedis, get("transaction:abc")).WillOnce(Return(sw::redis::OptionalString{}));
+    EXPECT_FALSE(db_copy_transaction_to_kvrocks("abc"));
+}
+
+TEST_F(DbTest, CopyTransactionToKvrocks_Success) {
+    EXPECT_CALL(mockRedis, get("transaction:abc")).WillOnce(Return(sw::redis::OptionalString("data")));
+    EXPECT_CALL(mockKvrocks, set(std::string("transaction:abc"), _, _)).Times(1);
+    EXPECT_TRUE(db_copy_transaction_to_kvrocks("abc"));
+}
+
+TEST_F(DbTest, CopyTransactionToKvrocks_NoKvrocks_ReturnsFalse) {
+    db_inject_redis(&mockRedis, nullptr);
+    EXPECT_FALSE(db_copy_transaction_to_kvrocks("abc"));
+}
+
+// ---------------------------------------------------------------------------
+// db_add_many_transactions_to_kvrocks
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, AddManyTransactionsToKvrocks_EmptyKeys_ReturnsTrue) {
+    EXPECT_TRUE(db_add_many_transactions_to_kvrocks({}, {}));
+}
+
+TEST_F(DbTest, AddManyTransactionsToKvrocks_SizeMismatch_ReturnsFalse) {
+    EXPECT_FALSE(db_add_many_transactions_to_kvrocks({"k1"}, {}));
+}
+
+TEST_F(DbTest, AddManyTransactionsToKvrocks_UsesPipeline) {
+    auto* rawPipe = new MockPipeline();
+    EXPECT_CALL(*rawPipe, set(_, _, _)).WillRepeatedly(testing::ReturnRef(*rawPipe));
+    EXPECT_CALL(*rawPipe, execute()).Times(1);
+    EXPECT_CALL(mockKvrocks, pipeline()).WillOnce(Return(std::unique_ptr<IPipeline>(rawPipe)));
+
+    std::vector<std::string> keys = {"k1"};
+    std::vector<std::optional<std::string>> vals = {std::string("v1")};
+    EXPECT_TRUE(db_add_many_transactions_to_kvrocks(keys, vals));
+}
+
+// ---------------------------------------------------------------------------
+// db_move_logs_to_kvrocks_by_range
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, MoveLogsToKvrocksByRange_NegativeRange_ReturnsTrue) {
+    EXPECT_TRUE(db_move_logs_to_kvrocks_by_range(1, -1, -1));
+}
+
+TEST_F(DbTest, MoveLogsToKvrocksByRange_NoRedis_ReturnsFalse) {
+    db_inject_redis(nullptr, &mockKvrocks);
+    EXPECT_FALSE(db_move_logs_to_kvrocks_by_range(1, 0, 5));
+}
+
+TEST_F(DbTest, MoveLogsToKvrocksByRange_LogMissingInRedis_ReturnsFalse) {
+    EXPECT_CALL(mockRedis, mget(_, _, _))
+        .WillOnce(testing::Invoke([](auto, auto, std::back_insert_iterator<OptStringVec> out) {
+            *out++ = sw::redis::OptionalString{};
+        }));
+    EXPECT_FALSE(db_move_logs_to_kvrocks_by_range(1, 0, 0));
+}
+
+// ---------------------------------------------------------------------------
+// db_get_end_epoch_log_range
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, GetEndEpochLogRange_Found) {
+    EXPECT_CALL(mockRedis, hmget("end_epoch:tick_log_range:5", std::initializer_list<std::string>{"fromLogId", "length"}, _))
+        .WillOnce(testing::Invoke([](const std::string&, std::initializer_list<std::string>, std::back_insert_iterator<OptionalStringVec> out) {
+            *out++ = std::string("100");
+            *out++ = std::string("50");
+        }));
+    long long from, len;
+    EXPECT_TRUE(db_get_end_epoch_log_range(5, from, len));
+    EXPECT_EQ(from, 100LL);
+    EXPECT_EQ(len, 50LL);
+}
+
+TEST_F(DbTest, GetEndEpochLogRange_NoRedis_ReturnsFalse) {
+    db_inject_redis(nullptr, nullptr);
+    long long from, len;
+    EXPECT_FALSE(db_get_end_epoch_log_range(5, from, len));
+}
+
+// ---------------------------------------------------------------------------
+// db_try_get_tick_data
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, TryGetTickData_FoundInRedis) {
+    TickData expected{};
+    expected.tick = 11;
+    std::string raw(reinterpret_cast<char*>(&expected), sizeof(TickData));
+    EXPECT_CALL(mockRedis, get("tick_data:11")).WillOnce(Return(sw::redis::OptionalString(raw)));
+    TickData out{};
+    EXPECT_TRUE(db_try_get_tick_data(11, out));
+    EXPECT_EQ(out.tick, 11u);
+}
+
+TEST_F(DbTest, TryGetTickData_NotFoundAnywhere_ReturnsFalse) {
+    EXPECT_CALL(mockRedis, get("tick_data:11")).WillOnce(Return(sw::redis::OptionalString{}));
+    EXPECT_CALL(mockKvrocks, get("vtick:11")).WillOnce(Return(sw::redis::OptionalString{}));
+    TickData out{};
+    EXPECT_FALSE(db_try_get_tick_data(11, out));
+}
+
+// ---------------------------------------------------------------------------
+// db_search_log
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, SearchLog_InvalidTopic1Size_ReturnsEmpty) {
+    auto result = db_search_log(1, 0, 0, 100, "short", std::string(60, 'a'), std::string(60, 'a'));
+    EXPECT_TRUE(result.empty());
+}
+
+TEST_F(DbTest, SearchLog_NoKvrocks_ReturnsEmpty) {
+    db_inject_redis(&mockRedis, nullptr);
+    auto result = db_search_log(1, 0, 0, 100, std::string(60, 'a'), std::string(60, 'a'), std::string(60, 'a'));
+    EXPECT_TRUE(result.empty());
+}
+
+TEST_F(DbTest, SearchLog_AllWildcardNoLogType_CallsZrangebyscore) {
+    EXPECT_CALL(mockRedis, zrangebyscore(std::string("indexed:1"), _, _)).Times(1);
+    EXPECT_CALL(mockKvrocks, zrangebyscore(std::string("indexed:1"), _, _)).Times(1);
+    db_search_log(1, 0xffffffff, 0, 100, std::string(WILDCARD), std::string(WILDCARD), std::string(WILDCARD));
+}
+
+// ---------------------------------------------------------------------------
+// Cannot test (require real Redis/Kvrocks or complex internal state):
+// - db_insert_transaction (calls getQubicHash which is a real crypto function)
+// - db_insert_log_range (calls isArrayZero and logRange.getMinMax from structs.h)
+// - db_try_get_log_ranges (falls through to db_get_cLogRange_from_kvrocks which requires zstd)
+// - db_try_get_log_range_for_tick (uses getPtr() raw Redis* pointer internally)
+// - db_try_get_log / db_try_get_logs (requires valid LogEvent with packed header)
+// - db_get_logs_by_tick_range (depends on db_try_get_log_range_for_tick and LogEvent internals)
+// - db_get_quorum_unixtime_from_votes (depends on db_try_to_get_votes + timegm)
+// - db_is_tick_empty (depends on db_try_to_get_votes + m256i)
+// - db_try_to_get_votes (depends on db_get_tick_votes_from_vtick -> db_get_vtick_from_kvrocks -> zstd)
+// - db_try_get_tick_vote (same zstd/vtick dependency)
+// - db_insert_vtick_to_kvrocks / db_get_vtick_from_kvrocks (require zstd compression)
+// - db_insert_cLogRange_to_kvrocks / db_get_cLogRange_from_kvrocks (require zstd compression)
+// - db_insert_TickLogRange_to_kvrocks (requires kvrocks + expire)
+// - db_get_endepoch_log_range_info (requires LogRangesPerTxInTick binary blob)
