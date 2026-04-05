@@ -1118,9 +1118,85 @@ TEST_F(DbTest, TryGetLogRanges_NotInRedis_FallsBackToKvrocks_NotFound) {
     LogRangesPerTxInTick out{};
     EXPECT_FALSE(db_try_get_log_ranges(10, out));
 }
+
+// ---------------------------------------------------------------------------
+// db_try_get_log_range_for_tick
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, TryGetLogRangeForTick_NoRedisNoKvrocks_ReturnsFalse) {
+    db_inject_redis(nullptr, nullptr);
+    long long from, len;
+    EXPECT_FALSE(db_try_get_log_range_for_tick(5, from, len));
+    EXPECT_EQ(from, -1LL);
+    EXPECT_EQ(len,  -1LL);
+}
+
+TEST_F(DbTest, TryGetLogRangeForTick_FoundInRedis) {
+    EXPECT_CALL(mockRedis, hmget(std::string("tick_log_range:5"), _, _))
+        .WillOnce(testing::Invoke([](const std::string&, std::initializer_list<std::string>, std::back_insert_iterator<OptionalStringVec> out) {
+            *out++ = std::string("100");
+            *out++ = std::string("50");
+        }));
+
+    long long from, len;
+    EXPECT_TRUE(db_try_get_log_range_for_tick(5, from, len));
+    EXPECT_EQ(from, 100LL);
+    EXPECT_EQ(len,   50LL);
+}
+
+TEST_F(DbTest, TryGetLogRangeForTick_EmptyTick_ReturnsNegativeOne) {
+    EXPECT_CALL(mockRedis, hmget(std::string("tick_log_range:5"), _, _))
+        .WillOnce(testing::Invoke([](const std::string&, std::initializer_list<std::string>, std::back_insert_iterator<OptionalStringVec> out) {
+            *out++ = std::string("-1");
+            *out++ = std::string("-1");
+        }));
+
+    long long from, len;
+    EXPECT_TRUE(db_try_get_log_range_for_tick(5, from, len));
+    EXPECT_EQ(from, -1LL);
+    EXPECT_EQ(len,  -1LL);
+}
+
+TEST_F(DbTest, TryGetLogRangeForTick_NotInRedis_FallsBackToKvrocks) {
+    EXPECT_CALL(mockRedis, hmget(std::string("tick_log_range:5"), _, _))
+        .WillOnce(testing::Invoke([](const std::string&, std::initializer_list<std::string>, std::back_insert_iterator<OptionalStringVec> out) {}));
+
+    EXPECT_CALL(mockKvrocks, hmget(std::string("tick_log_range:5"), _, _))
+        .WillOnce(testing::Invoke([](const std::string&, std::initializer_list<std::string>, std::back_insert_iterator<OptionalStringVec> out) {
+            *out++ = std::string("200");
+            *out++ = std::string("10");
+        }));
+
+    long long from, len;
+    EXPECT_TRUE(db_try_get_log_range_for_tick(5, from, len));
+    EXPECT_EQ(from, 200LL);
+    EXPECT_EQ(len,   10LL);
+}
+
+TEST_F(DbTest, TryGetLogRangeForTick_NotFoundAnywhere_ReturnsFalse) {
+    EXPECT_CALL(mockRedis,   hmget(std::string("tick_log_range:5"), _, _))
+        .WillOnce(testing::Invoke([](const std::string&, std::initializer_list<std::string>, std::back_insert_iterator<OptionalStringVec>) {}));
+    EXPECT_CALL(mockKvrocks, hmget(std::string("tick_log_range:5"), _, _))
+        .WillOnce(testing::Invoke([](const std::string&, std::initializer_list<std::string>, std::back_insert_iterator<OptionalStringVec>) {}));
+
+    long long from, len;
+    EXPECT_FALSE(db_try_get_log_range_for_tick(5, from, len));
+    EXPECT_EQ(from, -1LL);
+    EXPECT_EQ(len,  -1LL);
+}
+
+TEST_F(DbTest, TryGetLogRangeForTick_RedisThrows_ReturnsFalse) {
+    EXPECT_CALL(mockRedis, hmget(std::string("tick_log_range:5"), _, _))
+        .WillOnce(testing::Throw(sw::redis::Error("fail")));
+    EXPECT_CALL(mockKvrocks, hmget(std::string("tick_log_range:5"), _, _))
+        .WillOnce(testing::Invoke([](const std::string&, std::initializer_list<std::string>, std::back_insert_iterator<OptionalStringVec>) {}));
+
+    long long from, len;
+    EXPECT_FALSE(db_try_get_log_range_for_tick(5, from, len));
+}
+
 // ---------------------------------------------------------------------------
 // Cannot test (require real Redis/Kvrocks or complex internal state):
-// - db_try_get_log_range_for_tick (uses getPtr() raw Redis* pointer internally)
 // - db_try_get_log / db_try_get_logs (requires valid LogEvent with packed header)
 // - db_get_logs_by_tick_range (depends on db_try_get_log_range_for_tick and LogEvent internals)
 // - db_get_quorum_unixtime_from_votes (depends on db_try_to_get_votes + timegm)
