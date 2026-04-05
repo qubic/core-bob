@@ -1713,11 +1713,144 @@ TEST_F(DbTest, GetVtickFromKvrocks_CorruptData_ReturnsFalse) {
     EXPECT_FALSE(db_get_vtick_from_kvrocks(42, out));
 }
 
+TEST_F(DbTest, InsertCLogRangeToKvrocks_NoKvrocks_ReturnsFalse) {
+    db_inject_redis(&mockRedis, nullptr);
+    LogRangesPerTxInTick lr{};
+    EXPECT_FALSE(db_insert_cLogRange_to_kvrocks(10, lr));
+}
+
+TEST_F(DbTest, InsertCLogRangeToKvrocks_Success) {
+    EXPECT_CALL(mockKvrocks, set(std::string("cLogRange:10"), _, _)).Times(1);
+    LogRangesPerTxInTick lr{};
+    EXPECT_TRUE(db_insert_cLogRange_to_kvrocks(10, lr));
+}
+
+TEST_F(DbTest, GetCLogRangeFromKvrocks_NoKvrocks_ReturnsFalse) {
+    db_inject_redis(&mockRedis, nullptr);
+    LogRangesPerTxInTick out{};
+    EXPECT_FALSE(db_get_cLogRange_from_kvrocks(10, out));
+}
+
+TEST_F(DbTest, GetCLogRangeFromKvrocks_NotFound_ReturnsFalse) {
+    EXPECT_CALL(mockKvrocks, get(std::string("cLogRange:10"))).WillOnce(Return(sw::redis::OptionalString{}));
+    LogRangesPerTxInTick out{};
+    EXPECT_FALSE(db_get_cLogRange_from_kvrocks(10, out));
+}
+
+TEST_F(DbTest, GetCLogRangeFromKvrocks_CorruptData_ReturnsFalse) {
+    EXPECT_CALL(mockKvrocks, get(std::string("cLogRange:10")))
+        .WillOnce(Return(sw::redis::OptionalString("not_valid_zstd")));
+    LogRangesPerTxInTick out{};
+    EXPECT_FALSE(db_get_cLogRange_from_kvrocks(10, out));
+}
+
+TEST_F(DbTest, InsertAndGetCLogRange_RoundTrip) {
+    LogRangesPerTxInTick original{};
+    memset(&original, 0, sizeof(original));
+    original.fromLogId[0] = 100;
+    original.length[0]    = 50;
+    original.fromLogId[3] = 200;
+    original.length[3]    = 10;
+
+    std::string compressed;
+    EXPECT_CALL(mockKvrocks, set(std::string("cLogRange:10"), _, _))
+        .WillOnce(testing::Invoke([&compressed](
+            const std::string&,
+            sw::redis::StringView val,
+            std::chrono::seconds) {
+            compressed = std::string(val.data(), val.size());
+        }));
+    EXPECT_TRUE(db_insert_cLogRange_to_kvrocks(10, original));
+
+    EXPECT_CALL(mockKvrocks, get(std::string("cLogRange:10")))
+        .WillOnce(Return(sw::redis::OptionalString(compressed)));
+    LogRangesPerTxInTick out{};
+    EXPECT_TRUE(db_get_cLogRange_from_kvrocks(10, out));
+    EXPECT_EQ(out.fromLogId[0], 100LL);
+    EXPECT_EQ(out.length[0],     50LL);
+    EXPECT_EQ(out.fromLogId[3], 200LL);
+    EXPECT_EQ(out.length[3],     10LL);
+}
+
 // ---------------------------------------------------------------------------
-// Cannot test (require real Redis/Kvrocks or complex internal state):
-// - db_try_to_get_votes (depends on db_get_tick_votes_from_vtick -> db_get_vtick_from_kvrocks -> zstd)
-// - db_try_get_tick_vote (same zstd/vtick dependency)
-// - db_insert_vtick_to_kvrocks / db_get_vtick_from_kvrocks (require zstd compression)
-// - db_insert_cLogRange_to_kvrocks / db_get_cLogRange_from_kvrocks (require zstd compression)
-// - db_insert_TickLogRange_to_kvrocks (requires kvrocks + expire)
-// - db_get_endepoch_log_range_info (requires LogRangesPerTxInTick binary blob)
+// db_insert_TickLogRange_to_kvrocks
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, InsertTickLogRangeToKvrocks_NoKvrocks_ReturnsFalse) {
+    db_inject_redis(&mockRedis, nullptr);
+    long long start = 5, len = 10;
+    EXPECT_FALSE(db_insert_TickLogRange_to_kvrocks(1, start, len));
+}
+
+TEST_F(DbTest, InsertTickLogRangeToKvrocks_Success) {
+    EXPECT_CALL(mockKvrocks, hmset(std::string("tick_log_range:1"), _, _)).Times(1);
+    EXPECT_CALL(mockKvrocks, expire(std::string("tick_log_range:1"), _)).Times(1);
+    long long start = 5, len = 10;
+    EXPECT_TRUE(db_insert_TickLogRange_to_kvrocks(1, start, len));
+}
+
+TEST_F(DbTest, InsertTickLogRangeToKvrocks_Throws_ReturnsFalse) {
+    EXPECT_CALL(mockKvrocks, hmset(std::string("tick_log_range:1"), _, _))
+        .WillOnce(testing::Throw(sw::redis::Error("fail")));
+    long long start = 5, len = 10;
+    EXPECT_FALSE(db_insert_TickLogRange_to_kvrocks(1, start, len));
+}
+
+// ---------------------------------------------------------------------------
+// db_get_endepoch_log_range_info
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, GetEndepochLogRangeInfo_NoRedis_ReturnsFalse) {
+    db_inject_redis(nullptr, nullptr);
+    long long start, length;
+    LogRangesPerTxInTick lr{};
+    EXPECT_FALSE(db_get_endepoch_log_range_info(5, start, length, lr));
+}
+
+TEST_F(DbTest, GetEndepochLogRangeInfo_HmgetMissing_ReturnsFalse) {
+    EXPECT_CALL(mockRedis, hmget(std::string("end_epoch:tick_log_range:5"), _, _))
+        .WillOnce(testing::Invoke([](const std::string&, std::initializer_list<std::string>,
+                                     std::back_insert_iterator<OptionalStringVec>) {}));
+    long long start, length;
+    LogRangesPerTxInTick lr{};
+    EXPECT_FALSE(db_get_endepoch_log_range_info(5, start, length, lr));
+}
+
+TEST_F(DbTest, GetEndepochLogRangeInfo_LogRangesMissing_ReturnsFalse) {
+    EXPECT_CALL(mockRedis, hmget(std::string("end_epoch:tick_log_range:5"), _, _))
+        .WillOnce(testing::Invoke([](const std::string&, std::initializer_list<std::string>,
+                                     std::back_insert_iterator<OptionalStringVec> out) {
+            *out++ = std::string("100");
+            *out++ = std::string("50");
+        }));
+    EXPECT_CALL(mockRedis, get(std::string("end_epoch:log_ranges:5")))
+        .WillOnce(Return(sw::redis::OptionalString{}));
+    long long start, length;
+    LogRangesPerTxInTick lr{};
+    EXPECT_FALSE(db_get_endepoch_log_range_info(5, start, length, lr));
+}
+
+TEST_F(DbTest, GetEndepochLogRangeInfo_Success) {
+    LogRangesPerTxInTick expectedLr{};
+    memset(&expectedLr, 0, sizeof(expectedLr));
+    expectedLr.fromLogId[0] = 100;
+    expectedLr.length[0]    = 50;
+    std::string lrBlob(reinterpret_cast<char*>(&expectedLr), sizeof(LogRangesPerTxInTick));
+
+    EXPECT_CALL(mockRedis, hmget(std::string("end_epoch:tick_log_range:5"), _, _))
+        .WillOnce(testing::Invoke([](const std::string&, std::initializer_list<std::string>,
+                                     std::back_insert_iterator<OptionalStringVec> out) {
+            *out++ = std::string("100");
+            *out++ = std::string("50");
+        }));
+    EXPECT_CALL(mockRedis, get(std::string("end_epoch:log_ranges:5")))
+        .WillOnce(Return(sw::redis::OptionalString(lrBlob)));
+
+    long long start = 0, length = 0;
+    LogRangesPerTxInTick lr{};
+    EXPECT_TRUE(db_get_endepoch_log_range_info(5, start, length, lr));
+    EXPECT_EQ(start,  100LL);
+    EXPECT_EQ(length,  50LL);
+    EXPECT_EQ(lr.fromLogId[0], 100LL);
+    EXPECT_EQ(lr.length[0],     50LL);
+}
