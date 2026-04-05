@@ -319,10 +319,11 @@ bool db_try_get_log_range_for_tick(uint32_t tick, long long& fromLogId, long lon
     fromLogId = -1;
     length = -1;
 
-    auto fetchFromDB = [&](sw::redis::Redis* db) -> bool {
+    const std::string key = "tick_log_range:" + std::to_string(tick);
+
+    auto tryFetch = [&](IRedis* db) -> bool {
         if (!db) return false;
         try {
-            const std::string key = "tick_log_range:" + std::to_string(tick);
             std::vector<sw::redis::Optional<std::string>> vals;
             db->hmget(key, {"fromLogId", "length"}, std::back_inserter(vals));
             if (vals.size() == 2 && vals[0] && vals[1]) {
@@ -334,7 +335,7 @@ bool db_try_get_log_range_for_tick(uint32_t tick, long long& fromLogId, long lon
                     return true;
                 }
                 fromLogId = min_id;
-                length = len; // length already stored as (max_log_id - min_log_id)
+                length = len;
                 return true;
             }
             return false;
@@ -347,8 +348,8 @@ bool db_try_get_log_range_for_tick(uint32_t tick, long long& fromLogId, long lon
         }
     };
 
-    if (g_redis && fetchFromDB(g_redis->getPtr())) return true;
-    if (g_kvrocks && fetchFromDB(g_kvrocks->getPtr())) return true;
+    if (tryFetch(g_redis)) return true;
+    if (tryFetch(g_kvrocks)) return true;
 
     return false;
 }

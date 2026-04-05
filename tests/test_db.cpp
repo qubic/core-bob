@@ -1120,8 +1120,6 @@ TEST_F(DbTest, TryGetLogRanges_NotInRedis_FallsBackToKvrocks_NotFound) {
 }
 // ---------------------------------------------------------------------------
 // Cannot test (require real Redis/Kvrocks or complex internal state):
-// - db_insert_log_range (calls isArrayZero and logRange.getMinMax from structs.h)
-// - db_try_get_log_ranges (falls through to db_get_cLogRange_from_kvrocks which requires zstd)
 // - db_try_get_log_range_for_tick (uses getPtr() raw Redis* pointer internally)
 // - db_try_get_log / db_try_get_logs (requires valid LogEvent with packed header)
 // - db_get_logs_by_tick_range (depends on db_try_get_log_range_for_tick and LogEvent internals)
