@@ -1589,9 +1589,132 @@ TEST_F(DbTest, IsTickEmpty_NotEnoughConsensus_NotEnoughData) {
 }
 
 // ---------------------------------------------------------------------------
+// db_try_to_get_votes
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, TryToGetVotes_NoRedisNoKvrocks_ReturnsEmpty) {
+    db_inject_redis(nullptr, nullptr);
+    auto result = db_try_to_get_votes(1);
+    EXPECT_TRUE(result.empty());
+}
+
+TEST_F(DbTest, TryToGetVotes_FoundInRedis_ReturnsVotes) {
+    constexpr uint32_t tick = 10;
+    std::vector<std::string> blobs;
+    for (int i = 0; i < 3; ++i)
+        blobs.push_back(makeVoteBlob(tick, static_cast<uint16_t>(i), 24, 1, 15, 10, 0, 0));
+    injectVotes(mockRedis, blobs);
+
+    auto result = db_try_to_get_votes(tick);
+    EXPECT_EQ(result.size(), 3u);
+}
+
+TEST_F(DbTest, TryToGetVotes_RedisEmpty_FallsBackToKvrocks_NotFound) {
+    injectVotes(mockRedis, {});
+    EXPECT_CALL(mockKvrocks, get(std::string("vtick:10"))).WillOnce(Return(sw::redis::OptionalString{}));
+    auto result = db_try_to_get_votes(10);
+    EXPECT_TRUE(result.empty());
+}
+
+// ---------------------------------------------------------------------------
+// db_try_get_tick_vote
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, TryGetTickVote_NoRedis_ReturnsEmpty) {
+    db_inject_redis(nullptr, nullptr);
+    auto result = db_try_get_tick_vote(1);
+    EXPECT_TRUE(result.empty());
+}
+
+TEST_F(DbTest, TryGetTickVote_FoundInRedis_ReturnsVotes) {
+    constexpr uint32_t tick = 20;
+    std::vector<std::string> blobs;
+    for (int i = 0; i < 5; ++i)
+        blobs.push_back(makeVoteBlob(tick, static_cast<uint16_t>(i), 24, 1, 15, 10, 0, 0));
+    injectVotes(mockRedis, blobs);
+
+    auto result = db_try_get_tick_vote(tick);
+    EXPECT_EQ(result.size(), 5u);
+    for (const auto& v : result)
+        EXPECT_EQ(v.tick, tick);
+}
+
+TEST_F(DbTest, TryGetTickVote_RedisEmpty_FallsBackToKvrocks_NotFound) {
+    injectVotes(mockRedis, {});
+    EXPECT_CALL(mockKvrocks, get(std::string("vtick:20"))).WillOnce(Return(sw::redis::OptionalString{}));
+    auto result = db_try_get_tick_vote(20);
+    EXPECT_TRUE(result.empty());
+}
+
+// ---------------------------------------------------------------------------
+// db_insert_vtick_to_kvrocks / db_get_vtick_from_kvrocks
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, InsertVtickToKvrocks_NoKvrocks_ReturnsFalse) {
+    db_inject_redis(&mockRedis, nullptr);
+    FullTickStruct fts{};
+    std::vector<char> buf;
+    EXPECT_FALSE(db_insert_vtick_to_kvrocks(1, fts, buf));
+}
+
+TEST_F(DbTest, InsertVtickToKvrocks_Success) {
+    EXPECT_CALL(mockKvrocks, set(std::string("vtick:42"), _, _)).Times(1);
+    FullTickStruct fts{};
+    std::vector<char> buf;
+    EXPECT_TRUE(db_insert_vtick_to_kvrocks(42, fts, buf));
+    EXPECT_FALSE(buf.empty());
+}
+
+TEST_F(DbTest, GetVtickFromKvrocks_NoKvrocks_ReturnsFalse) {
+    db_inject_redis(&mockRedis, nullptr);
+    FullTickStruct out{};
+    EXPECT_FALSE(db_get_vtick_from_kvrocks(42, out));
+}
+
+TEST_F(DbTest, GetVtickFromKvrocks_NotFound_ReturnsFalse) {
+    EXPECT_CALL(mockKvrocks, get(std::string("vtick:42"))).WillOnce(Return(sw::redis::OptionalString{}));
+    FullTickStruct out{};
+    EXPECT_FALSE(db_get_vtick_from_kvrocks(42, out));
+}
+
+TEST_F(DbTest, InsertAndGetVtick_RoundTrip) {
+    FullTickStruct original{};
+    original.td.tick = 42;
+    original.tv[0].tick = 42;
+    original.tv[0].computorIndex = 7;
+
+    std::string compressed;
+
+    EXPECT_CALL(mockKvrocks, set(std::string("vtick:42"), _, _))
+        .WillOnce(testing::Invoke([&compressed](
+            const std::string&,
+            sw::redis::StringView val,
+            std::chrono::seconds) {
+            compressed = std::string(val.data(), val.size());
+        }));
+
+    std::vector<char> buf;
+    EXPECT_TRUE(db_insert_vtick_to_kvrocks(42, original, buf));
+
+    EXPECT_CALL(mockKvrocks, get(std::string("vtick:42")))
+        .WillOnce(Return(sw::redis::OptionalString(compressed)));
+
+    FullTickStruct out{};
+    EXPECT_TRUE(db_get_vtick_from_kvrocks(42, out));
+    EXPECT_EQ(out.td.tick, 42u);
+    EXPECT_EQ(out.tv[0].tick, 42u);
+    EXPECT_EQ(out.tv[0].computorIndex, 7u);
+}
+
+TEST_F(DbTest, GetVtickFromKvrocks_CorruptData_ReturnsFalse) {
+    EXPECT_CALL(mockKvrocks, get(std::string("vtick:42")))
+        .WillOnce(Return(sw::redis::OptionalString("not_valid_zstd_data")));
+    FullTickStruct out{};
+    EXPECT_FALSE(db_get_vtick_from_kvrocks(42, out));
+}
+
+// ---------------------------------------------------------------------------
 // Cannot test (require real Redis/Kvrocks or complex internal state):
-// - db_get_quorum_unixtime_from_votes (depends on db_try_to_get_votes + timegm)
-// - db_is_tick_empty (depends on db_try_to_get_votes + m256i)
 // - db_try_to_get_votes (depends on db_get_tick_votes_from_vtick -> db_get_vtick_from_kvrocks -> zstd)
 // - db_try_get_tick_vote (same zstd/vtick dependency)
 // - db_insert_vtick_to_kvrocks / db_get_vtick_from_kvrocks (require zstd compression)
