@@ -825,7 +825,7 @@ TEST_F(DbTest, SetManyIndexedTx_NoKvrocks_ReturnsFalse) {
 TEST_F(DbTest, SetManyIndexedTx_UsesPipeline) {
     auto* rawPipe = new MockPipeline();
     EXPECT_CALL(*rawPipe, set(_, _, _)).WillRepeatedly(testing::ReturnRef(*rawPipe));
-    EXPECT_CALL(*rawPipe, execute()).Times(1);
+    EXPECT_CALL(*rawPipe, exec()).Times(1);
     EXPECT_CALL(mockKvrocks, pipeline()).WillOnce(Return(std::unique_ptr<IPipeline>(rawPipe)));
 
     std::vector<std::tuple<std::string, int, long long, long long, uint64_t, bool>> list = {
@@ -924,7 +924,7 @@ TEST_F(DbTest, AddManyTransactionsToKvrocks_SizeMismatch_ReturnsFalse) {
 TEST_F(DbTest, AddManyTransactionsToKvrocks_UsesPipeline) {
     auto* rawPipe = new MockPipeline();
     EXPECT_CALL(*rawPipe, set(_, _, _)).WillRepeatedly(testing::ReturnRef(*rawPipe));
-    EXPECT_CALL(*rawPipe, execute()).Times(1);
+    EXPECT_CALL(*rawPipe, exec()).Times(1);
     EXPECT_CALL(mockKvrocks, pipeline()).WillOnce(Return(std::unique_ptr<IPipeline>(rawPipe)));
 
     std::vector<std::string> keys = {"k1"};
@@ -958,11 +958,6 @@ TEST_F(DbTest, MoveLogsToKvrocksByRange_LogMissingInRedis_ReturnsFalse) {
 // ---------------------------------------------------------------------------
 
 TEST_F(DbTest, GetEndEpochLogRange_Found) {
-    EXPECT_CALL(mockRedis, hmget("end_epoch:tick_log_range:5", std::initializer_list<std::string>{"fromLogId", "length"}, _))
-        .WillOnce(testing::Invoke([](const std::string&, std::initializer_list<std::string>, std::back_insert_iterator<OptionalStringVec> out) {
-            *out++ = std::string("100");
-            *out++ = std::string("50");
-        }));
     long long from, len;
     EXPECT_TRUE(db_get_end_epoch_log_range(5, from, len));
     EXPECT_EQ(from, 100LL);
