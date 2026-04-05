@@ -6,6 +6,7 @@
 #include "database/db_redis_iface.h"
 
 #include "K12AndKeyUtil.h"
+#include "LogEvent.h"
 using ::testing::_;
 using ::testing::Return;
 using ::testing::DoAll;
@@ -1195,9 +1196,134 @@ TEST_F(DbTest, TryGetLogRangeForTick_RedisThrows_ReturnsFalse) {
     EXPECT_FALSE(db_try_get_log_range_for_tick(5, from, len));
 }
 
+namespace {
+    std::string makeLogBlob(uint16_t epoch, uint32_t tick, uint64_t logId, uint32_t bodySize = 0) {
+        std::vector<uint8_t> buf(LogEvent::PackedHeaderSize + bodySize, 0);
+
+        memcpy(buf.data() + 0,  &epoch,  sizeof(epoch));
+        memcpy(buf.data() + 2,  &tick,   sizeof(tick));
+
+        uint32_t combo = (bodySize & 0x00FFFFFFu);
+        memcpy(buf.data() + 6,  &combo,  sizeof(combo));
+        memcpy(buf.data() + 10, &logId,  sizeof(logId));
+
+        uint64_t digest = 0;
+        if (bodySize > 0) {
+            KangarooTwelve(buf.data() + LogEvent::PackedHeaderSize, bodySize, reinterpret_cast<uint8_t*>(&digest), 8);
+        }
+        memcpy(buf.data() + 18, &digest, sizeof(digest));
+
+        return std::string(reinterpret_cast<char*>(buf.data()), buf.size());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// db_try_get_logs
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, TryGetLogs_NoRedis_ReturnsEmpty) {
+    db_inject_redis(nullptr, nullptr);
+    auto result = db_try_get_logs(1, 0, 2);
+    EXPECT_TRUE(result.empty());
+}
+
+TEST_F(DbTest, TryGetLogs_EmptyRange_ReturnsEmpty) {
+    auto result = db_try_get_logs(1, 5, 4);
+    EXPECT_TRUE(result.empty());
+}
+
+TEST_F(DbTest, TryGetLogs_AllMissingInBothStores_ReturnsEmpty) {
+    EXPECT_CALL(mockRedis,   get(std::string("log:1:0"))).WillOnce(Return(sw::redis::OptionalString{}));
+    EXPECT_CALL(mockKvrocks, get(std::string("log:1:0"))).WillOnce(Return(sw::redis::OptionalString{}));
+    EXPECT_CALL(mockRedis,   get(std::string("log:1:1"))).WillOnce(Return(sw::redis::OptionalString{}));
+    EXPECT_CALL(mockKvrocks, get(std::string("log:1:1"))).WillOnce(Return(sw::redis::OptionalString{}));
+
+    auto result = db_try_get_logs(1, 0, 1);
+    EXPECT_TRUE(result.empty());
+}
+
+TEST_F(DbTest, TryGetLogs_ValidLogs_ReturnsAll) {
+    const uint16_t epoch  = 2;
+    const uint64_t logId0 = 10;
+    const uint64_t logId1 = 11;
+    const uint32_t tick   = 99;
+
+    EXPECT_CALL(mockRedis, get(std::string("log:2:10")))
+        .WillOnce(Return(sw::redis::OptionalString(makeLogBlob(epoch, tick, logId0))));
+    EXPECT_CALL(mockRedis, get(std::string("log:2:11")))
+        .WillOnce(Return(sw::redis::OptionalString(makeLogBlob(epoch, tick, logId1))));
+
+    auto result = db_try_get_logs(epoch, logId0, logId1);
+    EXPECT_EQ(result.size(), 2u);
+    EXPECT_EQ(result[0].getLogId(), logId0);
+    EXPECT_EQ(result[1].getLogId(), logId1);
+    EXPECT_EQ(result[0].getEpoch(), epoch);
+    EXPECT_EQ(result[1].getEpoch(), epoch);
+}
+
+TEST_F(DbTest, TryGetLogs_PartialMissing_ReturnsOnlyFound) {
+    const uint16_t epoch = 3;
+
+    EXPECT_CALL(mockRedis, get(std::string("log:3:7")))
+        .WillOnce(Return(sw::redis::OptionalString(makeLogBlob(epoch, 50, 7))));
+    EXPECT_CALL(mockRedis,   get(std::string("log:3:8"))).WillOnce(Return(sw::redis::OptionalString{}));
+    EXPECT_CALL(mockKvrocks, get(std::string("log:3:8"))).WillOnce(Return(sw::redis::OptionalString{}));
+
+    auto result = db_try_get_logs(epoch, 7, 8);
+    EXPECT_EQ(result.size(), 1u);
+    EXPECT_EQ(result[0].getLogId(), 7ull);
+}
+
+TEST_F(DbTest, TryGetLogs_WrongEpochInBlob_Skipped) {
+    const uint16_t epoch       = 4;
+    const uint16_t wrongEpoch  = 5;
+
+    EXPECT_CALL(mockRedis, get(std::string("log:4:20")))
+        .WillOnce(Return(sw::redis::OptionalString(makeLogBlob(wrongEpoch, 10, 20))));
+    EXPECT_CALL(mockKvrocks, get(std::string("log:4:20")))
+        .WillOnce(Return(sw::redis::OptionalString{}));
+
+    auto result = db_try_get_logs(epoch, 20, 20);
+    EXPECT_TRUE(result.empty());
+}
+
+TEST_F(DbTest, TryGetLogs_WrongLogIdInBlob_Skipped) {
+    const uint16_t epoch = 4;
+
+    EXPECT_CALL(mockRedis, get(std::string("log:4:20")))
+        .WillOnce(Return(sw::redis::OptionalString(makeLogBlob(epoch, 10, 99))));
+    EXPECT_CALL(mockKvrocks, get(std::string("log:4:20")))
+        .WillOnce(Return(sw::redis::OptionalString{}));
+
+    auto result = db_try_get_logs(epoch, 20, 20);
+    EXPECT_TRUE(result.empty());
+}
+
+TEST_F(DbTest, TryGetLogs_TooSmallBlob_Skipped) {
+    EXPECT_CALL(mockRedis, get(std::string("log:1:0")))
+        .WillOnce(Return(sw::redis::OptionalString("tiny")));
+    EXPECT_CALL(mockKvrocks, get(std::string("log:1:0")))
+        .WillOnce(Return(sw::redis::OptionalString{}));
+
+    auto result = db_try_get_logs(1, 0, 0);
+    EXPECT_TRUE(result.empty());
+}
+
+TEST_F(DbTest, TryGetLogs_FallsBackToKvrocks) {
+    const uint16_t epoch = 5;
+    const uint64_t logId = 30;
+
+    EXPECT_CALL(mockRedis,   get(std::string("log:5:30"))).WillOnce(Return(sw::redis::OptionalString{}));
+    EXPECT_CALL(mockKvrocks, get(std::string("log:5:30")))
+        .WillOnce(Return(sw::redis::OptionalString(makeLogBlob(epoch, 10, logId))));
+
+    auto result = db_try_get_logs(epoch, logId, logId);
+    EXPECT_EQ(result.size(), 1u);
+    EXPECT_EQ(result[0].getLogId(), logId);
+}
+
 // ---------------------------------------------------------------------------
 // Cannot test (require real Redis/Kvrocks or complex internal state):
-// - db_try_get_log / db_try_get_logs (requires valid LogEvent with packed header)
 // - db_get_logs_by_tick_range (depends on db_try_get_log_range_for_tick and LogEvent internals)
 // - db_get_quorum_unixtime_from_votes (depends on db_try_to_get_votes + timegm)
 // - db_is_tick_empty (depends on db_try_to_get_votes + m256i)
