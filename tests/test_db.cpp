@@ -1049,6 +1049,76 @@ TEST_F(DbTest, InsertTransaction_RedisThrows_ReturnsFalse) {
 }
 
 // ---------------------------------------------------------------------------
+// db_insert_log_range
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, InsertLogRange_NoRedis_ReturnsFalse) {
+    db_inject_redis(nullptr, nullptr);
+    LogRangesPerTxInTick lr{};
+    EXPECT_FALSE(db_insert_log_range(10, lr));
+}
+
+TEST_F(DbTest, InsertLogRange_AllZero_ReturnsFalse) {
+    LogRangesPerTxInTick lr{};
+    memset(&lr, 0, sizeof(lr));
+    EXPECT_FALSE(db_insert_log_range(10, lr));
+}
+
+TEST_F(DbTest, InsertLogRange_ValidData_CallsSetAndHmset) {
+    LogRangesPerTxInTick lr{};
+    memset(&lr, 0, sizeof(lr));
+    lr.fromLogId[0] = 5;
+    lr.length[0]    = 3;
+
+    EXPECT_CALL(mockRedis, set(std::string("log_ranges:10"), _, std::chrono::milliseconds(0), sw::redis::UpdateType::NOT_EXIST)).Times(1);
+    EXPECT_CALL(mockRedis, hmset(std::string("tick_log_range:10"), _, _)).Times(1);
+    EXPECT_TRUE(db_insert_log_range(10, lr));
+}
+
+TEST_F(DbTest, InsertLogRange_RedisThrows_ReturnsFalse) {
+    LogRangesPerTxInTick lr{};
+    memset(&lr, 0, sizeof(lr));
+    lr.fromLogId[0] = 5;
+    lr.length[0]    = 3;
+
+    EXPECT_CALL(mockRedis, set(_, _, std::chrono::milliseconds(0), sw::redis::UpdateType::NOT_EXIST))
+        .WillOnce(testing::Throw(sw::redis::Error("fail")));
+    EXPECT_FALSE(db_insert_log_range(10, lr));
+}
+
+// ---------------------------------------------------------------------------
+// db_try_get_log_ranges
+// ---------------------------------------------------------------------------
+
+TEST_F(DbTest, TryGetLogRanges_NoRedisNoKvrocks_ReturnsFalse) {
+    db_inject_redis(nullptr, nullptr);
+    LogRangesPerTxInTick lr{};
+    EXPECT_FALSE(db_try_get_log_ranges(10, lr));
+}
+
+TEST_F(DbTest, TryGetLogRanges_FoundInRedis) {
+    LogRangesPerTxInTick expected{};
+    memset(&expected, 0, sizeof(expected));
+    expected.fromLogId[0] = 10;
+    expected.length[0]    = 5;
+
+    std::string raw(reinterpret_cast<char*>(&expected), sizeof(LogRangesPerTxInTick));
+    EXPECT_CALL(mockRedis, get(std::string("log_ranges:10"))).WillOnce(Return(sw::redis::OptionalString(raw)));
+
+    LogRangesPerTxInTick out{};
+    EXPECT_TRUE(db_try_get_log_ranges(10, out));
+    EXPECT_EQ(out.fromLogId[0], 10LL);
+    EXPECT_EQ(out.length[0],    5LL);
+}
+
+TEST_F(DbTest, TryGetLogRanges_NotInRedis_FallsBackToKvrocks_NotFound) {
+    EXPECT_CALL(mockRedis,   get(std::string("log_ranges:10"))).WillOnce(Return(sw::redis::OptionalString{}));
+    EXPECT_CALL(mockKvrocks, get(std::string("cLogRange:10"))).WillOnce(Return(sw::redis::OptionalString{}));
+
+    LogRangesPerTxInTick out{};
+    EXPECT_FALSE(db_try_get_log_ranges(10, out));
+}
+// ---------------------------------------------------------------------------
 // Cannot test (require real Redis/Kvrocks or complex internal state):
 // - db_insert_log_range (calls isArrayZero and logRange.getMinMax from structs.h)
 // - db_try_get_log_ranges (falls through to db_get_cLogRange_from_kvrocks which requires zstd)
