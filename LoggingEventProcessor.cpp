@@ -234,6 +234,7 @@ bool processSendToManyBenchmark(LogEvent& le)
             output.total += 1;
         }
     }
+    return true;
 }
 
 bool processDistributeDividends(std::vector<LogEvent>& vle)
@@ -1004,7 +1005,6 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
 {
     auto idleBackoff = 1;
     uint64_t lastRequestMs = 0;
-    uint32_t lastRequestTick = 0;
     int64_t lastRequestLogid = -1;
     uint32_t stallTick = 0;
     uint64_t stallStartMs = 0;
