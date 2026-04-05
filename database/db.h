@@ -528,3 +528,10 @@ bool db_get_endepoch_log_range_info(const uint16_t epoch, long long &start, long
 
 bool db_copy(const std::string &key1, const std::string &key2);
 bool db_hcopy(const std::string &key1, const std::string &key2);
+
+#ifdef GTEST
+struct IRedis;
+/// Inject mock Redis/Kvrocks instances for unit testing.
+/// Call with (nullptr, nullptr) in TearDown to reset state.
+void db_inject_redis(IRedis* redis, IRedis* kvrocks);
+#endif

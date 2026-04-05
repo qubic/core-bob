@@ -169,9 +169,10 @@ target_link_libraries(pop10 PRIVATE bob_lib)
 enable_testing()
 include(GoogleTest)
 include_directories(${CMAKE_SOURCE_DIR}/)
-file(GLOB TEST_FILES "tests/*.cpp")
+file(GLOB TEST_FILES "tests/*.cpp" database/db.cpp)
 add_executable(bob_tests ${TEST_FILES})
-target_link_libraries(bob_tests PRIVATE bob_lib gtest_main redis++_static hiredis spdlog::spdlog)
+target_link_libraries(bob_tests PRIVATE bob_lib gtest_main gmock redis++_static hiredis spdlog::spdlog)
+target_compile_definitions(bob_tests PRIVATE GTEST)
 gtest_discover_tests(bob_tests)
 
 # Copy configuration file after building bob
