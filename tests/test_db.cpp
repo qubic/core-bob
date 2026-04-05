@@ -5,6 +5,7 @@
 #include "database/db.h"
 #include "database/db_redis_iface.h"
 
+#include "K12AndKeyUtil.h"
 using ::testing::_;
 using ::testing::Return;
 using ::testing::DoAll;
@@ -959,6 +960,11 @@ TEST_F(DbTest, MoveLogsToKvrocksByRange_LogMissingInRedis_ReturnsFalse) {
 
 TEST_F(DbTest, GetEndEpochLogRange_Found) {
     long long from, len;
+    EXPECT_CALL(mockRedis, hmget("end_epoch:tick_log_range:5", _, _))
+        .WillOnce(testing::Invoke([](const std::string&, std::initializer_list<std::string>, std::back_insert_iterator<OptionalStringVec> out) {
+            *out++ = std::string("100");
+            *out++ = std::string("50");
+        }));
     EXPECT_TRUE(db_get_end_epoch_log_range(5, from, len));
     EXPECT_EQ(from, 100LL);
     EXPECT_EQ(len, 50LL);
@@ -1012,9 +1018,38 @@ TEST_F(DbTest, SearchLog_AllWildcardNoLogType_CallsZrangebyscore) {
     db_search_log(1, 0xffffffff, 0, 100, std::string(WILDCARD), std::string(WILDCARD), std::string(WILDCARD));
 }
 
+TEST_F(DbTest, InsertTransaction_NoRedis_ReturnsFalse) {
+    db_inject_redis(nullptr, nullptr);
+    Transaction tx{};
+    tx.inputSize = 0;
+    EXPECT_FALSE(db_insert_transaction(&tx));
+}
+
+TEST_F(DbTest, InsertTransaction_Success) {
+    size_t tx_size = sizeof(Transaction) + SIGNATURE_SIZE;
+    std::vector<uint8_t> buf(tx_size, 0);
+    Transaction* tx = reinterpret_cast<Transaction*>(buf.data());
+    tx->inputSize = 0;
+
+    char expectedHash[64] = {0};
+    getQubicHash(buf.data(), tx_size, expectedHash);
+    std::string expectedKey = "transaction:" + std::string(expectedHash);
+
+    EXPECT_CALL(mockRedis, set(expectedKey, _, std::chrono::milliseconds(0), sw::redis::UpdateType::NOT_EXIST)).Times(1);
+    EXPECT_TRUE(db_insert_transaction(tx));
+}
+
+TEST_F(DbTest, InsertTransaction_RedisThrows_ReturnsFalse) {
+    Transaction tx{};
+    tx.inputSize = 0;
+
+    EXPECT_CALL(mockRedis, set(_, _, std::chrono::milliseconds(0), sw::redis::UpdateType::NOT_EXIST))
+        .WillOnce(testing::Throw(sw::redis::Error("fail")));
+    EXPECT_FALSE(db_insert_transaction(&tx));
+}
+
 // ---------------------------------------------------------------------------
 // Cannot test (require real Redis/Kvrocks or complex internal state):
-// - db_insert_transaction (calls getQubicHash which is a real crypto function)
 // - db_insert_log_range (calls isArrayZero and logRange.getMinMax from structs.h)
 // - db_try_get_log_ranges (falls through to db_get_cLogRange_from_kvrocks which requires zstd)
 // - db_try_get_log_range_for_tick (uses getPtr() raw Redis* pointer internally)
