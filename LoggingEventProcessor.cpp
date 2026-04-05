@@ -22,16 +22,9 @@
 #include "RESTAPI/QubicSubscriptionManager.h"
 
 using namespace std::chrono_literals;
-extern "C" {
-    // declare for xkcp
-int KT128(const unsigned char *input, size_t inputByteLen,
-          unsigned char *output, size_t outputByteLen,
-          const unsigned char *customization, size_t customByteLen);
-}
 
 static void KangarooTwelve64To32(void* input, void* output)
 {
-//    KT128((uint8_t*)input, 64, (uint8_t*)output, 32, nullptr, 0);
     KangarooTwelve((uint8_t*)input, 64, (uint8_t*)output, 32);
 }
 

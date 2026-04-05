@@ -153,16 +153,10 @@ SET(FILES
 		${CMAKE_SOURCE_DIR}/RESTAPI/QubicRpcHandler.cpp
 )
 
-add_library(XKCP_avx2 STATIC XKCP/KangarooTwelve.c
-		XKCP/KeccakP-1600-AVX2.s
-		XKCP/KeccakP-1600-times4-AVX2.c
-		                     XKCP/TurboSHAKE.c
-)
-
 # Create a library from the source files to be shared between the main executable and tests
 add_library(bob_lib STATIC ${FILES})
 target_link_libraries(bob_lib PRIVATE redis++_static hiredis spdlog::spdlog cxxopts::cxxopts
-		${ZSTD_TARGET} XKCP_avx2 drogon ${JSONCPP_TARGET})
+		${ZSTD_TARGET} drogon ${JSONCPP_TARGET})
 
 
 # --- Executable and Linking ---
@@ -177,7 +171,7 @@ include(GoogleTest)
 include_directories(${CMAKE_SOURCE_DIR}/)
 file(GLOB TEST_FILES "tests/*.cpp")
 add_executable(bob_tests ${TEST_FILES})
-target_link_libraries(bob_tests PRIVATE XKCP_avx2 bob_lib gtest_main redis++_static hiredis spdlog::spdlog)
+target_link_libraries(bob_tests PRIVATE bob_lib gtest_main redis++_static hiredis spdlog::spdlog)
 gtest_discover_tests(bob_tests)
 
 # Copy configuration file after building bob
