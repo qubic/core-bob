@@ -342,18 +342,6 @@ bool db_get_tick_vote(uint32_t tick, uint16_t computorIndex, TickVote& vote);
 bool db_get_tick_votes(uint32_t tick, std::vector<TickVote>& votes);
 
 /**
- * Count the number of transactions for a specific tick.
- *
- * Parameters
- * - tick: Target tick
- *
- * Return Value
- * - >= 0 transaction count
- * - -1 on error
- */
-long long db_get_tick_transaction_count(uint32_t tick);
-
-/**
  * Retrieve log events within an epoch and tick range [start_tick, end_tick].
  *
  * Parameters
@@ -489,8 +477,6 @@ bool db_get_end_epoch_log_range(uint16_t epoch, long long &fromLogId, long long 
 void db_kvrocks_connect(const std::string &connectionString);
 
 // functions for persistant on disk layer
-bool cleanRawTick(uint32_t fromTick, uint32_t toTick, bool withTransactions);
-bool cleanTransactionLogs(uint32_t tick);
 
 bool db_insert_vtick_to_kvrocks(uint32_t tick, const FullTickStruct& fullTick, std::vector<char>& buffer);
 bool db_get_vtick_from_kvrocks(uint32_t tick, FullTickStruct& outFullTick);

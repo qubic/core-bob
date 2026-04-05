@@ -1854,3 +1854,9 @@ TEST_F(DbTest, GetEndepochLogRangeInfo_Success) {
     EXPECT_EQ(lr.fromLogId[0], 100LL);
     EXPECT_EQ(lr.length[0],     50LL);
 }
+
+TEST_F(DbTest, CLogRangeKvrocks_NoKvrocks_ReturnsFalseForGet) {
+    db_inject_redis(&mockRedis, nullptr);
+    LogRangesPerTxInTick out{};
+    EXPECT_FALSE(db_get_cLogRange_from_kvrocks(5, out));
+}
