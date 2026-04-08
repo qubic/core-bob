@@ -14,7 +14,7 @@
 #include <netinet/tcp.h>
 #include "database/db.h"
 #include "connection.h"
-#include "Logger.h"
+#include "spdlogDriver/Logger.h"
 #include "GlobalVar.h"
 #include "shim.h"
 static int do_connect(const char* nodeIp, int nodePort)

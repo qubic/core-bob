@@ -12,7 +12,7 @@
 #include <atomic>
 #include <optional>
 #include "drogon/WebSocketConnection.h"
-#include "LogEvent.h"
+#include "logEventCore/LogEvent.h"
 #include "structs.h"
 
 // Subscription types for Qubic API

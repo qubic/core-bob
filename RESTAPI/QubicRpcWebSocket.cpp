@@ -3,7 +3,7 @@
 #include "QubicRpcMethods.h"
 #include "QubicSubscriptionManager.h"
 #include "QubicRpcMapper.h"
-#include "Logger.h"
+#include "spdlogDriver/Logger.h"
 #include "shim.h"
 #include <sstream>
 

@@ -44,8 +44,8 @@
 #include <optional>
 #include <immintrin.h> // For m256i
 #include "structs.h"
-#include "Logger.h"
-#include "LogEvent.h"
+#include "spdlogDriver/Logger.h"
+#include "logEventCore/LogEvent.h"
 // Forward declaration for the Redis client
 namespace sw { namespace redis { class Redis; }}
 
@@ -342,29 +342,6 @@ bool db_get_tick_vote(uint32_t tick, uint16_t computorIndex, TickVote& vote);
 bool db_get_tick_votes(uint32_t tick, std::vector<TickVote>& votes);
 
 /**
- * Count the number of transactions for a specific tick.
- *
- * Parameters
- * - tick: Target tick
- *
- * Return Value
- * - >= 0 transaction count
- * - -1 on error
- */
-long long db_get_tick_transaction_count(uint32_t tick);
-
-/**
- * Retrieve all log events for a transaction hash.
- *
- * Parameters
- * - txHash: Transaction hash string in canonical representation
- *
- * Return Value
- * - Vector of LogEvent. Empty on failure or if none exist.
- */
-std::vector<LogEvent> db_get_logs_by_tx_hash(const std::string& txHash);
-
-/**
  * Retrieve log events within an epoch and tick range [start_tick, end_tick].
  *
  * Parameters
@@ -500,9 +477,6 @@ bool db_get_end_epoch_log_range(uint16_t epoch, long long &fromLogId, long long 
 void db_kvrocks_connect(const std::string &connectionString);
 
 // functions for persistant on disk layer
-void compressTickAndMoveToKVRocks(uint32_t tick);
-bool cleanRawTick(uint32_t fromTick, uint32_t toTick, bool withTransactions);
-bool cleanTransactionLogs(uint32_t tick);
 
 bool db_insert_vtick_to_kvrocks(uint32_t tick, const FullTickStruct& fullTick, std::vector<char>& buffer);
 bool db_get_vtick_from_kvrocks(uint32_t tick, FullTickStruct& outFullTick);
@@ -528,3 +502,10 @@ bool db_get_endepoch_log_range_info(const uint16_t epoch, long long &start, long
 
 bool db_copy(const std::string &key1, const std::string &key2);
 bool db_hcopy(const std::string &key1, const std::string &key2);
+
+#ifdef GTEST
+struct IRedis;
+/// Inject mock Redis/Kvrocks instances for unit testing.
+/// Call with (nullptr, nullptr) in TearDown to reset state.
+void db_inject_redis(IRedis* redis, IRedis* kvrocks);
+#endif

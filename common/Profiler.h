@@ -15,7 +15,7 @@
 // Optional Logger integration if available
 #ifdef __has_include
 #  if __has_include("Logger.h")
-#    include "Logger.h"
+#include "spdlogDriver/Logger.h"
 #    define PROFLOG_INFO(fmt, ...) Logger::get()->info(fmt, ##__VA_ARGS__)
 #    define PROFLOG_WARN(fmt, ...) Logger::get()->warn(fmt, ##__VA_ARGS__)
 #  else

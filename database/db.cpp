@@ -1,18 +1,41 @@
 #include "db.h"
-#include "sw/redis++/redis++.h"
+#include "db_redis_iface.h"
+
+#ifndef GTEST
+  #include "db_redis_real.h"
+#endif
+
 #include <stdexcept>
 #include <vector>
 #include <sstream>
 #include <iomanip>
 #include <future>
 #include "zstd.h" // zstd compression/decompression
-#include "Logger.h"
+#include "spdlogDriver/Logger.h"
 #include "K12AndKeyUtil.h"
 #include <cstdlib> // std::exit
 #include "shim.h"
-// Global Redis client handle
-static std::unique_ptr<sw::redis::Redis> g_redis = nullptr;
-static std::unique_ptr<sw::redis::Redis> g_kvrocks = nullptr;
+
+// --- connection handles --------------------------------------------------
+// Under GTEST these are plain observing pointers; ownership stays with the test.
+// In production RealRedis objects are heap-allocated and owned here.
+
+#ifdef GTEST
+static IRedis* g_redis   = nullptr;
+static IRedis* g_kvrocks = nullptr;
+
+/// Inject mock instances from a unit test. Pass nullptr to reset.
+void db_inject_redis(IRedis* redis, IRedis* kvrocks) {
+    g_redis   = redis;
+    g_kvrocks = kvrocks;
+}
+#else
+static std::unique_ptr<IRedis> g_redis_owner;
+static std::unique_ptr<IRedis> g_kvrocks_owner;
+static IRedis* g_redis   = nullptr;
+static IRedis* g_kvrocks = nullptr;
+#endif
+// -------------------------------------------------------------------------
 
 void db_connect(const std::string& connectionString) {
     if (g_redis) {
@@ -20,27 +43,32 @@ void db_connect(const std::string& connectionString) {
         return;
     }
     try {
-        // Ensure a Redis connection pool with 16 connections is used.
-        // redis++ supports configuring pool size via URI query parameter `pool_size`.
         std::string uri_with_pool = connectionString;
         if (uri_with_pool.find('?') == std::string::npos) {
             uri_with_pool += "?pool_size=32";
         } else {
             uri_with_pool += "&pool_size=32";
         }
-
-        g_redis = std::make_unique<sw::redis::Redis>(uri_with_pool);
+#ifndef GTEST
+        g_redis_owner = std::make_unique<RealRedis>(uri_with_pool);
+        g_redis       = g_redis_owner.get();
+#endif
         g_redis->ping();
     } catch (const sw::redis::Error& e) {
-        g_redis.reset();
+#ifndef GTEST
+        g_redis_owner.reset();
+#endif
+        g_redis = nullptr;
         throw std::runtime_error("Cannot connect to KeyDB: " + std::string(e.what()));
-        exit(1);
     }
     Logger::get()->trace("Connected to DB!");
 }
 
 void db_close() {
-    g_redis.reset();
+#ifndef GTEST
+    g_redis_owner.reset();
+#endif
+    g_redis = nullptr;
     Logger::get()->info("Closed keydb DB connections");
 }
 
@@ -291,10 +319,11 @@ bool db_try_get_log_range_for_tick(uint32_t tick, long long& fromLogId, long lon
     fromLogId = -1;
     length = -1;
 
-    auto fetchFromDB = [&](sw::redis::Redis* db) -> bool {
+    const std::string key = "tick_log_range:" + std::to_string(tick);
+
+    auto tryFetch = [&](IRedis* db) -> bool {
         if (!db) return false;
         try {
-            const std::string key = "tick_log_range:" + std::to_string(tick);
             std::vector<sw::redis::Optional<std::string>> vals;
             db->hmget(key, {"fromLogId", "length"}, std::back_inserter(vals));
             if (vals.size() == 2 && vals[0] && vals[1]) {
@@ -306,7 +335,7 @@ bool db_try_get_log_range_for_tick(uint32_t tick, long long& fromLogId, long lon
                     return true;
                 }
                 fromLogId = min_id;
-                length = len; // length already stored as (max_log_id - min_log_id)
+                length = len;
                 return true;
             }
             return false;
@@ -319,8 +348,8 @@ bool db_try_get_log_range_for_tick(uint32_t tick, long long& fromLogId, long lon
         }
     };
 
-    if (g_redis && fetchFromDB(g_redis.get())) return true;
-    if (g_kvrocks && fetchFromDB(g_kvrocks.get())) return true;
+    if (tryFetch(g_redis)) return true;
+    if (tryFetch(g_kvrocks)) return true;
 
     return false;
 }
@@ -371,7 +400,7 @@ return 0
 )lua";
         std::vector<std::string> keys = {"db_status"};
         std::vector<std::string> args = {std::to_string(tick), std::to_string(epoch)};
-        g_redis->eval<long long>(script, keys.begin(), keys.end(), args.begin(), args.end());
+        g_redis->eval_ll(script, keys.begin(), keys.end(), args.begin(), args.end());
     } catch (const sw::redis::Error& e) {
         Logger::get()->error("Redis error: {}\n", e.what());
         return false;
@@ -484,7 +513,7 @@ return 0
 )lua";
         std::vector<std::string> keys = {key};
         std::vector<std::string> args = {std::to_string(logId)};
-        g_redis->eval<long long>(script, keys.begin(), keys.end(), args.begin(), args.end());
+        g_redis->eval_ll(script, keys.begin(), keys.end(), args.begin(), args.end());
     } catch (const sw::redis::Error &e) {
         Logger::get()->error("Redis error: {}\n", e.what());
         return false;
@@ -525,7 +554,7 @@ return 0
 )lua";
         std::vector<std::string> keys = {"db_status"};
         std::vector<std::string> args = {std::to_string(tick)};
-        g_redis->eval<long long>(script, keys.begin(), keys.end(), args.begin(), args.end());
+        g_redis->eval_ll(script, keys.begin(), keys.end(), args.begin(), args.end());
         return true;
     } catch (const sw::redis::Error &e) {
         Logger::get()->error("Redis error in db_update_latest_verified_tick: {}\n", e.what());
@@ -636,7 +665,6 @@ std::vector<LogEvent> db_get_logs_by_tick_range(uint16_t epoch, uint32_t start_t
         // We rely on the aggregated range for each tick in [start_tick, end_tick].
         // For each tick, read tick_log_range:<tick> which stores (fromLogId, length) in the new compact format,
         // then fetch logs "log:<epoch>:<logId>" for that contiguous id range.
-        const std::size_t kChunkSize = 1024;
 
         for (uint32_t tick = start_tick; tick <= end_tick; ++tick) {
             long long fromLogId = -1;
@@ -1089,7 +1117,7 @@ return 0
 )lua";
         std::vector<std::string> keys = {"db_status"};
         std::vector<std::string> args = {std::to_string(tick)};
-        g_redis->eval<long long>(script, keys.begin(), keys.end(), args.begin(), args.end());
+        g_redis->eval_ll(script, keys.begin(), keys.end(), args.begin(), args.end());
         return true;
     } catch (const sw::redis::Error &e) {
         Logger::get()->error("Redis error in db_update_last_indexed_tick: {}\n", e.what());
@@ -1148,7 +1176,7 @@ bool db_add_many_indexer(const std::vector<std::string> &keys, uint32_t tickNumb
         // Create a proper vector for argv (can't use initializer list with iterators)
         std::vector<std::string> argv = {member, score, max_size};
 
-        g_kvrocks->eval<long long>(lua_script,
+        g_kvrocks->eval_ll(lua_script,
                                    keys.begin(), keys.end(),
                                    argv.begin(), argv.end());
 
@@ -1202,10 +1230,10 @@ bool db_set_many_indexed_tx(const std::vector<std::tuple<std::string, int, long 
             };
 
             sw::redis::StringView val(reinterpret_cast<const char*>(&data), sizeof(data));
-            pipe.set(key, val, std::chrono::seconds(gKvrocksTTL));
+            pipe->set(key, val, std::chrono::seconds(gKvrocksTTL));
         }
 
-        pipe.exec();
+        pipe->exec();
         return true;
     } catch (const sw::redis::Error& e) {
         Logger::get()->error("Redis error in db_set_many_indexed_tx: {}", e.what());
@@ -1412,11 +1440,11 @@ bool db_add_many_transactions_to_kvrocks(const std::vector<std::string>& txKeys,
 
             sw::redis::StringView view(txVal[i]->data(), txVal[i]->size());
 
-            pipe.set(txKeys[i], view, std::chrono::seconds(gKvrocksTTL));
+            pipe->set(txKeys[i], view, std::chrono::seconds(gKvrocksTTL));
         }
 
         // Execute all commands in the pipeline
-        pipe.exec();
+        pipe->exec();
 
         return true;
     } catch (const sw::redis::Error &e) {
@@ -1831,19 +1859,26 @@ void db_kvrocks_connect(const std::string &connectionString) {
         } else {
             uri_with_pool += "&pool_size=32";
         }
-
-        g_kvrocks = std::make_unique<sw::redis::Redis>(uri_with_pool);
+#ifndef GTEST
+        g_kvrocks_owner = std::make_unique<RealRedis>(uri_with_pool);
+        g_kvrocks       = g_kvrocks_owner.get();
+#endif
         g_kvrocks->ping();
     } catch (const sw::redis::Error &e) {
-        g_kvrocks.reset();
+#ifndef GTEST
+        g_kvrocks_owner.reset();
+#endif
+        g_kvrocks = nullptr;
         throw std::runtime_error("Cannot connect to Kvrocks: " + std::string(e.what()));
-        exit(1);
     }
     Logger::get()->trace("Connected to Kvrocks!");
 }
 
 void db_kvrocks_close() {
-    g_kvrocks.reset();
+#ifndef GTEST
+    g_kvrocks_owner.reset();
+#endif
+    g_kvrocks = nullptr;
     Logger::get()->info("Closed kvrocks DB connections");
 }
 

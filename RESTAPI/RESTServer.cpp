@@ -19,7 +19,7 @@
 #include <sstream>
 
 #include "bob.h"
-#include "Logger.h"
+#include "spdlogDriver/Logger.h"
 #include "shim.h"
 #include "database/db.h"
 #include "ApiHelpers.h"

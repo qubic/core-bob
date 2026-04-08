@@ -2,7 +2,7 @@
 #include <mutex>
 
 #include "shim.h"
-#include "Logger.h"
+#include "spdlogDriver/Logger.h"
 
 ConnectionPool::ConnectionPool()
         : rng_(std::random_device{}()) {}

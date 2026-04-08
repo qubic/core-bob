@@ -132,16 +132,17 @@ SET(FILES
 		${CMAKE_SOURCE_DIR}/connection/NodeIntroducer.cpp
         ${CMAKE_SOURCE_DIR}/database/db.cpp
 		${CMAKE_SOURCE_DIR}/database/garbageCleaner.cpp
-		${CMAKE_SOURCE_DIR}/Logger.cpp
-		${CMAKE_SOURCE_DIR}/DataProcessors.cpp
-		${CMAKE_SOURCE_DIR}/IOProcessor.cpp
-		${CMAKE_SOURCE_DIR}/LoggingEventProcessor.cpp
-		${CMAKE_SOURCE_DIR}/QubicServer.cpp
-		${CMAKE_SOURCE_DIR}/QubicIndexer.cpp
+		${CMAKE_SOURCE_DIR}/spdlogDriver/Logger.cpp
+		${CMAKE_SOURCE_DIR}/processors/DataProcessors.cpp
+		${CMAKE_SOURCE_DIR}/processors/IOProcessor.cpp
+		${CMAKE_SOURCE_DIR}/processors/QubicServer.cpp
+		${CMAKE_SOURCE_DIR}/processors/QubicIndexerProcessor.cpp
+		${CMAKE_SOURCE_DIR}/logEventCore/LoggingEventProcessor.cpp
+		${CMAKE_SOURCE_DIR}/logEventCore/LoggingEventProcessorCore.cpp
+		${CMAKE_SOURCE_DIR}/logEventCore/LogEvent.cpp
 		${CMAKE_SOURCE_DIR}/Config.cpp
 		${CMAKE_SOURCE_DIR}/bob.cpp
-		${CMAKE_SOURCE_DIR}/GlobalVar.cpp
-		${CMAKE_SOURCE_DIR}/LogEvent.cpp
+		${CMAKE_SOURCE_DIR}/common/GlobalVar.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/bobAPI.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/ApiHelpers.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/querySmartContract.cpp
@@ -153,16 +154,10 @@ SET(FILES
 		${CMAKE_SOURCE_DIR}/RESTAPI/QubicRpcHandler.cpp
 )
 
-add_library(XKCP_avx2 STATIC XKCP/KangarooTwelve.c
-		XKCP/KeccakP-1600-AVX2.s
-		XKCP/KeccakP-1600-times4-AVX2.c
-		                     XKCP/TurboSHAKE.c
-)
-
 # Create a library from the source files to be shared between the main executable and tests
 add_library(bob_lib STATIC ${FILES})
 target_link_libraries(bob_lib PRIVATE redis++_static hiredis spdlog::spdlog cxxopts::cxxopts
-		${ZSTD_TARGET} XKCP_avx2 drogon ${JSONCPP_TARGET})
+		${ZSTD_TARGET} drogon ${JSONCPP_TARGET})
 
 
 # --- Executable and Linking ---
@@ -175,9 +170,14 @@ target_link_libraries(pop10 PRIVATE bob_lib)
 enable_testing()
 include(GoogleTest)
 include_directories(${CMAKE_SOURCE_DIR}/)
-file(GLOB TEST_FILES "tests/*.cpp")
+include_directories(${CMAKE_SOURCE_DIR}/common)
+file(GLOB TEST_FILES "tests/*.cpp"
+		database/db.cpp
+		logEventCore/LogEvent.cpp
+		logEventCore/LoggingEventProcessorCore.cpp)
 add_executable(bob_tests ${TEST_FILES})
-target_link_libraries(bob_tests PRIVATE XKCP_avx2 bob_lib gtest_main redis++_static hiredis spdlog::spdlog)
+target_link_libraries(bob_tests PRIVATE bob_lib gtest_main gmock redis++_static hiredis spdlog::spdlog)
+target_compile_definitions(bob_tests PRIVATE GTEST)
 gtest_discover_tests(bob_tests)
 
 # Copy configuration file after building bob

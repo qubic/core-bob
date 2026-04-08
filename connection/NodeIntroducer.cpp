@@ -6,7 +6,7 @@
 #include <string>
 #include <cstdlib>
 #include <cstdint>
-#include "Logger.h"
+#include "spdlogDriver/Logger.h"
 #include "shim.h"
 
 // Default http timeout for external API calls (in seconds)

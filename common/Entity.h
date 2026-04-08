@@ -1,7 +1,7 @@
 #pragma once
 #include "common_def.h"
 #include "shim.h"
-static char spectrumLock;
+[[maybe_unused]] static char spectrumLock;
 struct EntityRecord
 {
     m256i publicKey;
