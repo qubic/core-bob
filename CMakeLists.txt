@@ -142,7 +142,7 @@ SET(FILES
 		${CMAKE_SOURCE_DIR}/logEventCore/LogEvent.cpp
 		${CMAKE_SOURCE_DIR}/Config.cpp
 		${CMAKE_SOURCE_DIR}/bob.cpp
-		${CMAKE_SOURCE_DIR}/GlobalVar.cpp
+		${CMAKE_SOURCE_DIR}/common/GlobalVar.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/bobAPI.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/ApiHelpers.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/querySmartContract.cpp
