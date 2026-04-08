@@ -133,13 +133,13 @@ SET(FILES
         ${CMAKE_SOURCE_DIR}/database/db.cpp
 		${CMAKE_SOURCE_DIR}/database/garbageCleaner.cpp
 		${CMAKE_SOURCE_DIR}/spdlogDriver/Logger.cpp
-		${CMAKE_SOURCE_DIR}/DataProcessors.cpp
-		${CMAKE_SOURCE_DIR}/IOProcessor.cpp
+		${CMAKE_SOURCE_DIR}/processors/DataProcessors.cpp
+		${CMAKE_SOURCE_DIR}/processors/IOProcessor.cpp
+		${CMAKE_SOURCE_DIR}/processors/QubicServer.cpp
+		${CMAKE_SOURCE_DIR}/processors/QubicIndexerProcessor.cpp
 		${CMAKE_SOURCE_DIR}/logEventCore/LoggingEventProcessor.cpp
 		${CMAKE_SOURCE_DIR}/logEventCore/LoggingEventProcessorCore.cpp
 		${CMAKE_SOURCE_DIR}/logEventCore/LogEvent.cpp
-		${CMAKE_SOURCE_DIR}/QubicServer.cpp
-		${CMAKE_SOURCE_DIR}/QubicIndexerProcessor.cpp
 		${CMAKE_SOURCE_DIR}/Config.cpp
 		${CMAKE_SOURCE_DIR}/bob.cpp
 		${CMAKE_SOURCE_DIR}/GlobalVar.cpp
