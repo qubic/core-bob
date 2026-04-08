@@ -139,7 +139,7 @@ SET(FILES
 		${CMAKE_SOURCE_DIR}/logEventCore/LoggingEventProcessorCore.cpp
 		${CMAKE_SOURCE_DIR}/logEventCore/LogEvent.cpp
 		${CMAKE_SOURCE_DIR}/QubicServer.cpp
-		${CMAKE_SOURCE_DIR}/QubicIndexer.cpp
+		${CMAKE_SOURCE_DIR}/QubicIndexerProcessor.cpp
 		${CMAKE_SOURCE_DIR}/Config.cpp
 		${CMAKE_SOURCE_DIR}/bob.cpp
 		${CMAKE_SOURCE_DIR}/GlobalVar.cpp
