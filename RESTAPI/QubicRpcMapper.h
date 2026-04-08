@@ -5,7 +5,7 @@
 #include <json/json.h>
 #include "m256i.h"
 #include "structs.h"
-#include "LogEvent.h"
+#include "logEventCore/LogEvent.h"
 
 namespace QubicRpc {
 

@@ -1,7 +1,7 @@
 #include "QubicRpcHandler.h"
 #include "QubicRpcMethods.h"
 #include "QubicRpcMapper.h"
-#include "Logger.h"
+#include "spdlogDriver/Logger.h"
 #include "shim.h"
 
 namespace QubicRpcHandler {

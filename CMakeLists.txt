@@ -132,16 +132,17 @@ SET(FILES
 		${CMAKE_SOURCE_DIR}/connection/NodeIntroducer.cpp
         ${CMAKE_SOURCE_DIR}/database/db.cpp
 		${CMAKE_SOURCE_DIR}/database/garbageCleaner.cpp
-		${CMAKE_SOURCE_DIR}/Logger.cpp
+		${CMAKE_SOURCE_DIR}/spdlogDriver/Logger.cpp
 		${CMAKE_SOURCE_DIR}/DataProcessors.cpp
 		${CMAKE_SOURCE_DIR}/IOProcessor.cpp
-		${CMAKE_SOURCE_DIR}/LoggingEventProcessor.cpp
+		${CMAKE_SOURCE_DIR}/logEventCore/LoggingEventProcessor.cpp
+		${CMAKE_SOURCE_DIR}/logEventCore/LoggingEventProcessorCore.cpp
+		${CMAKE_SOURCE_DIR}/logEventCore/LogEvent.cpp
 		${CMAKE_SOURCE_DIR}/QubicServer.cpp
 		${CMAKE_SOURCE_DIR}/QubicIndexer.cpp
 		${CMAKE_SOURCE_DIR}/Config.cpp
 		${CMAKE_SOURCE_DIR}/bob.cpp
 		${CMAKE_SOURCE_DIR}/GlobalVar.cpp
-		${CMAKE_SOURCE_DIR}/LogEvent.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/bobAPI.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/ApiHelpers.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/querySmartContract.cpp
@@ -169,7 +170,10 @@ target_link_libraries(pop10 PRIVATE bob_lib)
 enable_testing()
 include(GoogleTest)
 include_directories(${CMAKE_SOURCE_DIR}/)
-file(GLOB TEST_FILES "tests/*.cpp" database/db.cpp)
+file(GLOB TEST_FILES "tests/*.cpp"
+		database/db.cpp
+		logEventCore/LogEvent.cpp
+		logEventCore/LoggingEventProcessorCore.cpp)
 add_executable(bob_tests ${TEST_FILES})
 target_link_libraries(bob_tests PRIVATE bob_lib gtest_main gmock redis++_static hiredis spdlog::spdlog)
 target_compile_definitions(bob_tests PRIVATE GTEST)

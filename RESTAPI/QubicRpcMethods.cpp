@@ -4,7 +4,7 @@
 #include "ApiHelpers.h"
 #include "shim.h"
 #include "database/db.h"
-#include "Logger.h"
+#include "spdlogDriver/Logger.h"
 #include "Version.h"
 #include "K12AndKeyUtil.h"
 #include "Entity.h"

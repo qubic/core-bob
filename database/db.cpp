@@ -11,7 +11,7 @@
 #include <iomanip>
 #include <future>
 #include "zstd.h" // zstd compression/decompression
-#include "Logger.h"
+#include "spdlogDriver/Logger.h"
 #include "K12AndKeyUtil.h"
 #include <cstdlib> // std::exit
 #include "shim.h"

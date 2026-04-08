@@ -44,8 +44,8 @@
 #include <optional>
 #include <immintrin.h> // For m256i
 #include "structs.h"
-#include "Logger.h"
-#include "LogEvent.h"
+#include "spdlogDriver/Logger.h"
+#include "logEventCore/LogEvent.h"
 // Forward declaration for the Redis client
 namespace sw { namespace redis { class Redis; }}
 

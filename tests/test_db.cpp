@@ -6,7 +6,7 @@
 #include "database/db_redis_iface.h"
 
 #include "K12AndKeyUtil.h"
-#include "LogEvent.h"
+#include "logEventCore/LogEvent.h"
 using ::testing::_;
 using ::testing::Return;
 using ::testing::DoAll;

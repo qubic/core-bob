@@ -6,7 +6,7 @@ This guide is for exchange developers and integrators who want to connect to Qub
 > [!NOTE]
 > This documentation covers the Qubic JSON-RPC 2.0 API including WebSocket subscriptions.
 
-To have a playground, you can open [rpc_playground.html](rpc_playground.html) in your browser. Or use the published version [here on github gist](https://gistpreview.github.io/?6912d613bc27ae75126859447fca8acf).
+To have a playground, you can open [rpc_playground.html](../rpc_playground.html) in your browser. Or use the published version [here on github gist](https://gistpreview.github.io/?6912d613bc27ae75126859447fca8acf).
 
 ## Table of Contents
 
