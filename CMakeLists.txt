@@ -170,6 +170,7 @@ target_link_libraries(pop10 PRIVATE bob_lib)
 enable_testing()
 include(GoogleTest)
 include_directories(${CMAKE_SOURCE_DIR}/)
+include_directories(${CMAKE_SOURCE_DIR}/common)
 file(GLOB TEST_FILES "tests/*.cpp"
 		database/db.cpp
 		logEventCore/LogEvent.cpp
