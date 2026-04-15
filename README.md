@@ -140,7 +140,7 @@ An example configuration file, `default_config_bob.json`, ships with the reposit
   "tx-storage-mode": "kvrocks",
   "tx_tick_to_live": 3000,
   "max-thread": 8,
-  "spam-qu-threshold": 100
+  "spam-qu-threshold": 0
 }
 ```
 

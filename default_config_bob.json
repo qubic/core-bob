@@ -12,5 +12,5 @@
   "tx-storage-mode" : "kvrocks",
   "tx_tick_to_live" : 1111,
   "max-thread": 4,
-  "spam-qu-threshold": 100
+  "spam-qu-threshold": 0
 }

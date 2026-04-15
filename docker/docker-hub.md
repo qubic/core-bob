@@ -135,7 +135,7 @@ docker run -d --name qubic-bob \
   "tx-storage-mode": "kvrocks",
   "tx_tick_to_live": 10000,
   "log-level": "info",
-  "spam-qu-threshold": 100
+  "spam-qu-threshold": 0
 }
 ```
 
@@ -146,7 +146,7 @@ docker run -d --name qubic-bob \
 | `tx-storage-mode` | `kvrocks` or `free` | `kvrocks` |
 | `tx_tick_to_live` | Ticks to keep tx data | `10000` |
 | `log-level` | `debug`, `info`, `warn`, `error` | `info` |
-| `spam-qu-threshold` | Min QU to index transfers | `100` |
+| `spam-qu-threshold` | Min QU to index transfers (0 disables the filter) | `0` |
 
 ## Links
 
