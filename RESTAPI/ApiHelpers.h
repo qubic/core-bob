@@ -5,6 +5,8 @@
 #include <cstring>
 #include <vector>
 #include "Entity.h"
+#include "structs.h"
+#include "logEventCore/LogEvent.h"
 
 // ============================================================================
 // Shared Data Structures for API responses
@@ -109,6 +111,26 @@ AssetBalanceInfo getAssetBalanceInfo(const std::string& identity,
 
 // Get transaction by hash (60-char Qubic format)
 TransactionInfo getTransactionInfo(const std::string& txHash);
+
+// Direct-lookup transaction execution details — computed from primary data
+// (tick data + log ranges + logs) without relying on the itx: index.
+// Used by transaction-receipt / status endpoints so responses are always
+// correct regardless of indexer state or spam-filter settings.
+struct TxExecutionDetails {
+    bool resolved = false;          // tx was found in the tick's digests
+    int transactionIndex = -1;
+    long long fromLogId = -1;
+    long long toLogId = -1;
+    uint64_t timestamp = 0;         // unix millis; 0 if unknown
+    bool executed = false;
+    std::vector<LogEvent> logs;
+};
+
+// tx and td must refer to the same transaction / tick. txHash is the
+// 60-char lowercase Qubic hash of the transaction.
+TxExecutionDetails computeTxExecutionDetails(const std::string& txHash,
+                                             const Transaction& tx,
+                                             const TickData& td);
 
 // Get epoch information
 EpochInfo getEpochInfo(uint16_t epoch);

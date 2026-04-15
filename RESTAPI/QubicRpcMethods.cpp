@@ -299,30 +299,16 @@ Json::Value QubicRpcMethods::getTransactionReceipt(const std::string& txHashInpu
         return Json::Value::null;
     }
 
-    // Try to get indexed transaction info (may not be available yet if not indexed)
-    int txIndex = -1;
-    long long fromLogId = -1, toLogId = -1;
-    uint64_t timestamp = 0;
-    bool executed = false;
-    bool hasIndexedData = db_get_indexed_tx(qubicHash.c_str(), txIndex, fromLogId, toLogId, timestamp, executed);
+    // Authoritative lookup: compute execution state and fetch logs directly
+    // from primary data (tick digests + log ranges + logs) without relying
+    // on the itx: index. This guarantees correct status for every tx,
+    // including those skipped by spam-qu-threshold or not yet indexed.
+    auto details = ApiHelpers::computeTxExecutionDetails(qubicHash, *tx, td);
 
-    // If not indexed, find txIndex by scanning tick data
-    if (!hasIndexedData || txIndex < 0) {
-        for (int i = 0; i < NUMBER_OF_TRANSACTIONS_PER_TICK; ++i) {
-            if (td.transactionDigests[i].toQubicHash() == qubicHash) {
-                txIndex = i;
-                break;
-            }
-        }
-    }
-
-    // Get logs for this transaction (if indexed data available)
-    std::vector<LogEvent> logs;
-    if (hasIndexedData && fromLogId >= 0 && toLogId >= fromLogId) {
-        logs = db_try_get_logs(td.epoch, fromLogId, toLogId);
-    }
-
-    return QubicRpc::transactionToQubicReceipt(tx, qubicHash, tx->tick, txIndex, td, logs, executed);
+    return QubicRpc::transactionToQubicReceipt(tx, qubicHash, tx->tick,
+                                                details.transactionIndex,
+                                                td, details.logs,
+                                                details.executed);
 }
 
 Json::Value QubicRpcMethods::broadcastTransaction(const std::string& signedTxHex) {

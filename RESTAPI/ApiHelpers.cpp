@@ -107,6 +107,86 @@ AssetBalanceInfo getAssetBalanceInfo(const std::string& identity,
 // Transaction Functions
 // ============================================================================
 
+namespace {
+
+uint64_t tickDataToUnixMillis(const TickData& td) {
+    std::tm timeinfo = {};
+    timeinfo.tm_year = int(td.year) + 2000 - 1900;
+    timeinfo.tm_mon  = td.month - 1;
+    timeinfo.tm_mday = td.day;
+    timeinfo.tm_hour = td.hour;
+    timeinfo.tm_min  = td.minute;
+    timeinfo.tm_sec  = td.second;
+    timeinfo.tm_isdst = -1;
+    time_t t = timegm(&timeinfo);
+    return static_cast<uint64_t>(t) * 1000u + static_cast<uint64_t>(td.millisecond);
+}
+
+bool firstLogMatchesQuTransfer(const LogEvent& firstEvent, const Transaction& tx) {
+    if (firstEvent.getType() != QU_TRANSFER) return true;
+    // Protocol-report transactions (zero destination + protocol inputType) still
+    // execute when any log is emitted — don't require the transfer to match.
+    if (tx.destinationPublicKey == m256i::zero() &&
+        (tx.inputType == 1 || tx.inputType == 2 || tx.inputType == 3 ||
+         tx.inputType == 4 || tx.inputType == 5 || tx.inputType == 6 ||
+         tx.inputType == 7 || tx.inputType == 8 || tx.inputType == 9 ||
+         tx.inputType == 10)) {
+        return true;
+    }
+    QuTransfer transfer{};
+    memcpy(&transfer, firstEvent.getLogBodyPtr(), sizeof(QuTransfer));
+    return transfer.sourcePublicKey == tx.sourcePublicKey &&
+           transfer.destinationPublicKey == tx.destinationPublicKey &&
+           transfer.amount == tx.amount;
+}
+
+} // namespace
+
+TxExecutionDetails computeTxExecutionDetails(const std::string& txHash,
+                                             const Transaction& tx,
+                                             const TickData& td) {
+    TxExecutionDetails out;
+
+    if (td.tick != tx.tick) {
+        return out;
+    }
+
+    for (int i = 0; i < NUMBER_OF_TRANSACTIONS_PER_TICK; ++i) {
+        if (td.transactionDigests[i] == m256i::zero()) continue;
+        if (td.transactionDigests[i].toQubicHash() == txHash) {
+            out.transactionIndex = i;
+            break;
+        }
+    }
+    if (out.transactionIndex < 0) {
+        return out;
+    }
+
+    out.resolved = true;
+    out.timestamp = tickDataToUnixMillis(td) / 1000; // seconds, to match db_get_indexed_tx
+
+    LogRangesPerTxInTick logrange{};
+    if (!db_try_get_log_ranges(tx.tick, logrange)) {
+        return out;
+    }
+
+    const long long from = logrange.fromLogId[out.transactionIndex];
+    const long long length = logrange.length[out.transactionIndex];
+    if (from < 0 || length <= 0) {
+        return out;
+    }
+    out.fromLogId = from;
+    out.toLogId   = from + length - 1;
+
+    out.logs = db_try_get_logs(td.epoch, out.fromLogId, out.toLogId);
+    if (out.logs.empty()) {
+        return out;
+    }
+
+    out.executed = firstLogMatchesQuTransfer(out.logs.front(), tx);
+    return out;
+}
+
 TransactionInfo getTransactionInfo(const std::string& txHash) {
     TransactionInfo info;
 
@@ -142,19 +222,21 @@ TransactionInfo getTransactionInfo(const std::string& txHash) {
         info.inputData = bytesToHex(input, tx->inputSize);
     }
 
-    // Try to get indexed information
-    int tx_index;
-    long long from_log_id, to_log_id;
-    uint64_t timestamp;
-    bool executed;
-
-    if (db_get_indexed_tx(txHash.c_str(), tx_index, from_log_id, to_log_id, timestamp, executed)) {
-        info.hasIndexedInfo = true;
-        info.transactionIndex = tx_index;
-        info.logIdFrom = from_log_id;
-        info.logIdTo = to_log_id;
-        info.timestamp = timestamp;
-        info.executed = executed;
+    // Authoritative lookup: compute execution state directly from primary
+    // data so the response is correct even when the itx: index was skipped
+    // (e.g. dust txs filtered by spam-qu-threshold) or has not been written
+    // for this tick yet.
+    TickData td;
+    if (db_try_get_tick_data(tx->tick, td)) {
+        auto details = computeTxExecutionDetails(txHash, *tx, td);
+        if (details.resolved) {
+            info.hasIndexedInfo = true;
+            info.transactionIndex = details.transactionIndex;
+            info.logIdFrom = details.fromLogId;
+            info.logIdTo = details.toLogId;
+            info.timestamp = details.timestamp;
+            info.executed = details.executed;
+        }
     }
 
     return info;
