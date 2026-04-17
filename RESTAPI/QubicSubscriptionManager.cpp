@@ -1,5 +1,6 @@
 #include "QubicSubscriptionManager.h"
 #include "QubicRpcMapper.h"
+#include "ApiHelpers.h"
 #include "spdlogDriver/Logger.h"
 #include "GlobalVar.h"
 #include "shim.h"
@@ -781,27 +782,17 @@ void QubicSubscriptionManager::processVerifiedTick(
                 stx.signature = QubicRpc::bytesToHex(sigPtr, SIGNATURE_SIZE);
             }
 
-            // Get execution info from log ranges (more reliable than indexed tx for real-time)
-            // The log ranges are set during log verification and contain accurate data
+            // Compute execution status directly from the tick's log range and
+            // already-loaded logs. Same rules as ApiHelpers::computeTxExecutionDetails
+            // so the streamed status matches what receipt/info endpoints return.
             if (lr.length[i] > 0 && lr.fromLogId[i] >= 0) {
-                stx.executed = true;  // Has logs = was executed
+                stx.executed = ApiHelpers::isTxExecuted(*tx, lr.fromLogId[i], lr.length[i], logs);
                 stx.logIdFrom = lr.fromLogId[i];
                 stx.logIdLength = lr.length[i];
             } else {
-                // No logs for this transaction - check indexed data as fallback
-                int txIndex;
-                long long fromLogId, toLogId;
-                uint64_t txTimestamp;
-                bool executed;
-                if (db_get_indexed_tx(txHash.c_str(), txIndex, fromLogId, toLogId, txTimestamp, executed)) {
-                    stx.executed = executed;
-                    stx.logIdFrom = fromLogId;
-                    stx.logIdLength = (toLogId >= fromLogId) ? (toLogId - fromLogId + 1) : 0;
-                } else {
-                    stx.executed = false;
-                    stx.logIdFrom = -1;
-                    stx.logIdLength = 0;
-                }
+                stx.executed = false;
+                stx.logIdFrom = -1;
+                stx.logIdLength = 0;
             }
 
             allTxs.push_back(std::move(stx));
@@ -1013,15 +1004,11 @@ void QubicSubscriptionManager::performCatchUp(
                     stx.inputData.assign(inputPtr, inputPtr + tx->inputSize);
                 }
 
-                // Get execution info
-                int txIndex;
-                long long fromLogId, toLogId;
-                uint64_t txTimestamp;
-                bool executed;
-                if (db_get_indexed_tx(txHash.c_str(), txIndex, fromLogId, toLogId, txTimestamp, executed)) {
-                    stx.executed = executed;
-                    stx.logIdFrom = fromLogId;
-                    stx.logIdLength = (toLogId >= fromLogId) ? (toLogId - fromLogId + 1) : 0;
+                // Compute execution status directly from log ranges + tick logs.
+                if (lr.length[i] > 0 && lr.fromLogId[i] >= 0) {
+                    stx.executed = ApiHelpers::isTxExecuted(*tx, lr.fromLogId[i], lr.length[i], logs);
+                    stx.logIdFrom = lr.fromLogId[i];
+                    stx.logIdLength = lr.length[i];
                 } else {
                     stx.executed = false;
                     stx.logIdFrom = -1;
@@ -1188,25 +1175,15 @@ void QubicSubscriptionManager::performCatchUp(
                     stx.inputData.assign(inputPtr, inputPtr + tx->inputSize);
                 }
 
-                // Get execution info from log ranges
+                // Compute execution status directly from log ranges + tick logs.
                 if (lr.length[i] > 0 && lr.fromLogId[i] >= 0) {
-                    stx.executed = true;
+                    stx.executed = ApiHelpers::isTxExecuted(*tx, lr.fromLogId[i], lr.length[i], logs);
                     stx.logIdFrom = lr.fromLogId[i];
                     stx.logIdLength = lr.length[i];
                 } else {
-                    int txIndex;
-                    long long fromLogId, toLogId;
-                    uint64_t txTimestamp;
-                    bool executed;
-                    if (db_get_indexed_tx(txHash.c_str(), txIndex, fromLogId, toLogId, txTimestamp, executed)) {
-                        stx.executed = executed;
-                        stx.logIdFrom = fromLogId;
-                        stx.logIdLength = (toLogId >= fromLogId) ? (toLogId - fromLogId + 1) : 0;
-                    } else {
-                        stx.executed = false;
-                        stx.logIdFrom = -1;
-                        stx.logIdLength = 0;
-                    }
+                    stx.executed = false;
+                    stx.logIdFrom = -1;
+                    stx.logIdLength = 0;
                 }
 
                 // Check if matches any filter

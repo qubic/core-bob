@@ -187,6 +187,21 @@ TxExecutionDetails computeTxExecutionDetails(const std::string& txHash,
     return out;
 }
 
+bool isTxExecuted(const Transaction& tx,
+                  long long fromLogId,
+                  long long length,
+                  const std::vector<LogEvent>& tickLogs) {
+    if (length <= 0 || fromLogId < 0) return false;
+
+    // tickLogs is sorted by logId — find the first log for this tx.
+    for (const auto& log : tickLogs) {
+        if (static_cast<long long>(log.getLogId()) == fromLogId) {
+            return firstLogMatchesQuTransfer(log, tx);
+        }
+    }
+    return false;
+}
+
 TransactionInfo getTransactionInfo(const std::string& txHash) {
     TransactionInfo info;
 

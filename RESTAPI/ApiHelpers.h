@@ -132,6 +132,16 @@ TxExecutionDetails computeTxExecutionDetails(const std::string& txHash,
                                              const Transaction& tx,
                                              const TickData& td);
 
+// Determine whether a transaction executed using the tx's log range and the
+// already-loaded vector of LogEvents for the whole tick. Intended for
+// streaming / per-tick loops (subscription delivery, catch-up) where lr and
+// tickLogs are already in hand and per-tx DB lookups would be wasteful.
+// `tickLogs` is expected to contain the logs for the tick the tx belongs to.
+bool isTxExecuted(const Transaction& tx,
+                  long long fromLogId,
+                  long long length,
+                  const std::vector<LogEvent>& tickLogs);
+
 // Get epoch information
 EpochInfo getEpochInfo(uint16_t epoch);
 
