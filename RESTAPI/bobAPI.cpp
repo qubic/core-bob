@@ -206,14 +206,18 @@ std::string bobGetLog(uint16_t epoch, int64_t start, int64_t end)
             logTxOrder = lr.sort();
             // scan to find the first cursor
             logTxOrderIndex = lr.scanTxId(logTxOrder, logTxOrderIndex, log.getLogId());
+            int txIndex;
             if (logTxOrderIndex == -1)
             {
-                result.push_back(']');
-                return result;
+                // bob should return the log if it exists, just don't map to a tx
+                logTxOrderIndex = 0; // reset the cursor back to 0
+                txIndex = -1;
             }
-            int txIndex = logTxOrder[logTxOrderIndex];
+            else {
+                txIndex = logTxOrder[logTxOrderIndex];
+            }
 
-            if (log.getTick() != gInitialTick && txIndex < NUMBER_OF_TRANSACTIONS_PER_TICK)
+            if (log.getTick() != gInitialTick && txIndex < NUMBER_OF_TRANSACTIONS_PER_TICK && txIndex >= 0)
             {
                 if (td.tick != log.getTick()) {
                     // only re-fetch tick data if it's a new tick

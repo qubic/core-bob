@@ -382,7 +382,7 @@ Json::Value LogEvent::parseToJsonValueWithExtraData(const TickData& td, const in
         root["txHash"] = txHash;
         return root;
     }
-    root["txHash"] = "null";
+    root["txHash"] = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzunknowntransaction";
     return root;
 }
 

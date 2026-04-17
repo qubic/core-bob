@@ -146,6 +146,7 @@ public:
     }
 
     std::string parseToJsonWithExtraData(const TickData& td, const int txIndex) const;
+    // if txIndex is -1, it will return unknown tx
     Json::Value parseToJsonValueWithExtraData(const TickData& td, const int txIndex) const;
     std::string parseToJsonStr() const;
     std::string parseToJsonForEndEpoch(uint32_t endEpochTick, const std::string& timestamp) const;
