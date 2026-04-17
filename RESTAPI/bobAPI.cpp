@@ -199,10 +199,9 @@ std::string bobGetLog(uint16_t epoch, int64_t start, int64_t end)
                 return result;
             }
 
-            logTxOrderIndex = 0;
             logTxOrder = lr.sort();
             // scan to find the first cursor
-            logTxOrderIndex = lr.scanTxId(logTxOrder, 0, log.getLogId());
+            logTxOrderIndex = lr.scanTxId(logTxOrder, logTxOrderIndex, log.getLogId());
             if (logTxOrderIndex == -1)
             {
                 result.push_back(']');
@@ -251,19 +250,13 @@ std::string bobGetLog(uint16_t epoch, int64_t start, int64_t end)
                 }
             }
 
-            txIndex = logTxOrder[logTxOrderIndex];
-            auto s = lr.fromLogId[txIndex];
-            auto e = s + lr.length[txIndex] - 1;
-            if (id > e) // processed all, move the cursor to next tx
-            {
-                logTxOrderIndex++; // continous log, don't need to scan
-                txIndex = logTxOrder[logTxOrderIndex];
-            }
             std::string js = log.parseToJsonWithExtraData(td, txIndex);
             if (!first) result.push_back(',');
             result += js;
             first = false;
-        } else {
+        }
+        else
+        {
             Json::Value err(Json::objectValue);
             err["ok"] = false;
             err["error"] = "not_found";
