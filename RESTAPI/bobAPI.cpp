@@ -178,10 +178,14 @@ std::string bobGetLog(uint16_t epoch, int64_t start, int64_t end)
     LogRangesPerTxInTick lr{-1};
     int logTxOrderIndex = 0;
     std::vector<int> logTxOrder;
-
+    uint32_t prevTick = 0;
     for (int64_t id = start; id <= end; ++id) {
         LogEvent log;
         if (db_try_get_log(epoch, static_cast<uint64_t>(id), log)) {
+            if (log.getTick() != prevTick) {
+                prevTick = log.getTick();
+                logTxOrderIndex = 0; // reset this back to 0 everytime it process a new tick
+            }
             if (!db_try_get_log_ranges(log.getTick(), lr))
             {
                 Json::Value err(Json::objectValue);
@@ -211,7 +215,10 @@ std::string bobGetLog(uint16_t epoch, int64_t start, int64_t end)
 
             if (log.getTick() != gInitialTick && txIndex < NUMBER_OF_TRANSACTIONS_PER_TICK)
             {
-                db_try_get_tick_data(log.getTick(), td);
+                if (td.tick != log.getTick()) {
+                    // only re-fetch tick data if it's a new tick
+                    db_try_get_tick_data(log.getTick(), td);
+                }
                 if (td.epoch == 0)
                 {
                     Json::Value err(Json::objectValue);
