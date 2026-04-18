@@ -12,197 +12,193 @@ The configuration must be a single JSON object (root must be an object). Invalid
     - At least one of trusted-node (array of strings) or p2p-node (array of strings) must be present and non-empty.
 - Other fields are optional and have sensible defaults (where applicable).
 
-## Keys Overview
+## How to Find Your Configuration File
 
-- Networking and peers
-    - trusted-node: array of strings (optional, but at least one of this or p2p-node required)
-    - p2p-node: array of strings (optional, but at least one of this or trusted-node required)
-    - server-port: unsigned integer (optional)
-    - is-trusted-node: boolean (optional)
-    - node-seed: string (optional)
-- Identity and trust
-    - arbitrator-identity: string (required)
-    - trusted-entities: array of uppercase 60-char strings (optional, strict validation)
-- Execution and threading
-    - max-thread: unsigned integer (optional; 0 means auto/unlimited)
-- Logging and diagnostics
-    - log-level: string (optional)
-    - request-cycle-ms: unsigned integer (optional)
-    - request-logging-cycle-ms: unsigned integer (optional)
-    - spam-qu-threshold: unsigned integer (optional; default 0)
-- Environment
-    - is-testnet: boolean (optional)
-    - keydb-url: string (optional)
-- Tick storage
-    - tick-storage-mode: string, one of "lastNTick", "kvrocks", "free" (optional; default "lastNTick")
-    - last_n_tick_storage: unsigned integer (only for "lastNTick"; default 1000)
-    - kvrocks-url: string (only for "kvrocks"; default "tcp://127.0.0.1:6666")
+The configuration file is typically named `bob.json` and should be located in the same folder as your Bob program. When you start Bob, it will look for this file in the current directory by default.
 
-## Detailed Field Reference
+If you want to use a different configuration file, you can specify its path when starting Bob:
+```
+./bob /path/to/your/custom_config.json
+```
 
-### trusted-node
-- Type: array of strings
-- Required: No (but see rule below)
-- Validation: Must be an array; each element must be a string.
-- Notes: At least one of trusted-node or p2p-node must be present and have at least one element.
+## Understanding Configuration Settings
 
-### p2p-node
-- Type: array of strings
-- Required: No (but see rule below)
-- Validation: Must be an array; each element must be a string.
-- Rule: At least one of trusted-node or p2p-node must be present and non-empty.
+### Basic Node Information
 
-If both arrays are absent or empty, configuration is rejected with: “Either 'trusted-node' or 'p2p-node' array is required”.
+**`node-seed`**
+- **What it does:** This is your node's secret key that creates your unique identity on the Qubic network
+- **Default value:** `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`
+- **Important note:** For security, you should change this to a random 55-character lowercase string
 
-### arbitrator-identity
-- Type: string
-- Required: Yes
-- Validation: Must be a string (non-empty recommended).
-- Error if missing: “string required for key 'arbitrator-identity'”.
+**`node-alias`**
+- **What it does:** A nickname for your node that others can see when they connect to your node
+- **Default value:** `"Big fat bob"`
 
-### log-level
-- Type: string
-- Required: No
+### Network Settings
 
-### keydb-url
-- Type: string
-- Required: No
+**`p2p-nodes`**
+- **What it does:** Lists other Bob nodes you want to connect to directly
+- **Default value:** Empty (will automatically find peers from qubic.global)
+- **Example:** `["192.168.1.100:21842", "10.0.0.50:21842"]`
 
-### run-server
-- Type: boolean
-- Required: No
+**`is-testnet`**
+- **What it does:** Tells Bob whether to connect to the test network or main network
+- **Default value:** `false` (main network)
+- **Use case:** Set to `true` if you're testing things
 
-### is-testnet
-- Type: boolean
-- Required: No
+### Logging and Debugging
 
-### request-cycle-ms
-- Type: unsigned integer
-- Required: No
-- Validation:
-    - Accepts non-negative integers.
-    - If provided as a signed integer, it must be >= 0.
+**`log-level`**
+- **What it does:** Controls how much information your node logs to the screen or file
+- **Options:** `"trace"`, `"debug"`, `"info"`, `"warn"`, `"error"`, `"fatal"`
+- **Default value:** `"info"`
 
-### request-logging-cycle-ms
-- Type: unsigned integer
-- Required: No
-- Validation: Same as request-cycle-ms.
+### Storage Settings (Important!)
 
-### future-offset
-- Type: unsigned integer
-- Required: No
-- Validation: Same as request-cycle-ms.
+**`tick-storage-mode`**
+- **What it does:** Determines how your node stores information about network ticks (the equivalent of blockchain blocks)
+- **Options:**
+  - `lastNTick`: Stores only the most recent N ticks in memory
+  - `kvrocks`: Uses a special database for storage
+  - `free`: Doesn't store anything (for advanced users)
 
-### server-port
-- Type: unsigned integer
-- Required: No
-- Validation: Same as request-cycle-ms.
+**`tx-storage-mode`**
+- **What it does:** Determines how your node stores transaction information
+- **Options:** Same as tick-storage-mode
+- **Default value:** `lastNTick`
 
-### max-thread
-- Type: unsigned integer
-- Required: No
-- Meaning: Maximum threads the system can use.
-- Special: 0 means auto/unlimited.
+**`last_n_tick_storage`**
+- **What it does:** When using `lastNTick` mode, this sets how many recent ticks to keep in memory
+- **Default value:** `1000`
+- **Note:** Higher values = more memory usage but better performance
 
-### spam-qu-threshold
-- Type: unsigned integer
-- Required: No
-- Default: 0
-- Meaning: Threshold for spam/junk QU transfer detection.
+### Database Connections
 
-### is-trusted-node
-- Type: boolean
-- Required: No
+**`keydb-url`**
+- **What it does:** Where your node connects to store data (KeyDB is a Redis-compatible database)
+- **Default value:** Not set by default
+- **Example:** `"redis://localhost:6379"`
 
-### node-seed
-- Type: string
-- Required: No
+**`kvrocks-url`**
+- **What it does:** Where your node connects to store data when using `kvrocks` storage mode
+- **Default value:** `"tcp://127.0.0.1:6666"`
 
-### trusted-entities
-- Type: array of strings
-- Required: No
-- Validation for each element:
-    - Must be a string of exactly 60 characters.
-    - All characters must be uppercase letters A–Z.
-- Notes: Each valid identity is transformed to a public key and stored internally in a trusted map.
+### Performance Settings
 
-### tick-storage-mode
-- Type: string
-- Required: No
-- Allowed values: "lastNTick", "kvrocks", "free"
-- Default: "lastNTick"
-- Behavior and related fields:
-    - "lastNTick"
-        - last_n_tick_storage (unsigned integer)
-            - Required: No
-            - Default: 1000 (if not previously set or set to zero)
-            - Validation: Must be a non-negative integer.
-    - "kvrocks"
-        - kvrocks-url (string)
-            - Required: No
-            - Default: "tcp://127.0.0.1:6666" (if absent or empty)
-    - "free"
-        - No related options. Implies no garbage cleaner.
-- Error if value is not one of the allowed: “Invalid value for 'tick-storage-mode': must be one of 'lastNTick', 'kvrocks', or 'free'”.
+**`max-thread`**
+- **What it does:** Sets the maximum number of computer processor threads Bob can use
+- **Default value:** `0` (automatically uses all available cores)
+- **Note:** Setting this to a specific number can help control system resource usage
 
-## Type and Range Rules
+**`request-cycle-ms`**
+- **What it does:** How often Bob checks for new network data (in milliseconds)
+- **Default value:** `0` (uses default timing)
 
-- Unsigned integer fields accept:
-    - JSON unsigned numbers
-    - JSON signed numbers if >= 0
-    - Negative values are rejected with a specific error.
-- Booleans must be JSON booleans (true/false), not strings.
-- Strings must be JSON strings.
-- Arrays must be JSON arrays containing elements of the documented type.
+**`server-port`**
+- **What it does:** The port number where your node will accept direct connections from other nodes
+- **Default value:** `21842`
+- **Note:** Must be between 1 and 65535
 
-## Error Conditions Summary
+### RPC Settings
 
-- File cannot be opened: “cannot open file”
-- JSON parse error: “invalid JSON: …”
-- Root is not an object: “invalid JSON: root must be an object”
-- Missing arbitrator-identity: “string required for key 'arbitrator-identity'”
-- Both trusted-node and p2p-node absent or empty: “Either 'trusted-node' or 'p2p-node' array is required”
-- Type mismatches: “Invalid type: … required for key '…'”
-- Negative integer for unsigned fields: “Negative integer is invalid for key '…'”
-- trusted-entities element length not 60: “Invalid trusted entity ID length: must be 60 characters”
-- trusted-entities element not uppercase A–Z: “Invalid trusted entity ID format: must be uppercase letters only”
-- tick-storage-mode invalid value: “Invalid value for 'tick-storage-mode': must be one of 'lastNTick', 'kvrocks', or 'free'”
+**`rpc-port`**
+- **What it does:** The port number for external applications to connect to your node's API
+- **Default value:** `40420`
 
-## Minimal Example
+**`enable-admin-endpoints`**
+- **What it does:** Allows access to special administrative functions (use with caution)
+- **Default value:** `false`
+- **Security note:** Only enable if you need admin access
 
-~~~json
+### Security and Privacy
+
+**`allow-check-in-qubic-global`**
+- **What it does:** Controls whether your node reports its presence to the main Qubic network
+- **Default value:** `true`
+
+**`allow-receive-log-from-incoming-connections`**
+- **What it does:** Allows other nodes to send log information directly to your node
+- **Default value:** `false`
+
+### Advanced Settings
+
+**`spam-qu-threshold`**
+- **What it does:** Helps identify and ignore spam transactions with very small amounts
+- **Default value:** `0` (disabled)
+
+**`n-tickdata-to-store`**
+- **What it does:** How many tick data items to keep in memory when using certain storage modes
+- **Default value:** `5`
+
+**`indexer-max-activities-per-key`**
+- **What it does:** Limits how many activities are indexed per key for performance reasons
+- **Default value:** `100000`
+
+## Example Configuration File
+
+Here's a basic example of what a configuration file might look like:
+
+```json
 {
-  "arbitrator-identity": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-  "trusted-node": ["node1.example.org:1234"]
-}
-~~~
-
-- Provides required arbitrator-identity and at least one of the peer lists.
-
-## Full Example
-
-~~~json
-{
-  "arbitrator-identity": "ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZAB",
-  "trusted-node": ["node1.example.org:1234", "node2.example.org:5678"],
-  "p2p-node": ["p2p1.example.org:7000"],
+  "node-seed": "your_random_55_character_seed_here",
+  "node-alias": "My Bob Node",
   "log-level": "info",
-  "keydb-url": "redis://localhost:6379/0",
-  "run-server": true,
+  "p2p-nodes": [],
   "is-testnet": false,
-  "request-cycle-ms": 100,
-  "request-logging-cycle-ms": 1000,
-  "future-offset": 50,
-  "server-port": 8080,
-  "max-thread": 0,
-  "spam-qu-threshold": 0,
-  "is-trusted-node": false,
-  "node-seed": "some-seed-string",
-  "trusted-entities": [
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZAB",
-    "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"
-  ],
   "tick-storage-mode": "kvrocks",
-  "kvrocks-url": "tcp://127.0.0.1:6666"
+  "tx-storage-mode": "kvrocks",
+  "last_n_tick_storage": 1000,
+  "server-port": 21842,
+  "rpc-port": 40420,
+  "enable-admin-endpoints": false
+}
+```
+
+## Important Notes
+
+1. **File Format:** The configuration file must be valid JSON format - this means it uses proper brackets, commas, and quotes.
+
+2. **Security:** Never share your node-seed with anyone as it gives full control over your node.
+
+3. **Testing:** If you're testing, set `is-testnet` to `true` to avoid affecting the main network.
+
+4. **Performance:** Adjust memory-related settings based on your computer's available resources.
+
+5. **Backup:** Always keep a backup of your configuration file before making changes.
+
+## Troubleshooting Common Issues
+
+**Problem: Node won't start**
+- Check that the JSON syntax is correct (no trailing commas, proper quotes)
+- Verify all required fields are present
+- Make sure file permissions allow reading
+
+**Problem: Node connects to wrong network**
+- Check that `is-testnet` is set correctly for your needs
+
+**Problem: High memory usage**
+- Reduce `last_n_tick_storage` value
+- Consider using different storage modes
+
+Remember, this configuration file gives you complete control over how your Qubic Bob node operates. Start with the default settings and only change what you understand and need to change.
+
+## Default config
+
+~~~json
+{
+  "request-cycle-ms": 300,
+  "request-logging-cycle-ms": 10,
+  "future-offset": 32,
+  "log-level": "info",
+  "keydb-url": "tcp://127.0.0.1:6379",
+  "run-server": true,
+  "server-port": 21842,
+  "arbitrator-identity": "AFZPUAIYVPNUYGJRQVLUKOPPVLHAZQTGLYAAUUNBXFTVTAMSBKQBLEIEPCVJ",
+  "tick-storage-mode": "kvrocks",
+  "kvrocks-url": "tcp://127.0.0.1:6666",
+  "tx-storage-mode": "kvrocks",
+  "tx_tick_to_live": 100000,
+  "max-thread": 6,
+  "spam-qu-threshold": 0
 }
 ~~~
