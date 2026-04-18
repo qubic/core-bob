@@ -1,9 +1,9 @@
-# Qubic Network REST API
+# Qubic BOB Network REST API
 
 This document describes the REST endpoints exposed by the server.
 
 Base URL
-- Host: 0.0.0.0
+- Host: 1.2.3.4
 - Port: 40420
 - Base: http://HOST:40420
 
@@ -369,109 +369,6 @@ curl -sS http://HOST:40420/getAllAssetTransfers \
 
 ## JSON-RPC Interface
 
-The Qubic API also provides a JSON-RPC 2.0 interface accessible via HTTP and WebSocket connections. This interface supports all REST endpoints through equivalent methods with better parameter validation and enhanced functionality.
+The Qubic API also provides a JSON-RPC 2.0 interface accessible via HTTP and WebSocket connections. This interface supports all REST endpoints through equivalent methods with better parameter validation and enhanced functionality. 
 
-### HTTP Endpoint
-- URL: http://HOST:40420/jsonrpc
-- Content-Type: application/json
-
-### WebSocket Endpoint
-- URL: ws://HOST:40420/ws/qubic
-- Supports subscriptions for real-time updates
-
-### Common Error Codes
-- -32700: Parse error
-- -32600: Invalid request
-- -32601: Method not found
-- -32602: Invalid params
-- -32603: Internal error
-- -32001: Resource not found
-- -32002: Resource unavailable
-- -32005: Limit exceeded
-
-### Supported Methods
-
-#### Chain Info Methods
-- `qubic_chainId` - Returns chain identifier
-- `qubic_clientVersion` - Returns client version string  
-- `qubic_syncing` - Returns sync status
-- `qubic_status` - Returns full node status (same as /status REST endpoint)
-- `qubic_getCurrentEpoch` - Returns current epoch number
-
-#### Tick Methods
-- `qubic_getTickNumber` - Returns latest verified tick number
-- `qubic_getTickByNumber` - Returns tick data by tick number or tag
-- `qubic_getTickByHash` - Returns tick data by signature hash
-
-#### Transaction Methods
-- `qubic_getTransactionByHash` - Returns transaction by hash
-- `qubic_getTransactionReceipt` - Returns transaction receipt with logs
-- `qubic_broadcastTransaction` - Broadcasts a signed transaction
-
-#### Balance & Transfer Methods
-- `qubic_getBalance` - Returns full balance info for an identity
-- `qubic_getTransfers` - Returns transfers/logs matching filter criteria
-
-#### Asset Methods
-- `qubic_getAssetBalance` - Returns asset balance for an identity
-- `qubic_getAssets` - Returns list of assets owned by identity (placeholder)
-
-#### Log/Event Methods
-- `qubic_getLogs` - Returns logs matching filter
-- `qubic_findLogIds` - Returns only log IDs matching filter
-- `qubic_getLogsByIdRange` - Returns logs by ID range
-- `qubic_getTickLogRanges` - Returns logId ranges for given ticks
-
-#### Epoch Methods
-- `qubic_getEpochInfo` - Returns epoch info (tick range, log boundaries)
-- `qubic_getEndEpochLogs` - Returns end-of-epoch logs
-- `qubic_getComputors` - Returns computor list for an epoch
-
-#### Transfer History Methods
-- `qubic_getQuTransfers` - Returns QU transfer history for an identity
-- `qubic_getAssetTransfers` - Returns asset transfer history for an identity
-- `qubic_getAllAssetTransfers` - Returns all transfers for a specific asset
-
-#### Smart Contract Methods
-- `qubic_querySmartContract` - Query a smart contract function
-
-#### Subscription Methods (WebSocket only)
-- `qubic_subscribe` - Subscribe to events
-- `qubic_unsubscribe` - Unsubscribe from events
-
-## WebSocket Subscriptions
-
-The Qubic API supports real-time subscriptions over WebSocket connections for:
-
-### Subscription Types:
-1. **newTicks** - New tick notifications
-2. **logs** - Log events matching filter  
-3. **transfers** - QU transfer events (specialized log filter)
-4. **tickStream** - Full tick stream with transactions and logs
-
-### Subscription Management:
-- Maximum 10 subscriptions per client
-- Supports catch-up functionality for historical data
-- Rate limiting to prevent abuse
-- Automatic cleanup of disconnected clients
-
-### Catch-up Process:
-When a new subscription is established, the system can perform a catch-up process to provide historical data matching the subscription criteria. This ensures subscribers receive complete historical information before receiving live updates.
-
-----------------------------------------------------------------
-
-HTTP Status Codes
-- 200 OK: Successful request with JSON payload.
-- 202 Accepted: Request accepted and pending (used by querySmartContract when result not ready).
-- 400 Bad Request: Validation errors or malformed input.
-- 500 Internal Server Error: Unexpected server-side error.
-
-Content Types
-- Requests: For POST endpoints, send Content-Type: application/json.
-- Responses: application/json for all endpoints.
-
-Timeouts and Connection Behavior
-- Short-polling pattern on querySmartContract:
-  - The server attempts to return the result within roughly 100ms. If not ready, it returns 202 with a pending message and may close the connection. Clients should retry with the same nonce until a 200 response with data is received.
-- WebSocket connections are maintained for real-time updates
-- Periodic ping/pong messages to maintain connection health
+[JSON-RPC document](QUBIC_JSON_RPC.md)
