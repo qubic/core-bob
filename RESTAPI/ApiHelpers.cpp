@@ -165,14 +165,18 @@ TxExecutionDetails computeTxExecutionDetails(const std::string& txHash,
     out.resolved = true;
     out.timestamp = tickDataToUnixMillis(td) / 1000; // seconds, to match db_get_indexed_tx
 
+    // If log ranges aren't available, the tick hasn't been log-verified yet.
+    // Report as pending rather than silently returning executed=false.
     LogRangesPerTxInTick logrange{};
     if (!db_try_get_log_ranges(tx.tick, logrange)) {
+        out.pending = true;
         return out;
     }
 
     const long long from = logrange.fromLogId[out.transactionIndex];
     const long long length = logrange.length[out.transactionIndex];
     if (from < 0 || length <= 0) {
+        // Ranges exist and say this tx has no logs — definitively not executed.
         return out;
     }
     out.fromLogId = from;
@@ -180,6 +184,8 @@ TxExecutionDetails computeTxExecutionDetails(const std::string& txHash,
 
     out.logs = db_try_get_logs(td.epoch, out.fromLogId, out.toLogId);
     if (out.logs.empty()) {
+        // Ranges promised logs but we can't read them back — treat as pending.
+        out.pending = true;
         return out;
     }
 
@@ -246,6 +252,7 @@ TransactionInfo getTransactionInfo(const std::string& txHash) {
         auto details = computeTxExecutionDetails(txHash, *tx, td);
         if (details.resolved) {
             info.hasIndexedInfo = true;
+            info.pending = details.pending;
             info.transactionIndex = details.transactionIndex;
             info.logIdFrom = details.fromLogId;
             info.logIdTo = details.toLogId;

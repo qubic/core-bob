@@ -77,6 +77,7 @@ struct StreamTx {
     std::vector<uint8_t> inputData;
     std::string signature;
     bool executed;
+    bool pending{false};   // tick not yet log-verified; executed is unknown
     int64_t logIdFrom;
     int64_t logIdLength;
 };

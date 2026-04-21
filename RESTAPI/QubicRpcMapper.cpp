@@ -4,6 +4,7 @@
 #include "database/db.h"
 #include "GlobalVar.h"
 #include "defines.h"
+#include "ApiHelpers.h"
 #include <sstream>
 #include <iomanip>
 #include <cstring>
@@ -237,6 +238,20 @@ Json::Value tickDataToQubicTick(uint32_t tick, const TickData& td,
     // Transaction count and list
     result["transactionCount"] = static_cast<Json::UInt>(txDigests.size());
 
+    // Load the tick's log ranges and logs once so we can annotate each tx
+    // with its execution status without doing per-tx DB calls. If either
+    // lookup fails the tick hasn't been log-verified yet and we report
+    // status as "pending" instead of guessing "failed".
+    LogRangesPerTxInTick tickLogRanges{-1};
+    std::vector<LogEvent> tickLogs;
+    bool logsAvailable = false;
+    if (includeTransactions) {
+        bool rangesOk = db_try_get_log_ranges(tick, tickLogRanges);
+        bool logsOk = false;
+        tickLogs = db_get_logs_by_tick_range(epoch, tick, tick, logsOk);
+        logsAvailable = rangesOk && logsOk;
+    }
+
     Json::Value transactions(Json::arrayValue);
     for (size_t i = 0; i < txDigests.size(); ++i) {
         if (txDigests[i] != m256i::zero()) {
@@ -246,8 +261,31 @@ Json::Value tickDataToQubicTick(uint32_t tick, const TickData& td,
                 std::vector<uint8_t> txData;
                 if (db_try_get_transaction(qubicHash, txData)) {
                     Transaction* tx = reinterpret_cast<Transaction*>(txData.data());
-                    transactions.append(transactionToQubicTx(tx, qubicHash,
-                                                              tick, static_cast<int>(i), td, false));
+
+                    Json::Value txJson = transactionToQubicTx(tx, qubicHash,
+                                                               tick, static_cast<int>(i), td, false);
+
+                    if (logsAvailable) {
+                        int txSlot = -1;
+                        for (int s = 0; s < NUMBER_OF_TRANSACTIONS_PER_TICK; ++s) {
+                            if (td.transactionDigests[s] == txDigests[i]) {
+                                txSlot = s;
+                                break;
+                            }
+                        }
+                        bool executed = (txSlot >= 0) &&
+                                        ApiHelpers::isTxExecuted(*tx,
+                                                                 tickLogRanges.fromLogId[txSlot],
+                                                                 tickLogRanges.length[txSlot],
+                                                                 tickLogs);
+                        txJson["executed"] = executed;
+                        txJson["status"] = executed ? "success" : "failed";
+                    } else {
+                        txJson["executed"] = Json::Value::null;
+                        txJson["status"] = "pending";
+                    }
+
+                    transactions.append(std::move(txJson));
                 }
             } else {
                 // Just include the hash
@@ -319,7 +357,8 @@ Json::Value transactionToQubicTx(const Transaction* tx, const std::string& txHas
 
 Json::Value transactionToQubicReceipt(const Transaction* tx, const std::string& txHash,
                                        uint32_t tick, int txIndex, const TickData& td,
-                                       const std::vector<LogEvent>& logs, bool executed) {
+                                       const std::vector<LogEvent>& logs, bool executed,
+                                       bool pending) {
     Json::Value result(Json::objectValue);
 
     result["hash"] = txHash;
@@ -340,8 +379,13 @@ Json::Value transactionToQubicReceipt(const Transaction* tx, const std::string& 
     result["inputType"] = tx->inputType;
 
     // Execution status
-    result["executed"] = executed;
-    result["status"] = executed ? "success" : "failed";
+    if (pending) {
+        result["executed"] = Json::Value::null;
+        result["status"] = "pending";
+    } else {
+        result["executed"] = executed;
+        result["status"] = executed ? "success" : "failed";
+    }
 
     // Logs
     Json::Value logsArray(Json::arrayValue);

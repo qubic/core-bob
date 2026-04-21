@@ -45,6 +45,7 @@ struct TransactionInfo {
 
     // Indexed info (may not be available)
     bool hasIndexedInfo = false;
+    bool pending = false;           // tick not log-verified yet; executed is unknown
     int transactionIndex = -1;
     int64_t logIdFrom = -1;
     int64_t logIdTo = -1;
@@ -118,6 +119,7 @@ TransactionInfo getTransactionInfo(const std::string& txHash);
 // correct regardless of indexer state or spam-filter settings.
 struct TxExecutionDetails {
     bool resolved = false;          // tx was found in the tick's digests
+    bool pending = false;           // tick not yet log-verified; executed/logs unknown
     int transactionIndex = -1;
     long long fromLogId = -1;
     long long toLogId = -1;

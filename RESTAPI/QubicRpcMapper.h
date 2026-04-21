@@ -92,10 +92,13 @@ Json::Value transactionToQubicTx(const Transaction* tx, const std::string& txHas
                                   uint32_t tick, int txIndex, const TickData& td,
                                   bool includeTick = true);
 
-// Convert transaction + logs to receipt JSON
+// Convert transaction + logs to receipt JSON. When `pending` is true the tick
+// has not been log-verified yet; executed is emitted as null and status is
+// "pending" to distinguish from a genuinely failed tx.
 Json::Value transactionToQubicReceipt(const Transaction* tx, const std::string& txHash,
                                        uint32_t tick, int txIndex, const TickData& td,
-                                       const std::vector<LogEvent>& logs, bool executed);
+                                       const std::vector<LogEvent>& logs, bool executed,
+                                       bool pending = false);
 
 // ============================================================================
 // Log Conversions

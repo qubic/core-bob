@@ -308,7 +308,8 @@ Json::Value QubicRpcMethods::getTransactionReceipt(const std::string& txHashInpu
     return QubicRpc::transactionToQubicReceipt(tx, qubicHash, tx->tick,
                                                 details.transactionIndex,
                                                 td, details.logs,
-                                                details.executed);
+                                                details.executed,
+                                                details.pending);
 }
 
 Json::Value QubicRpcMethods::broadcastTransaction(const std::string& signedTxHex) {

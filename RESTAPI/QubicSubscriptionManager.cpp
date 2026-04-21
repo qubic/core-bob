@@ -600,7 +600,13 @@ std::string QubicSubscriptionManager::buildTickStreamJsonString(
         txJson["amount"] = static_cast<Json::Int64>(tx.amount);
         txJson["inputType"] = tx.inputType;
         txJson["inputSize"] = tx.inputSize;
-        txJson["executed"] = tx.executed;
+        if (tx.pending) {
+            txJson["executed"] = Json::Value::null;
+            txJson["status"] = "pending";
+        } else {
+            txJson["executed"] = tx.executed;
+            txJson["status"] = tx.executed ? "success" : "failed";
+        }
         txJson["logIdFrom"] = static_cast<Json::Int64>(tx.logIdFrom);
         txJson["logIdLength"] = static_cast<Json::Int64>(tx.logIdLength);
 
@@ -748,7 +754,7 @@ void QubicSubscriptionManager::processVerifiedTick(
 
         // Get log ranges for transaction index lookup
         LogRangesPerTxInTick lr{-1};
-        db_try_get_log_ranges(tick, lr);
+        bool logRangesAvailable = db_try_get_log_ranges(tick, lr);
 
         // Build list of all transactions in this tick
         std::vector<StreamTx> allTxs;
@@ -785,7 +791,14 @@ void QubicSubscriptionManager::processVerifiedTick(
             // Compute execution status directly from the tick's log range and
             // already-loaded logs. Same rules as ApiHelpers::computeTxExecutionDetails
             // so the streamed status matches what receipt/info endpoints return.
-            if (lr.length[i] > 0 && lr.fromLogId[i] >= 0) {
+            // If log ranges aren't available yet, report as pending so clients
+            // can distinguish from a genuinely failed tx.
+            if (!logRangesAvailable) {
+                stx.pending = true;
+                stx.executed = false;
+                stx.logIdFrom = -1;
+                stx.logIdLength = 0;
+            } else if (lr.length[i] > 0 && lr.fromLogId[i] >= 0) {
                 stx.executed = ApiHelpers::isTxExecuted(*tx, lr.fromLogId[i], lr.length[i], logs);
                 stx.logIdFrom = lr.fromLogId[i];
                 stx.logIdLength = lr.length[i];
@@ -974,7 +987,7 @@ void QubicSubscriptionManager::performCatchUp(
 
             // Get log ranges
             LogRangesPerTxInTick lr{-1};
-            db_try_get_log_ranges(tick, lr);
+            bool logRangesAvailable = db_try_get_log_ranges(tick, lr);
 
             // Build and filter transactions
             std::vector<StreamTx> matchedTxs;
@@ -1005,7 +1018,14 @@ void QubicSubscriptionManager::performCatchUp(
                 }
 
                 // Compute execution status directly from log ranges + tick logs.
-                if (lr.length[i] > 0 && lr.fromLogId[i] >= 0) {
+                // Mark as pending when log ranges haven't been written yet so
+                // catch-up clients don't see transient "failed" statuses.
+                if (!logRangesAvailable) {
+                    stx.pending = true;
+                    stx.executed = false;
+                    stx.logIdFrom = -1;
+                    stx.logIdLength = 0;
+                } else if (lr.length[i] > 0 && lr.fromLogId[i] >= 0) {
                     stx.executed = ApiHelpers::isTxExecuted(*tx, lr.fromLogId[i], lr.length[i], logs);
                     stx.logIdFrom = lr.fromLogId[i];
                     stx.logIdLength = lr.length[i];
@@ -1145,7 +1165,7 @@ void QubicSubscriptionManager::performCatchUp(
 
             // Get log ranges
             LogRangesPerTxInTick lr{-1};
-            db_try_get_log_ranges(tick, lr);
+            bool logRangesAvailable = db_try_get_log_ranges(tick, lr);
 
             // Build and filter transactions
             std::vector<StreamTx> matchedTxs;
@@ -1176,7 +1196,14 @@ void QubicSubscriptionManager::performCatchUp(
                 }
 
                 // Compute execution status directly from log ranges + tick logs.
-                if (lr.length[i] > 0 && lr.fromLogId[i] >= 0) {
+                // Mark as pending when log ranges haven't been written yet so
+                // catch-up clients don't see transient "failed" statuses.
+                if (!logRangesAvailable) {
+                    stx.pending = true;
+                    stx.executed = false;
+                    stx.logIdFrom = -1;
+                    stx.logIdLength = 0;
+                } else if (lr.length[i] > 0 && lr.fromLogId[i] >= 0) {
                     stx.executed = ApiHelpers::isTxExecuted(*tx, lr.fromLogId[i], lr.length[i], logs);
                     stx.logIdFrom = lr.fromLogId[i];
                     stx.logIdLength = lr.length[i];

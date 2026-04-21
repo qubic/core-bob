@@ -84,6 +84,9 @@ std::string bobGetTransaction(const char* txHash)
                    "}";
         }
 
+        const std::string executedField = info.pending ? "null" : (info.executed ? "true" : "false");
+        const std::string statusField   = info.pending ? "pending" : (info.executed ? "success" : "failed");
+
         return std::string("{") +
                "\"hash\":\"" + info.hash + "\"," +
                "\"from\":\"" + info.from + "\"," +
@@ -93,7 +96,8 @@ std::string bobGetTransaction(const char* txHash)
                "\"logIdFrom\":" + std::to_string(info.logIdFrom) + "," +
                "\"logIdTo\":" + std::to_string(info.logIdTo) + "," +
                "\"transactionIndex\":" + std::to_string(info.transactionIndex) + "," +
-               "\"executed\":" + (info.executed ? "true" : "false") + "," +
+               "\"executed\":" + executedField + "," +
+               "\"status\":\"" + statusField + "\"," +
                "\"timestamp\":" + std::to_string(info.timestamp) + "," +
                "\"inputSize\":" + std::to_string(info.inputSize) + "," +
                "\"inputType\":" + std::to_string(info.inputType) + "," +
