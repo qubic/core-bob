@@ -233,26 +233,14 @@ bool db_check_log_range(uint32_t tick)
     return false;
 }
 
-bool db_log_exists(uint16_t epoch, uint64_t logId) {
-    if (!g_redis) return false;
-    try {
-        std::string key = "log:" + std::to_string(epoch) + ":" + std::to_string(logId);
-        return g_redis->exists(key);
-    } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in db_log_exists: {}\n", e.what());
-        return false;
-    }
-    return false;
-}
-
-bool _db_get_log_ranges(uint32_t tick, LogRangesPerTxInTick &logRange) {
+// Internal helper: fetch a LogRangesPerTxInTick blob by its full Redis key.
+// Handles the legacy "oracle machine" struct layout (16-byte size delta).
+static bool _db_get_log_ranges_by_key(const std::string& key, LogRangesPerTxInTick& logRange) {
     if (!g_redis) return false;
     try {
         // Default to -1s
         memset(&logRange, -1, sizeof(LogRangesPerTxInTick));
 
-        // Fetch the whole struct for the tick
-        std::string key = "log_ranges:" + std::to_string(tick);
         auto val = g_redis->get(key);
         if (!val) {
             return false;
@@ -260,15 +248,15 @@ bool _db_get_log_ranges(uint32_t tick, LogRangesPerTxInTick &logRange) {
         if (sizeof(LogRangesPerTxInTick) - val->size() == 16) // oracle machine logging mismatches
         {
             struct {
-                long long fromLogId[1024+5];
-                long long length[1024+5];
+                long long fromLogId[1024 + 5];
+                long long length[1024 + 5];
             } old_struct;
             memcpy(&old_struct, val->data(), val->size());
             memset(&logRange, 0, sizeof(logRange));
-            for (int i = 0; i < 1024+5; i++)
+            for (int i = 0; i < 1024 + 5; i++)
             {
                 logRange.fromLogId[i] = old_struct.fromLogId[i];
-                logRange.length[i] = old_struct.length[i];
+                logRange.length[i]    = old_struct.length[i];
             }
             return true;
         }
@@ -279,8 +267,28 @@ bool _db_get_log_ranges(uint32_t tick, LogRangesPerTxInTick &logRange) {
         }
         memcpy((void*)&logRange, val->data(), sizeof(LogRangesPerTxInTick));
         return true;
+    } catch (const sw::redis::Error& e) {
+        Logger::get()->error("Redis error in _db_get_log_ranges_by_key (key={}): {}\n",
+                             key.c_str(), e.what());
+        return false;
+    }
+}
+
+bool _db_get_log_ranges(uint32_t tick, LogRangesPerTxInTick& logRange) {
+    return _db_get_log_ranges_by_key("log_ranges:" + std::to_string(tick), logRange);
+}
+
+bool db_try_get_log_ranges_with_key(const std::string& key, LogRangesPerTxInTick& logRange) {
+    return _db_get_log_ranges_by_key(key, logRange);
+}
+
+bool db_log_exists(uint16_t epoch, uint64_t logId) {
+    if (!g_redis) return false;
+    try {
+        std::string key = "log:" + std::to_string(epoch) + ":" + std::to_string(logId);
+        return g_redis->exists(key);
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in db_try_get_log_ranges: {}\n", e.what());
+        Logger::get()->error("Redis error in db_log_exists: {}\n", e.what());
         return false;
     }
     return false;
@@ -300,7 +308,6 @@ bool db_delete_log_ranges(uint32_t tick) {
         return false;
     }
 }
-
 
 bool db_try_get_log_ranges(uint32_t tick, LogRangesPerTxInTick &logRange)
 {

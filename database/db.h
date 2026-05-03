@@ -393,7 +393,11 @@ bool db_is_tick_empty(uint32_t tick, bool& notEnoughData);
  */
 
 bool db_check_log_range(uint32_t tick);
-bool db_try_get_log_ranges(uint32_t tick, LogRangesPerTxInTick &logRange);
+bool db_try_get_log_ranges(uint32_t tick, LogRangesPerTxInTick& logRange);
+
+// Same as db_try_get_log_ranges but accepts the full Redis key directly.
+// Useful for migrated end-epoch keys like "end_epoch:log_ranges:<epoch>".
+bool db_try_get_log_ranges_with_key(const std::string& key, LogRangesPerTxInTick& logRange);
 bool db_has_tick_data(uint32_t tick);
 bool db_try_get_transaction(const std::string& tx_hash, std::vector<uint8_t>& tx_data);
 bool db_get_many_transaction_from_keydb(const std::vector<std::string>& txKeys,

@@ -190,7 +190,20 @@ std::string bobGetLog(uint16_t epoch, int64_t start, int64_t end)
                 prevTick = log.getTick();
                 logTxOrderIndex = 0; // reset this back to 0 everytime it process a new tick
             }
-            if (!db_try_get_log_ranges(log.getTick(), lr))
+
+            bool gotRanges = db_try_get_log_ranges(log.getTick(), lr);
+            if (!gotRanges)
+            {
+                uint32_t endEpochTick = 0;
+                if (db_get_u32("end_epoch_tick:" + std::to_string(epoch), endEpochTick)
+                    && endEpochTick == log.getTick())
+                {
+                    gotRanges = db_try_get_log_ranges_with_key(
+                        "end_epoch:log_ranges:" + std::to_string(epoch), lr);
+                }
+            }
+
+            if (!gotRanges)
             {
                 Json::Value err(Json::objectValue);
                 err["ok"] = false;
