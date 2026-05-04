@@ -971,15 +971,24 @@ void QubicSubscriptionManager::performCatchUp(
                 filter = it->second.tickStreamFilter;
             }
 
-            // Get tick data from DB
-            TickData td;
-            if (!db_try_get_tick_data(tick, td)) {
-                continue;  // Skip ticks not in DB
-            }
+            // Get tick data from DB. If it's missing the tick may be
+            // quorum-skipped (e.g. the empty first tick of an epoch) or
+            // evicted under lastNTick storage. Don't drop it from the stream
+            // — emit a placeholder so clients see every tick in the requested
+            // range. The skipEmptyTicks filter below still suppresses fully
+            // empty ticks when the client opts in.
+            TickData td{};
+            bool hasTickData = db_try_get_tick_data(tick, td);
 
-            // Get epoch from tick data
+            // Pick an epoch even when tick data is missing so log lookups
+            // and downstream JSON fields remain meaningful.
             uint16_t epoch = td.epoch;
-            lastEpoch = epoch;
+            if (epoch == 0) {
+                epoch = (lastEpoch != 0) ? lastEpoch : gCurrentProcessingEpoch.load();
+            }
+            if (hasTickData) {
+                lastEpoch = epoch;
+            }
 
             // Get logs for this tick
             bool success = false;
