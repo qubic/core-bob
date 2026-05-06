@@ -525,9 +525,57 @@ gatherAllLoggingEvents:
         }
 
 verifyNodeStateDigest:
-        if (gIsEndEpoch) break;
-        while (processToTick >= gCurrentFetchingTick)
-        {
+            // Helper lambda to push verified logs to WebSocket subscribers.
+            // Used for both regular verified batches and the final end-epoch batch.
+            auto broadcastVerifiedLogs = [&]() {
+                if (QubicSubscriptionManager::instance().getClientCount() == 0) return;
+                try {
+                    if (!vle.empty()) {
+                        // Group logs by tick for proper ordering
+                        uint32_t currentTick = 0;
+                        std::vector<LogEvent> tickLogs;
+                        for (const auto& log : vle) {
+                            uint32_t logTick = log.getTick();
+                            if (logTick != currentTick && !tickLogs.empty()) {
+                                TickData td{0};
+                                if (db_try_get_tick_data(currentTick, td)) {
+                                    QubicSubscriptionManager::instance().onNewTick(currentTick, td);
+                                    QubicSubscriptionManager::instance().onNewLogs(currentTick, tickLogs, td);
+                                }
+                                tickLogs.clear();
+                            }
+                            currentTick = logTick;
+                            tickLogs.push_back(log);
+                        }
+                        if (!tickLogs.empty()) {
+                            TickData td{0};
+                            if (db_try_get_tick_data(currentTick, td)) {
+                                QubicSubscriptionManager::instance().onNewTick(currentTick, td);
+                                QubicSubscriptionManager::instance().onNewLogs(currentTick, tickLogs, td);
+                            }
+                        }
+                    } else {
+                        // No logs but we still need to notify newTicks subscribers
+                        TickData td{0};
+                        if (db_try_get_tick_data(processToTick, td)) {
+                            QubicSubscriptionManager::instance().onNewTick(processToTick, td);
+                        }
+                    }
+                } catch (const std::exception& e) {
+                    Logger::get()->warn("LoggingEventProcessor: WebSocket notification failed: {}", e.what());
+                } catch (...) {
+                    Logger::get()->warn("LoggingEventProcessor: WebSocket notification failed: unknown error");
+                }
+            };
+
+            if (gIsEndEpoch) {
+                // Broadcast the final batch (which contains the END_EPOCH log events)
+                // to WebSocket subscribers before exiting the verification loop.
+                broadcastVerifiedLogs();
+                break;
+            }
+            while (processToTick >= gCurrentFetchingTick)
+            {
             SLEEP(100); // need to wait until tick data and votes arrive
             if (gStopFlag.load(std::memory_order_relaxed)) return;
         }
@@ -631,45 +679,7 @@ verifyNodeStateDigest:
             // Push verified logs to WebSocket subscribers (for logs/transfers subscriptions)
             // Note: tickStream subscriptions are notified from QubicIndexer after indexing
             // Wrapped in try-catch to ensure log verification continues even if notification fails
-            if (QubicSubscriptionManager::instance().getClientCount() > 0) {
-                try {
-                    if (!vle.empty()) {
-                        // Group logs by tick for proper ordering
-                        uint32_t currentTick = 0;
-                        std::vector<LogEvent> tickLogs;
-                        for (const auto& log : vle) {
-                            uint32_t logTick = log.getTick();
-                            if (logTick != currentTick && !tickLogs.empty()) {
-                                TickData td{0};
-                                if (db_try_get_tick_data(currentTick, td)) {
-                                    QubicSubscriptionManager::instance().onNewTick(currentTick, td);
-                                    QubicSubscriptionManager::instance().onNewLogs(currentTick, tickLogs, td);
-                                }
-                                tickLogs.clear();
-                            }
-                            currentTick = logTick;
-                            tickLogs.push_back(log);
-                        }
-                        if (!tickLogs.empty()) {
-                            TickData td{0};
-                            if (db_try_get_tick_data(currentTick, td)) {
-                                QubicSubscriptionManager::instance().onNewTick(currentTick, td);
-                                QubicSubscriptionManager::instance().onNewLogs(currentTick, tickLogs, td);
-                            }
-                        }
-                    } else {
-                        // No logs but we still need to notify newTicks subscribers
-                        TickData td{0};
-                        if (db_try_get_tick_data(processToTick, td)) {
-                            QubicSubscriptionManager::instance().onNewTick(processToTick, td);
-                        }
-                    }
-                } catch (const std::exception& e) {
-                    Logger::get()->warn("LoggingEventProcessor: WebSocket notification failed: {}", e.what());
-                } catch (...) {
-                    Logger::get()->warn("LoggingEventProcessor: WebSocket notification failed: unknown error");
-                }
-            }
+            broadcastVerifiedLogs();
 
             gCurrentVerifyLoggingTick = processToTick + 1;
         }
