@@ -435,18 +435,37 @@ int runBob(int argc, char *argv[])
     // Wake all data threads so none remain blocked on MRB.
     int N_data_thread = v_data_thread.size();
     Logger::get()->info("Exiting {} data thread", N_data_thread);
-    while (N_data_thread > gExitDataThreadCounter.load())
     {
-        const size_t wake_count = v_data_thread.size() * 8; // ensure enough tokens
-        std::vector<RequestResponseHeader> tokens(wake_count);
-        for (auto& t : tokens) {
-            t.randomizeDejavu();
-            t.setType(35); // NOP
-            t.setSize(8);
-        }
-        for (size_t i = 0; i < wake_count; ++i) {
-            MRB_Data.EnqueuePacket(reinterpret_cast<uint8_t*>(&tokens[i]));
-            MRB_Request.EnqueuePacket(reinterpret_cast<uint8_t*>(&tokens[i]));
+        // Hard timeout for end-of-epoch shutdown. If a data thread is stuck
+        // in a deep DB call (e.g., during heavy kvrocks compaction), force
+        // process exit so the supervisor restarts bob for the new epoch
+        // instead of hanging the WS/REST server alive without progress.
+        constexpr long long WAKE_TIMEOUT_MS = 60000;
+        const auto wakeStart = std::chrono::steady_clock::now();
+        while (N_data_thread > gExitDataThreadCounter.load())
+        {
+            const size_t wake_count = v_data_thread.size() * 8; // ensure enough tokens
+            std::vector<RequestResponseHeader> tokens(wake_count);
+            for (auto& t : tokens) {
+                t.randomizeDejavu();
+                t.setType(35); // NOP
+                t.setSize(8);
+            }
+            for (size_t i = 0; i < wake_count; ++i) {
+                MRB_Data.EnqueuePacket(reinterpret_cast<uint8_t*>(&tokens[i]));
+                MRB_Request.EnqueuePacket(reinterpret_cast<uint8_t*>(&tokens[i]));
+            }
+            SLEEP(50); // give the data threads CPU time to drain the queue and exit
+
+            const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - wakeStart).count();
+            if (elapsedMs > WAKE_TIMEOUT_MS) {
+                Logger::get()->critical(
+                    "Data threads did not exit within {}ms ({} of {} acked). Forcing process exit so supervisor can restart for the new epoch.",
+                    WAKE_TIMEOUT_MS, gExitDataThreadCounter.load(), N_data_thread);
+                spdlog::shutdown();
+                std::_Exit(0);
+            }
         }
     }
 
