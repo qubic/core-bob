@@ -56,7 +56,7 @@ int main(int argc, char* argv[]) {
         if (db_try_get_log_range_for_tick(tick, fromLogId, length)) {
             if (fromLogId != -1 && length > 0) {
                 // Deletes keys "log:<epoch>:<logId>"
-                db_delete_logs(epoch, fromLogId, fromLogId + length - 1);
+                db_delete_logs_from_redis(epoch, fromLogId, fromLogId + length - 1);
             }
         }
 

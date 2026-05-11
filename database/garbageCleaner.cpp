@@ -22,7 +22,7 @@ bool cleanTransactionAndLogsAndSaveToDisk(TickData& td, LogRangesPerTxInTick& lr
         Logger::get()->error("Failed to add transactions to kvrocks for tick {} - epoch {}", td.tick, td.epoch);
         return false;
     }
-    db_delete_many(txsHash);
+    db_delete_many_from_redis(txsHash);
     long long min_log_id = INTMAX_MAX;
     long long max_log_id = -1;
     lr.getMinMax(min_log_id, max_log_id);
@@ -33,7 +33,7 @@ bool cleanTransactionAndLogsAndSaveToDisk(TickData& td, LogRangesPerTxInTick& lr
             Logger::get()->error("Failed to move logs to kvrocks for tick {} - epoch {}", td.tick, gCurrentProcessingEpoch);
             return false;
         }
-        db_delete_logs(gCurrentProcessingEpoch, min_log_id, max_log_id - 1);
+        db_delete_logs_from_redis(gCurrentProcessingEpoch, min_log_id, max_log_id - 1);
     }
     return true;
 }

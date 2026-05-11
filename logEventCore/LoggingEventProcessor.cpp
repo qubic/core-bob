@@ -347,7 +347,7 @@ gatherAllLoggingEvents:
                 auto endId = fromId + length - 1;
                 while (!gStopFlag.load())
                 {
-                    db_delete_logs(gCurrentProcessingEpoch, fromId, endId);
+                    db_delete_logs_from_redis(gCurrentProcessingEpoch, fromId, endId);
                     refetchFromId = fromId;
                     refetchToId = endId;
                     Logger::get()->info("Deleted malformed log, waiting for new data");
@@ -654,7 +654,7 @@ verifyNodeStateDigest:
                 db_get_combined_log_range_for_ticks(processFromTick, processToTick, fromId, length);
                 auto endId = fromId + length - 1;
                 for (uint32_t t = processFromTick; t <= processToTick; t++) db_delete_log_ranges(t);
-                db_delete_logs(gCurrentProcessingEpoch, fromId, endId);
+                db_delete_logs_from_redis(gCurrentProcessingEpoch, fromId, endId);
                 Logger::get()->info("Deleted all potential malformed data. Setting last fetched logging to {}", processFromTick-1);
                 db_update_latest_event_tick_and_epoch(processFromTick-1, gCurrentProcessingEpoch);
                 Logger::get()->warn("Forcing bob to exit");

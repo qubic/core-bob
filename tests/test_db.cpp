@@ -250,17 +250,17 @@ TEST_F(DbTest, DeleteTransaction_NoRedis_ReturnsFalse) {
 // ---------------------------------------------------------------------------
 
 TEST_F(DbTest, DeleteMany_EmptyKeys_ReturnsTrue) {
-    EXPECT_TRUE(db_delete_many({}));
+    EXPECT_TRUE(db_delete_many_from_redis({}));
 }
 
 TEST_F(DbTest, DeleteMany_WithKeys_CallsUnlink) {
     EXPECT_CALL(mockRedis, unlink(_, _)).Times(1);
-    EXPECT_TRUE(db_delete_many({"key1", "key2"}));
+    EXPECT_TRUE(db_delete_many_from_redis({"key1", "key2"}));
 }
 
 TEST_F(DbTest, DeleteMany_NoRedis_ReturnsFalse) {
     db_inject_redis(nullptr, nullptr);
-    EXPECT_FALSE(db_delete_many({"key1"}));
+    EXPECT_FALSE(db_delete_many_from_redis({"key1"}));
 }
 
 // ---------------------------------------------------------------------------
@@ -269,12 +269,12 @@ TEST_F(DbTest, DeleteMany_NoRedis_ReturnsFalse) {
 
 TEST_F(DbTest, DeleteLogs_Success) {
     EXPECT_CALL(mockRedis, unlink(_, _)).Times(1);
-    EXPECT_TRUE(db_delete_logs(1, 10, 12));
+    EXPECT_TRUE(db_delete_logs_from_redis(1, 10, 12));
 }
 
 TEST_F(DbTest, DeleteLogs_NoRedis_ReturnsFalse) {
     db_inject_redis(nullptr, nullptr);
-    EXPECT_FALSE(db_delete_logs(1, 10, 12));
+    EXPECT_FALSE(db_delete_logs_from_redis(1, 10, 12));
 }
 
 // ---------------------------------------------------------------------------

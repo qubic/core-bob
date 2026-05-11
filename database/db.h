@@ -499,8 +499,8 @@ bool db_add_many_transactions_to_kvrocks(const std::vector<std::string>& txKeys,
 
 bool db_move_logs_to_kvrocks_by_range(uint16_t epoch, long long fromLogId, long long toLogId);
 bool db_delete_transaction(std::string hash);
-bool db_delete_many(const std::vector<std::string>& keys);
-bool db_delete_logs(uint16_t epoch, long long start, long long end);
+bool db_delete_many_from_redis(const std::vector<std::string>& keys);
+bool db_delete_logs_from_redis(uint16_t epoch, long long start, long long end);
 
 bool db_get_endepoch_log_range_info(const uint16_t epoch, long long &start, long long &length, LogRangesPerTxInTick &lr);
 

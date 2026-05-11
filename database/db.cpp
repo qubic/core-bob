@@ -129,7 +129,7 @@ bool db_delete_transaction(std::string hash)
     return true;
 }
 
-bool db_delete_many(const std::vector<std::string>& keys)
+bool db_delete_many_from_redis(const std::vector<std::string>& keys)
 {
     if (!g_redis) return false;
     try {
@@ -144,7 +144,7 @@ bool db_delete_many(const std::vector<std::string>& keys)
     return true;
 }
 
-bool db_delete_logs(uint16_t epoch, long long start, long long end)
+bool db_delete_logs_from_redis(uint16_t epoch, long long start, long long end)
 {
     if (!g_redis) return false;
     try {
