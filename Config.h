@@ -60,6 +60,9 @@ struct AppConfig {
     std::string nodeAlias = "Big fat bob";
 
     bool allow_check_in_qubic_global = true;
+
+    // When true, persist oracle tx data and log events. Default: true.
+    bool persist_oracle_tx = true;
 };
 
 // Returns true on success; on failure returns false and fills error with a human-readable message.

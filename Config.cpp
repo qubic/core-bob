@@ -369,6 +369,17 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
         out.allow_check_in_qubic_global = root["allow-check-in-qubic-global"].asBool();
     }
 
+    // persist-oracle-tx: when true, oracle tx data and log events are persisted (default: true)
+    if (root.isMember("persist-oracle-tx")) {
+        if (!root["persist-oracle-tx"].isBool()) {
+            error = "Invalid type: boolean required for key 'persist-oracle-tx'";
+            return false;
+        }
+        out.persist_oracle_tx = root["persist-oracle-tx"].asBool();
+    } else {
+        out.persist_oracle_tx = true;
+    }
+
     if (out.tick_storage_mode == TickStorageMode::LastNTick)
     {
         if (out.tx_storage_mode != TxStorageMode::LastNTick && out.tx_storage_mode != TxStorageMode::Free)

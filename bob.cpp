@@ -102,6 +102,7 @@ int runBob(int argc, char *argv[])
     gAllowCheckInQubicGlobal = cfg.allow_check_in_qubic_global;
     gAllowReceiveLogFromIncomingConnection = cfg.allow_receive_log_from_incoming_connections;
     gMaxActivitiesPerIndexKey = cfg.indexer_max_activities_per_key;
+    gPersistOracleTx = cfg.persist_oracle_tx;
     gIsTestnet = false;
 
     // Defaults for new knobs are already in AppConfig

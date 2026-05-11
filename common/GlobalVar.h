@@ -92,6 +92,8 @@ struct GlobalState {
     bool allowCheckInQubicGlobal = true;
     bool isTestNet;
 
+    bool persistOracleTx = true;
+
     std::atomic_bool gStopFlag;
 
     TimedCacheMap<>* TCM;

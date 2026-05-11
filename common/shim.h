@@ -60,6 +60,7 @@
 #define gStopFlag (GS().gStopFlag)
 #define gStartTimeUnix (GS().startTimeUnix)
 #define gAllowCheckInQubicGlobal (GS().allowCheckInQubicGlobal)
+#define gPersistOracleTx (GS().persistOracleTx)
 #define gTCM (GS().TCM)
 #define gMaxActivitiesPerIndexKey (GS().gMaxActivitiesPerIndexKey)
 
