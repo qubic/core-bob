@@ -5,38 +5,112 @@ static const std::string KEY_LAST_CLEAN_TX_TICK = "garbage_cleaner:last_clean_tx
 
 bool cleanTransactionAndLogsAndSaveToDisk(TickData& td, LogRangesPerTxInTick& lr)
 {
-    std::vector<std::string> txsHash;
-    std::vector<std::optional<std::basic_string<char>>> txVal;
+    // Collect all tx hashes from the tick
+    std::vector<std::string> allTxsHash;
+    std::vector<std::optional<std::basic_string<char>>> allTxVal;
     for (int i = 0; i < NUMBER_OF_TRANSACTIONS_PER_TICK; i++) {
         if (td.transactionDigests[i] != m256i::zero()) {
-            txsHash.push_back("transaction:" + td.transactionDigests[i].toQubicHash());
+            allTxsHash.push_back("transaction:" + td.transactionDigests[i].toQubicHash());
         }
     }
-    if (!db_get_many_transaction_from_keydb(txsHash, txVal))
+    if (!db_get_many_transaction_from_keydb(allTxsHash, allTxVal))
     {
         Logger::get()->error("Failed to get transactions data from keydb for tick {} - epoch {}", td.tick, td.epoch);
         return false;
     }
-    if (!db_add_many_transactions_to_kvrocks(txsHash, txVal))
+
+    // Split into kept (persisted) and discarded (oracle) txs when gPersistOracleTx is disabled.
+    std::vector<std::string> txsHash;
+    std::vector<std::optional<std::basic_string<char>>> txVal;
+    std::vector<std::string> oracleTxsHash;
+
+    if (!gPersistOracleTx)
+    {
+        txsHash.reserve(allTxsHash.size());
+        txVal.reserve(allTxVal.size());
+
+        for (size_t k = 0; k < allTxsHash.size(); ++k)
+        {
+            bool isOracle = false;
+            if (allTxVal[k].has_value())
+            {
+                const auto& blob = allTxVal[k].value();
+                if (blob.size() >= sizeof(Transaction))
+                {
+                    const Transaction* tx = reinterpret_cast<const Transaction*>(blob.data());
+                    if (isZero(tx->destinationPublicKey) &&
+                        (tx->inputType == 6 || tx->inputType == 7 || tx->inputType == 10))
+                    {
+                        isOracle = true;
+                    }
+                }
+            }
+
+            if (isOracle)
+            {
+                oracleTxsHash.push_back(allTxsHash[k]);
+            }
+            else
+            {
+                txsHash.push_back(allTxsHash[k]);
+                txVal.push_back(allTxVal[k]);
+            }
+        }
+    }
+    else
+    {
+        txsHash = std::move(allTxsHash);
+        txVal = std::move(allTxVal);
+    }
+
+    // Persist non-oracle txs to kvrocks
+    if (!txsHash.empty() && !db_add_many_transactions_to_kvrocks(txsHash, txVal))
     {
         Logger::get()->error("Failed to add transactions to kvrocks for tick {} - epoch {}", td.tick, td.epoch);
         return false;
     }
     db_delete_many_from_redis(txsHash);
+
+    // Discard oracle txs from redis without persisting
+    if (!oracleTxsHash.empty())
+    {
+        db_delete_many_from_redis(oracleTxsHash);
+    }
+
+    // Move logs to kvrocks, excluding oracle log event types (14, 15) when oracle persistence is off.
     long long min_log_id = INTMAX_MAX;
     long long max_log_id = -1;
     lr.getMinMax(min_log_id, max_log_id);
     if (min_log_id != -1 && max_log_id != -1)
     {
-        if (!db_move_logs_to_kvrocks_by_range(gCurrentProcessingEpoch, min_log_id, max_log_id - 1))
+        bool ok;
+        if (!gPersistOracleTx)
+        {
+            ok = db_move_logs_to_kvrocks_by_range_filtered(
+                gCurrentProcessingEpoch,
+                min_log_id,
+                max_log_id - 1,
+                /*excludedTypes=*/ std::vector<uint32_t>{14, 15});
+        }
+        else
+        {
+            ok = db_move_logs_to_kvrocks_by_range(
+                gCurrentProcessingEpoch,
+                min_log_id,
+                max_log_id - 1);
+        }
+
+        if (!ok)
         {
             Logger::get()->error("Failed to move logs to kvrocks for tick {} - epoch {}", td.tick, gCurrentProcessingEpoch);
             return false;
         }
+
         db_delete_logs_from_redis(gCurrentProcessingEpoch, min_log_id, max_log_id - 1);
     }
     return true;
 }
+
 void compressTickAndMoveToKVRocks(uint32_t tick, FullTickStruct& full, std::vector<TickVote>& votes, std::vector<char>& compressedBuffer)
 {
     std::memset((void*)&full, 0, sizeof(full));

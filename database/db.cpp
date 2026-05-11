@@ -1643,6 +1643,77 @@ bool db_move_logs_to_kvrocks_by_range(uint16_t epoch, long long fromLogId, long 
     }
 }
 
+bool db_move_logs_to_kvrocks_by_range_filtered(
+    uint16_t epoch,
+    long long fromLogId,
+    long long toLogId,
+    const std::vector<uint32_t>& excludedTypes)
+{
+    if (!g_redis || !g_kvrocks || toLogId < fromLogId) return false;
+    if (fromLogId < 0 || toLogId < 0) return true; // nothing to move
+
+    try {
+        // Build all keys for the range
+        std::vector<std::string> keys;
+        keys.reserve(toLogId - fromLogId + 1);
+        for (long long logId = fromLogId; logId <= toLogId; logId++) {
+            keys.push_back("log:" + std::to_string(epoch) + ":" + std::to_string(logId));
+        }
+
+        // MGET all log data from g_redis in 1 call
+        std::vector<sw::redis::OptionalString> values;
+        values.reserve(keys.size());
+        g_redis->mget(keys.begin(), keys.end(), std::back_inserter(values));
+
+        // Fast lookup for excluded types
+        std::unordered_set<int> excludedSet;
+        excludedSet.reserve(excludedTypes.size() * 2);
+        for (auto t : excludedTypes) excludedSet.insert(static_cast<int>(t));
+
+        // Prepare key-value pairs for MSET to kvrocks, applying filter
+        std::vector<std::pair<std::string, std::string>> kvPairs;
+        kvPairs.reserve(keys.size());
+
+        size_t skippedByType = 0;
+
+        for (size_t i = 0; i < keys.size(); i++) {
+            if (!values[i]) {
+                Logger::get()->warn("Log {}:{} ({} => {}) not found in redis. Stop migrating.",
+                                    epoch, fromLogId + i, fromLogId, toLogId);
+                return false;
+            }
+            LogEvent le{};
+            le.updateContent(reinterpret_cast<const uint8_t*>(values[i]->data()), static_cast<int>(values[i]->size()));
+            int type = le.getType();
+            if (type >= 0 && excludedSet.find(type) != excludedSet.end()) {
+                ++skippedByType;
+                continue;
+            }
+
+            kvPairs.emplace_back(keys[i], *values[i]);
+        }
+
+        if (kvPairs.empty()) {
+            Logger::get()->trace(
+                "No logs to migrate after filtering for range {}:{} to {} (skippedByType={})",
+                epoch, fromLogId, toLogId, skippedByType);
+            // Empty result is a valid outcome when every log was excluded by type.
+            return true;
+        }
+
+        // MSET filtered logs to kvrocks in 1 call
+        g_kvrocks->mset(kvPairs.begin(), kvPairs.end());
+
+        Logger::get()->trace(
+            "Migrated {} logs from {}:{} to {} to kvrocks (skippedByType={})",
+            kvPairs.size(), epoch, fromLogId, toLogId, skippedByType);
+        return true;
+    } catch (const std::exception& e) {
+        Logger::get()->error("Error in db_move_logs_to_kvrocks_by_range_filtered: {}\n", e.what());
+        return false;
+    }
+}
+
 bool db_get_endepoch_log_range_info(const uint16_t epoch, long long &start, long long &length, LogRangesPerTxInTick &lr) {
     if (!g_redis) return false;
     try {
