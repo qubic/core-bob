@@ -109,6 +109,10 @@ if [ -n "$ALLOW_RECEIVE_LOG_FROM_INCOMING" ]; then
     jq --argjson v "$ALLOW_RECEIVE_LOG_FROM_INCOMING" '.["allow-receive-log-from-incoming-connections"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
+if [ -n "$PERSIST_ORACLE_TX" ]; then
+    jq --argjson v "$PERSIST_ORACLE_TX" '.["persist-oracle-tx"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+fi
+
 # --- Array parameters ---
 # P2P_NODES: comma-separated list, e.g. "1:1.2.3.4:21841,2:5.6.7.8:21841"
 if [ -n "$P2P_NODES" ]; then
