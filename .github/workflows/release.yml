@@ -28,7 +28,19 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: "BOB ${{ github.ref_name }}"
-          body: "Automated release of Bob version ${{ github.ref_name }}"
+          body: |
+            Automated release of Bob version **${{ github.ref_name }}**.
+
+            ## Changelog
+            See [`RELEASE_NOTES.md`](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/RELEASE_NOTES.md) for the curated, human-written list of user-visible changes (RPC, REST, WebSocket, config) including any breaking-change migration notes.
+
+            ## Docker images
+            - `docker pull qubiccore/bob:${{ github.ref_name }}`
+            - `docker pull qubiccore/bob:latest`
+            - [All tags on Docker Hub](https://hub.docker.com/r/qubiccore/bob/tags)
+
+            ## Diff
+            Commit-level diff from the previous tag: [compare view](https://github.com/${{ github.repository }}/compare/${{ github.ref_name }}).
           files: ${{ env.RELEASE_BUILD_DIR }}/bob
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

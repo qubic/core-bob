@@ -13,6 +13,7 @@ A high-performance indexer for the **Qubic blockchain network**. Bob syncs tick 
   - [Option 3: Build from Source (No Docker)](#option-3-build-from-source-no-docker)
 - [Configuration](#configuration)
 - [Usage](#usage)
+- [Releases](#releases)
 - [Useful Resources](#useful-resources)
 
 ---
@@ -175,6 +176,14 @@ curl -s -X POST http://localhost:40420/qubic \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"qubic_getTickNumber","params":[],"id":1}'
 ```
+
+---
+
+## Releases
+
+- **[RELEASE_NOTES.md](RELEASE_NOTES.md)** — human-written changelog of user-visible changes (RPC, REST, WS, config) per version, including migration notes for breaking changes.
+- **[GitHub Releases](https://github.com/qubic/core-bob/releases)** — every tagged version (`v*.*.*`) triggers a GitHub Action that builds and publishes the docker image to Docker Hub as `qubiccore/bob:<version>` and `qubiccore/bob:latest`. The release page lists each tag with its build artifacts and the diff against the previous tag.
+- **Docker Hub** — pre-built images at [`qubiccore/bob`](https://hub.docker.com/r/qubiccore/bob/tags). Use `:latest` for the newest stable, or pin to a specific `:1.4.x` tag for reproducibility.
 
 ---
 
