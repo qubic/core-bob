@@ -612,7 +612,8 @@ Json::Value QubicRpcMethods::getTickLogRanges(const Json::Value& ticks) {
 
 Json::Value QubicRpcMethods::getAssetBalance(const std::string& identityInput,
                                               const std::string& issuerInput,
-                                              const std::string& assetName) {
+                                              const std::string& assetName,
+                                              uint32_t manageSCIndex) {
     std::string identity = normalizeIdentity(identityInput);
     std::string issuer = normalizeIdentity(issuerInput);
 
@@ -622,7 +623,7 @@ Json::Value QubicRpcMethods::getAssetBalance(const std::string& identityInput,
         return error;
     }
 
-    auto info = ApiHelpers::getAssetBalanceInfo(identity, issuer, assetName, 0);
+    auto info = ApiHelpers::getAssetBalanceInfo(identity, issuer, assetName, manageSCIndex);
 
     if (!info.found && !info.error.empty()) {
         Json::Value error(Json::objectValue);
@@ -634,6 +635,7 @@ Json::Value QubicRpcMethods::getAssetBalance(const std::string& identityInput,
     result["identity"] = identity;
     result["issuer"] = issuer;
     result["assetName"] = assetName;
+    result["manageSCIndex"] = manageSCIndex;
     result["ownershipBalance"] = std::to_string(info.ownershipBalance);
     result["possessionBalance"] = std::to_string(info.possessionBalance);
 

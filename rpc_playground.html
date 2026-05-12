@@ -760,11 +760,12 @@
                 ]
             },
             'qubic_getAssetBalance': {
-                description: 'Returns the balance of a specific asset for an identity.',
+                description: 'Returns the balance of a specific asset for an identity. For QX-managed assets (e.g. QDOGE), pass manageSCIndex=1.',
                 params: [
                     { name: 'identity', type: 'string', description: 'Owner identity', default: '' },
                     { name: 'issuer', type: 'string', description: 'Asset issuer identity', default: '' },
-                    { name: 'assetName', type: 'string', description: 'Asset name (max 7 chars)', default: '' }
+                    { name: 'assetName', type: 'string', description: 'Asset name (max 7 chars)', default: '' },
+                    { name: 'manageSCIndex', type: 'uint32', description: 'Managing smart contract index (0=native, 1=QX). Default: 0', default: '0' }
                 ]
             },
             'qubic_getAssets': {

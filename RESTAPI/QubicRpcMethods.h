@@ -80,9 +80,14 @@ public:
     // @param identity: owner identity
     // @param issuer: asset issuer identity
     // @param assetName: asset name (up to 7 chars)
+    // @param manageSCIndex: managing smart contract index (0 = none/native asset,
+    //                       1 = QX, etc.). Required for assets managed by a
+    //                       contract other than the issuer's own — e.g. QDOGE
+    //                       is managed by QX (index 1). Defaults to 0.
     static Json::Value getAssetBalance(const std::string& identity,
                                         const std::string& issuer,
-                                        const std::string& assetName);
+                                        const std::string& assetName,
+                                        uint32_t manageSCIndex = 0);
 
     // qubic_getAssets - Returns list of assets owned by identity
     // Note: This is a placeholder - requires asset indexing

@@ -166,20 +166,44 @@ Json::Value dispatchCommonMethod(const Json::Value& id,
         // Asset Methods
         // ====================================================================
         if (method == "qubic_getAssetBalance") {
-            if (!params.isArray() || params.size() < 3) {
+            // Two accepted shapes:
+            //   positional: [identity, issuer, assetName, manageSCIndex?]
+            //   named:      [{ "identity": ..., "issuer": ..., "assetName": ...,
+            //                  "manageSCIndex": <optional, default 0> }]
+            std::string identity, issuer, assetName;
+            uint32_t manageSCIndex = 0;
+
+            if (params.isArray() && params.size() >= 1 && params[0].isObject()) {
+                const Json::Value& p = params[0];
+                identity = p.get("identity", "").asString();
+                issuer   = p.get("issuer", "").asString();
+                assetName = p.get("assetName", "").asString();
+                if (p.isMember("manageSCIndex")) {
+                    manageSCIndex = p["manageSCIndex"].asUInt();
+                }
+            } else if (params.isArray() && params.size() >= 3) {
+                identity = params[0].asString();
+                issuer   = params[1].asString();
+                assetName = params[2].asString();
+                if (params.size() >= 4) {
+                    manageSCIndex = params[3].asUInt();
+                }
+            } else {
                 return makeError(id, QubicRpcError::INVALID_PARAMS,
-                               "Missing parameters: [identity, issuer, assetName]");
+                    "Missing parameters: [identity, issuer, assetName, manageSCIndex?] "
+                    "or {identity, issuer, assetName, manageSCIndex?}");
             }
-            if (!QubicRpcMethods::isValidIdentityInput(params[0].asString())) {
+
+            if (!QubicRpcMethods::isValidIdentityInput(identity)) {
                 return makeError(id, QubicRpcError::INVALID_PARAMS,
-                    "Invalid identity format for parameter 1. Expected 60-char Qubic identity (A-Z) or 0x-prefixed hex public key");
+                    "Invalid identity format. Expected 60-char Qubic identity (A-Z) or 0x-prefixed hex public key");
             }
-            if (!QubicRpcMethods::isValidIdentityInput(params[1].asString())) {
+            if (!QubicRpcMethods::isValidIdentityInput(issuer)) {
                 return makeError(id, QubicRpcError::INVALID_PARAMS,
-                    "Invalid identity format for parameter 2 (issuer). Expected 60-char Qubic identity (A-Z) or 0x-prefixed hex public key");
+                    "Invalid issuer identity format. Expected 60-char Qubic identity (A-Z) or 0x-prefixed hex public key");
             }
             return makeResult(id, QubicRpcMethods::getAssetBalance(
-                params[0].asString(), params[1].asString(), params[2].asString()));
+                identity, issuer, assetName, manageSCIndex));
         }
         if (method == "qubic_getAssets") {
             if (!params.isArray() || params.size() < 1) {

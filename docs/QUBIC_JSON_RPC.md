@@ -795,7 +795,16 @@ The filter object follows the same format as the `/findLog` endpoint. See [FINDL
 #### qubic_getAssetBalance
 Returns asset balance for an identity.
 
-**Params:** `[identity, issuer, assetName]`
+**Params (positional):** `[identity, issuer, assetName, manageSCIndex?]`
+
+**Params (named):** `[{"identity": "...", "issuer": "...", "assetName": "...", "manageSCIndex": 0}]`
+
+| Position | Name | Type | Description |
+|----------|------|------|-------------|
+| 0 | `identity` | string | Owner identity (60-char Qubic or 0x-hex public key) |
+| 1 | `issuer` | string | Asset issuer identity |
+| 2 | `assetName` | string | Asset name (up to 7 chars) |
+| 3 | `manageSCIndex` | uint32 | Optional. Managing smart contract index. `0` (default) for native assets where the issuer manages it directly; `1` for QX-managed assets such as **QDOGE**, **QWALLET**, etc. If you get `ownershipBalance: "-1"` and `possessionBalance: "-1"`, you most likely need to pass a non-zero `manageSCIndex`. |
 
 **Response:**
 ```json
@@ -804,10 +813,38 @@ Returns asset balance for an identity.
     "identity": "...",
     "issuer": "...",
     "assetName": "QFT",
+    "manageSCIndex": 0,
     "ownershipBalance": "1000000",
     "possessionBalance": "1000000"
   }
 }
+```
+
+**Examples:**
+
+Native asset (QFT, managed by the issuer):
+```bash
+curl -X POST http://localhost:40420/qubic -H "Content-Type: application/json" -d '{
+  "jsonrpc":"2.0","method":"qubic_getAssetBalance",
+  "params":["OWNER...IDENTITY","CFB...ISSUER","QFT"],"id":1
+}'
+```
+
+QX-managed asset (QDOGE), positional with `manageSCIndex=1`:
+```bash
+curl -X POST http://localhost:40420/qubic -H "Content-Type: application/json" -d '{
+  "jsonrpc":"2.0","method":"qubic_getAssetBalance",
+  "params":["OWNER...IDENTITY","QDOGE...ISSUER","QDOGE",1],"id":1
+}'
+```
+
+Same call using the named form:
+```bash
+curl -X POST http://localhost:40420/qubic -H "Content-Type: application/json" -d '{
+  "jsonrpc":"2.0","method":"qubic_getAssetBalance",
+  "params":[{"identity":"OWNER...","issuer":"QDOGE...","assetName":"QDOGE","manageSCIndex":1}],
+  "id":1
+}'
 ```
 
 | Ethereum Equivalent |
