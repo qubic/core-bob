@@ -150,8 +150,11 @@ public:
     Json::Value parseToJsonValueWithExtraData(const TickData& td, const int txIndex) const;
     std::string parseToJsonStr() const;
     std::string parseToJsonForEndEpoch(uint32_t endEpochTick, const std::string& timestamp) const;
-private:
+    // Canonical qubic-native JSON representation (with body fields under
+    // "body"). Used as the single source of truth for log-event JSON across
+    // REST and RPC surfaces.
     Json::Value parseToJson() const;
+private:
     // Map known event types to the minimum body size we expect for safe decoding.
     // Unknown types return 0 (no constraint here; callers should still be defensive).
     static constexpr uint32_t expectedMinBodySizeForType(uint32_t t) {

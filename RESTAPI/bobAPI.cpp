@@ -44,8 +44,8 @@ std::string bobGetBalance(const char* identity)
            ",\"numberOfOutgoingTransfers\":" + std::to_string(info.numberOfOutgoingTransfers) +
            ",\"latestIncomingTransferTick\":" + std::to_string(info.latestIncomingTransferTick) +
            ",\"latestOutgoingTransferTick\":" + std::to_string(info.latestOutgoingTransferTick) +
-           ",\"currentBobTick:\":" + std::to_string(info.currentTick) +
-           ",\"error:\":\"" + error + "\""
+           ",\"currentBobTick\":" + std::to_string(info.currentTick) +
+           ",\"error\":\"" + error + "\""
            "}";
 }
 
@@ -362,46 +362,12 @@ std::string bobGetTick(const uint32_t tick) {
 
     root["tickdata"] = tdJson;
 
-    // Add TickVote array (minimal fields, keep signatures as hex)
+    // Add TickVote array — shared serializer in ApiHelpers so REST and RPC
+    // produce identical vote JSON and new fields appear on both surfaces.
     auto tick_votes = db_try_get_tick_vote(tick);
     Json::Value votes(Json::arrayValue);
-    for (const auto &vote : tick_votes) {
-        Json::Value voteObj;
-        // Basic info
-        voteObj["computorIndex"] = vote.computorIndex;
-        voteObj["epoch"] = vote.epoch;
-        voteObj["tick"] = vote.tick;
-
-        // Timestamp fields
-        voteObj["millisecond"] = vote.millisecond;
-        voteObj["second"] = vote.second;
-        voteObj["minute"] = vote.minute;
-        voteObj["hour"] = vote.hour;
-        voteObj["day"] = vote.day;
-        voteObj["month"] = vote.month;
-        voteObj["year"] = vote.year;
-
-        // Digest integers
-        voteObj["prevResourceTestingDigest"] = vote.prevResourceTestingDigest;
-        voteObj["saltedResourceTestingDigest"] = vote.saltedResourceTestingDigest;
-        voteObj["prevTransactionBodyDigest"] = vote.prevTransactionBodyDigest;
-        voteObj["saltedTransactionBodyDigest"] = vote.saltedTransactionBodyDigest;
-
-        // m256i digests (use toQubicHash())
-        voteObj["prevSpectrumDigest"] = vote.prevSpectrumDigest.toQubicHash();
-        voteObj["prevUniverseDigest"] = vote.prevUniverseDigest.toQubicHash();
-        voteObj["prevComputerDigest"] = vote.prevComputerDigest.toQubicHash();
-        voteObj["saltedSpectrumDigest"] = vote.saltedSpectrumDigest.toQubicHash();
-        voteObj["saltedUniverseDigest"] = vote.saltedUniverseDigest.toQubicHash();
-        voteObj["saltedComputerDigest"] = vote.saltedComputerDigest.toQubicHash();
-
-        voteObj["transactionDigest"] = vote.transactionDigest.toQubicHash();
-        voteObj["expectedNextTickTransactionDigest"] = vote.expectedNextTickTransactionDigest.toQubicHash();
-
-        // Signature as hex
-        voteObj["signature"] = byteToHexStr(vote.signature, SIGNATURE_SIZE);
-
-        votes.append(voteObj);
+    for (const auto& vote : tick_votes) {
+        votes.append(ApiHelpers::tickVoteToJson(vote));
     }
     root["votes"] = votes;
 

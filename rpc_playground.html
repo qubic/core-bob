@@ -742,7 +742,7 @@
                 ]
             },
             'qubic_sendRawTransaction': {
-                description: 'Alias for qubic_broadcastTransaction. Broadcasts a signed transaction.',
+                description: 'Eth-style alias for qubic_broadcastTransaction. Broadcasts a signed transaction; returns the bare tx hash.',
                 params: [
                     { name: 'signedTx', type: 'string', description: 'Hex-encoded signed transaction', default: '0x' }
                 ]

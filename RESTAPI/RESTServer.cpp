@@ -6,7 +6,11 @@
 // Include WebSocket controller to trigger auto-registration
 #include "QubicRpcWebSocket.h"
 #include "QubicRpcHandler.h"
+#include "QubicRpcMethods.h"
 #include "QubicSubscriptionManager.h"
+
+#include <algorithm>
+#include <cctype>
 
 #include <string>
 #include <thread>
@@ -312,9 +316,25 @@ namespace {
                             return;
                         }
 
-                        const std::string topic1 = j["topic1"].asString();
-                        const std::string topic2 = j["topic2"].asString();
-                        const std::string topic3 = j["topic3"].asString();
+                        // Topics flow through bobFindLog which lowercases internally
+                        // before hitting db_search_log; we only need to canonicalize
+                        // 0x-hex / case variants up front. ApiHelpers::normalizeTopicIdentity
+                        // returns the canonical uppercase identity.
+                        auto toTopic = [](const std::string& in) -> std::string {
+                            std::string s = ApiHelpers::normalizeTopicIdentity(in);
+                            if (s.empty()) return "";
+                            std::transform(s.begin(), s.end(), s.begin(),
+                                           [](unsigned char c){ return std::tolower(c); });
+                            return s;
+                        };
+
+                        const std::string topic1 = toTopic(j["topic1"].asString());
+                        const std::string topic2 = toTopic(j["topic2"].asString());
+                        const std::string topic3 = toTopic(j["topic3"].asString());
+                        if (topic1.empty() || topic2.empty() || topic3.empty()) {
+                            callback(makeError("Invalid topic format: expected 60-char Qubic identity, 0x-prefixed hex public key, or 64-char hex"));
+                            return;
+                        }
 
                         std::string result = bobFindLog(scIndex, logType, topic1, topic2, topic3, fromTick, toTick);
                         callback(makeJsonResponse(result));
@@ -364,16 +384,21 @@ namespace {
                             }
                         }
 
-                        std::string topics[3] = {"", "", ""};
+                        // /getlogcustom downstream (getCustomLog) calls getPublicKeyFromIdentity
+                        // which expects uppercase canonical identities. Use the shared
+                        // normalizer so we also accept 0x-hex topics, not just A-Z text.
+                        const std::string kWildcardUpper =
+                            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFXIB";
+                        std::string topics[3] = {kWildcardUpper, kWildcardUpper, kWildcardUpper};
                         for (int i = 1; i <= 3; ++i) {
-                            std::string key = "topic" + std::to_string(i);
-                            if (!j.isMember(key) || !j[key].isString()) {
-                                topics[i-1] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFXIB";
-                            } else {
-                                topics[i-1] = j[key].asString();
-                                // To uppercase
-                                std::transform(topics[i-1].begin(), topics[i-1].end(), topics[i-1].begin(), ::toupper);
+                            const std::string key = "topic" + std::to_string(i);
+                            if (!j.isMember(key) || !j[key].isString()) continue;
+                            std::string normalized = ApiHelpers::normalizeTopicIdentity(j[key].asString());
+                            if (normalized.empty()) {
+                                callback(makeError("Invalid " + key + " format: expected 60-char Qubic identity or 0x-prefixed hex public key"));
+                                return;
                             }
+                            topics[i-1] = normalized;
                         }
 
                         // Reuse the existing find API with a single-tick window

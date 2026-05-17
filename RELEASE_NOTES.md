@@ -9,6 +9,74 @@ For exact commit boundaries, see `git log v<a>..v<b>`.
 
 ---
 
+## 1.5.0 (unreleased)
+
+> **⚠️ Wire-incompatible change** to the `balance` / asset-balance fields.
+> See "Migration" below.
+
+**RPC/REST parity fixes (audit pass)**
+
+Bugs:
+- `qubic_getLogs` and `qubic_getTransfers` no longer hardcode `epoch =
+  gCurrentProcessingEpoch`. They derive the epoch from `fromTick` (or accept
+  an optional `epoch` filter). Historical tick ranges now return their real
+  logs instead of empty arrays.
+- `qubic_getLogs` accepts both numeric and string `fromTick` / `toTick`.
+  Previously a numeric form (`{"fromTick": 123}`) threw an internal error.
+
+Parameter / shape parity:
+- `qubic_getAssetTransfers` and `qubic_getAllAssetTransfers` now accept
+  either `issuer` or `assetIssuer` (the latter is what the REST endpoints
+  use). Old payloads keep working; REST payloads now work unchanged on RPC.
+- `qubic_status` accepts an optional `challenge` parameter (string or
+  `{"challenge": "..."}` object form). Mirrors the REST `/status?challenge=...`
+  feature so callers can verify operator identity.
+- `qubic_getTickByNumber` response now includes `votes[]`, `contractFees`,
+  `logIdStart`, `logIdEnd` — matching the REST `/tick/{n}` shape. Existing
+  fields unchanged; this is additive.
+- REST `/findLog` now normalizes topic strings, accepting 0x-prefixed hex,
+  60-char uppercase identity, or already-lowercase identity. Previously only
+  the third form worked; same input that succeeded on `qubic_findLogIds`
+  failed on REST.
+- `bobGetBalance` REST keys: fixed typos `"currentBobTick:"` → `"currentBobTick"`
+  and `"error:"` → `"error"`. Clients keyed on the typo'd names must update.
+
+**Wire-incompatible**:
+- Numeric fields that were previously emitted as JSON strings on the RPC
+  surface are now emitted as JSON numbers. Brings RPC into line with REST
+  (REST already used numbers via `LogEvent::parseToJson`). Affected fields:
+  - `qubic_getBalance`: `balance`, `incomingAmount`, `outgoingAmount`
+  - `qubic_getAssetBalance`: `ownershipBalance`, `possessionBalance`
+  - `qubic_getLogs` / `qubic_getTransfers` log entries:
+    `amount` (QU_TRANSFER, BURNING), `numberOfShares` (ASSET_OWNERSHIP_CHANGE,
+    ASSET_POSSESSION_CHANGE)
+
+  Strict-typed clients that decoded these as strings must update.
+
+**Internal — additive on the wire**
+- Topic / identity normalization for log-search APIs is now centralized in
+  `ApiHelpers::normalizeTopicIdentity`. RPC `qubic_getTransfers`,
+  `qubic_findLogIds`, and REST `/findLog` + `/getlogcustom` all accept the
+  same input shapes (60-char Qubic identity in either case, 64-char hex,
+  0x-prefixed hex). Previously REST `/findLog` rejected 0x-hex and
+  `/getlogcustom` accepted only A-Z text.
+- `qubic_getLogs` (`logEventToQubicLog`) now delegates body extraction to
+  `LogEvent::parseToJson`, so new log types automatically surface on RPC
+  without a parallel switch update. Existing fields are unchanged; the
+  refactor adds previously-omitted fields for BURNING
+  (`contractIndexBurnedFor`) and CONTRACT_* messages (`content`), and
+  newly emits bodies for log types that weren't covered before
+  (`ASSET_ISSUANCE`, `ORACLE_QUERY_STATUS_CHANGE`, etc.).
+
+**Migration**
+1. JSON decoders that read `balance`, `incomingAmount`, `outgoingAmount`,
+   `ownershipBalance`, `possessionBalance`, `amount`, or `numberOfShares`
+   as strings should be updated to read them as integers.
+2. If you parsed REST `/balance/{id}` keys `currentBobTick:` or `error:`,
+   drop the trailing colons.
+
+---
+
 ## 1.4.3 (unreleased)
 
 **Asset RPC**

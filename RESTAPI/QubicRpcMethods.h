@@ -19,8 +19,11 @@ public:
     // qubic_syncing - Returns sync status
     static Json::Value syncing();
 
-    // qubic_status - Returns full node status (same as /status REST endpoint)
-    static Json::Value status();
+    // qubic_status - Returns full node status (same as /status REST endpoint).
+    // @param challenge: optional. If provided, the node signs the challenge
+    //                   so callers can verify operator identity. Mirrors
+    //                   the REST endpoint's ?challenge=... query param.
+    static Json::Value status(const std::string& challenge = "");
 
     // qubic_getCurrentEpoch - Returns current epoch number
     static Json::Value getCurrentEpoch();
@@ -50,7 +53,12 @@ public:
     // qubic_getTransactionReceipt - Returns transaction receipt with logs
     static Json::Value getTransactionReceipt(const std::string& txHash);
 
-    // qubic_broadcastTransaction - Broadcasts a signed transaction
+    // qubic_broadcastTransaction (and the Eth-style alias
+    // qubic_sendRawTransaction) - Broadcasts a signed transaction. Returns
+    // the transaction hash as a bare JSON string on success (mirrors
+    // `eth_sendRawTransaction`). NOTE: the REST /broadcastTransaction
+    // endpoint returns {"txHash": "..."} instead — the JSON-RPC and REST
+    // shapes intentionally differ; do not align them.
     static Json::Value broadcastTransaction(const std::string& signedTxHex);
 
     // ========================================================================
@@ -203,11 +211,13 @@ public:
     // Returns true if valid and can be normalized
     static bool isValidIdentityInput(const std::string& input);
 
-private:
-
-    // Helper to normalize identity input (accepts both Qubic identity and hex)
-    // Returns empty string if validation fails
+    // Helper to normalize identity input (accepts both Qubic identity and hex).
+    // Returns the canonical 60-char uppercase Qubic identity, or empty string
+    // if validation fails. Exposed so REST endpoints can share the same
+    // input-format tolerance as the RPC surface.
     static std::string normalizeIdentity(const std::string& input);
+
+private:
 
     // Helper to convert hex to Qubic identity
     static std::string hexToIdentity(const std::string& hex);

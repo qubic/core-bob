@@ -295,6 +295,46 @@ Json::Value tickDataToQubicTick(uint32_t tick, const TickData& td,
     }
     result["transactions"] = transactions;
 
+    // Log id range for this tick. Useful when callers want to follow up with
+    // a log fetch and don't want a second round-trip just to find the range.
+    long long logIdStart = -1, logIdLen = -1;
+    if (db_try_get_log_range_for_tick(tick, logIdStart, logIdLen)) {
+        result["logIdStart"] = static_cast<Json::Int64>(logIdStart);
+        result["logIdEnd"] = static_cast<Json::Int64>(
+            (logIdLen > 0) ? (logIdStart + logIdLen - 1) : (logIdStart - 1));
+    } else {
+        result["logIdStart"] = Json::Value::null;
+        result["logIdEnd"] = Json::Value::null;
+    }
+
+    // Per-contract fees collected this tick. Emit the full 1024-element array
+    // when at least one entry is non-zero; otherwise compress to a scalar 0
+    // so the response stays compact for typical empty ticks.
+    {
+        bool nonZero = false;
+        Json::Value fees(Json::arrayValue);
+        for (int i = 0; i < 1024; ++i) {
+            fees.append(static_cast<Json::Int64>(td.contractFees[i]));
+            if (td.contractFees[i]) nonZero = true;
+        }
+        if (nonZero) {
+            result["contractFees"] = fees;
+        } else {
+            result["contractFees"] = 0;
+        }
+    }
+
+    // Quorum tick votes — uses the shared serializer in ApiHelpers (same
+    // shape as the REST /tick/{n} endpoint).
+    {
+        auto tick_votes = db_try_get_tick_vote(tick);
+        Json::Value votes(Json::arrayValue);
+        for (const auto& vote : tick_votes) {
+            votes.append(ApiHelpers::tickVoteToJson(vote));
+        }
+        result["votes"] = votes;
+    }
+
     // Previous tick hash
     if (tick > gInitialTick.load()) {
         TickData prevTd;
@@ -447,71 +487,36 @@ Json::Value logEventToQubicLog(const LogEvent& log, const TickData& td,
         result["transactionHash"] = Json::Value::null;
     }
 
-    // Log-specific data based on type
-    switch (logType) {
-        case QU_TRANSFER: {
-            const QuTransfer* t = const_cast<LogEvent&>(log).getStruct<QuTransfer>();
-            if (t) {
-                char srcIdentity[64] = {0};
-                char dstIdentity[64] = {0};
-                getIdentityFromPublicKey(t->sourcePublicKey.m256i_u8, srcIdentity, false);
-                getIdentityFromPublicKey(t->destinationPublicKey.m256i_u8, dstIdentity, false);
-
-                result["source"] = std::string(srcIdentity);
-                result["destination"] = std::string(dstIdentity);
-                result["amount"] = std::to_string(t->amount);
+    // Delegate body extraction to LogEvent::parseToJson (single source of truth
+    // for all log types, including new ones). We then flatten the body fields
+    // onto `result` with the eth-style names this RPC has historically used:
+    //   from / sourcePublicKey / publicKey  → source
+    //   to / destinationPublicKey           → destination
+    //   issuerPublicKey                     → issuer
+    //   scIndex                             → contractIndex
+    //   scLogType                           → contractLogType
+    // Other field names pass through unchanged (amount, numberOfShares,
+    // assetName, contractIndexBurnedFor, …).
+    Json::Value parsed = log.parseToJson();
+    if (parsed.isMember("body") && parsed["body"].isObject()) {
+        const Json::Value& body = parsed["body"];
+        for (auto it = body.begin(); it != body.end(); ++it) {
+            const std::string key = it.key().asString();
+            const Json::Value& v = *it;
+            if (key == "from" || key == "sourcePublicKey" || key == "publicKey") {
+                result["source"] = v;
+            } else if (key == "to" || key == "destinationPublicKey") {
+                result["destination"] = v;
+            } else if (key == "issuerPublicKey") {
+                result["issuer"] = v;
+            } else if (key == "scIndex") {
+                result["contractIndex"] = v;
+            } else if (key == "scLogType") {
+                result["contractLogType"] = v;
+            } else {
+                result[key] = v;
             }
-            break;
         }
-        case ASSET_OWNERSHIP_CHANGE:
-        case ASSET_POSSESSION_CHANGE: {
-            const AssetOwnershipChange* a = const_cast<LogEvent&>(log).getStruct<AssetOwnershipChange>();
-            if (a) {
-                char srcIdentity[64] = {0};
-                char dstIdentity[64] = {0};
-                getIdentityFromPublicKey(a->sourcePublicKey.m256i_u8, srcIdentity, false);
-                getIdentityFromPublicKey(a->destinationPublicKey.m256i_u8, dstIdentity, false);
-
-                result["source"] = std::string(srcIdentity);
-                result["destination"] = std::string(dstIdentity);
-                result["numberOfShares"] = std::to_string(a->numberOfShares);
-
-                // Asset info
-                char issuerIdentity[64] = {0};
-                getIdentityFromPublicKey(a->issuerPublicKey.m256i_u8, issuerIdentity, false);
-                result["issuer"] = std::string(issuerIdentity);
-
-                char assetName[8] = {0};
-                memcpy(assetName, a->name, 7);
-                result["assetName"] = std::string(assetName);
-            }
-            break;
-        }
-        case BURNING: {
-            const Burning* b = const_cast<LogEvent&>(log).getStruct<Burning>();
-            if (b) {
-                char srcIdentity[64] = {0};
-                getIdentityFromPublicKey(b->sourcePublicKey.m256i_u8, srcIdentity, false);
-                result["source"] = std::string(srcIdentity);
-                result["amount"] = std::to_string(b->amount);
-            }
-            break;
-        }
-        case CONTRACT_ERROR_MESSAGE:
-        case CONTRACT_WARNING_MESSAGE:
-        case CONTRACT_INFORMATION_MESSAGE:
-        case CONTRACT_DEBUG_MESSAGE: {
-            if (log.getLogSize() >= 8) {
-                uint32_t scIndex, scLogType;
-                memcpy(&scIndex, log.getLogBodyPtr(), 4);
-                memcpy(&scLogType, log.getLogBodyPtr() + 4, 4);
-                result["contractIndex"] = scIndex;
-                result["contractLogType"] = scLogType;
-            }
-            break;
-        }
-        default:
-            break;
     }
 
     // Raw data as hex for all log types

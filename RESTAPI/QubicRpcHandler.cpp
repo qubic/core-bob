@@ -93,7 +93,18 @@ Json::Value dispatchCommonMethod(const Json::Value& id,
             return makeResult(id, QubicRpcMethods::syncing());
         }
         if (method == "qubic_status") {
-            return makeResult(id, QubicRpcMethods::status());
+            // Optional challenge: accept as params[0] (string) or
+            // params[0].challenge (object form), mirroring the REST
+            // ?challenge=... query param.
+            std::string challenge;
+            if (params.isArray() && params.size() >= 1) {
+                if (params[0].isString()) {
+                    challenge = params[0].asString();
+                } else if (params[0].isObject() && params[0].isMember("challenge")) {
+                    challenge = params[0]["challenge"].asString();
+                }
+            }
+            return makeResult(id, QubicRpcMethods::status(challenge));
         }
         if (method == "qubic_getCurrentEpoch") {
             return makeResult(id, QubicRpcMethods::getCurrentEpoch());
@@ -133,6 +144,10 @@ Json::Value dispatchCommonMethod(const Json::Value& id,
             }
             return makeResult(id, QubicRpcMethods::getTransactionReceipt(params[0].asString()));
         }
+        // qubic_sendRawTransaction is an Eth-style alias for
+        // qubic_broadcastTransaction (mirrors `eth_sendRawTransaction`).
+        // Both names have been public since the initial commit; do not
+        // remove without a deprecation cycle.
         if (method == "qubic_broadcastTransaction" || method == "qubic_sendRawTransaction") {
             if (!params.isArray() || params.size() < 1) {
                 return makeError(id, QubicRpcError::INVALID_PARAMS, "Missing signed transaction parameter");

@@ -137,8 +137,8 @@ Json::Value QubicRpcMethods::syncing() {
     return result;
 }
 
-Json::Value QubicRpcMethods::status() {
-    std::string jsonStr = bobGetStatus();
+Json::Value QubicRpcMethods::status(const std::string& challenge) {
+    std::string jsonStr = bobGetStatus(challenge);
 
     Json::Value result;
     Json::CharReaderBuilder builder;
@@ -321,7 +321,9 @@ Json::Value QubicRpcMethods::broadcastTransaction(const std::string& signedTxHex
         return error;
     }
 
-    // Return transaction hash on success (similar to eth_sendRawTransaction)
+    // Return transaction hash on success (Eth-style bare string).
+    // Intentionally NOT aligned with the REST /broadcastTransaction shape so
+    // existing JSON-RPC integrations keep working.
     return result.txHash;
 }
 
@@ -348,9 +350,9 @@ Json::Value QubicRpcMethods::getBalance(const std::string& identityInput) {
     Json::Value result(Json::objectValue);
     result["identity"] = identity;
     result["publicKeyHex"] = identityToHex(identity);
-    result["balance"] = std::to_string(info.balance);
-    result["incomingAmount"] = std::to_string(info.incomingAmount);
-    result["outgoingAmount"] = std::to_string(info.outgoingAmount);
+    result["balance"] = Json::Int64(info.balance);
+    result["incomingAmount"] = Json::Int64(info.incomingAmount);
+    result["outgoingAmount"] = Json::Int64(info.outgoingAmount);
     result["numberOfIncomingTransfers"] = info.numberOfIncomingTransfers;
     result["numberOfOutgoingTransfers"] = info.numberOfOutgoingTransfers;
     result["latestIncomingTransferTick"] = info.latestIncomingTransferTick;
@@ -404,34 +406,42 @@ Json::Value QubicRpcMethods::getTransfers(const Json::Value& filterParams) {
         logType = filterParams["logType"].asUInt();
     }
 
-    // Parse topic filters - use wildcard if not specified
-    // Wildcard identity: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFXIB
+    // Parse topic filters - use wildcard if not specified.
+    // getCustomLog downstream calls getPublicKeyFromIdentity which expects
+    // canonical uppercase identities; the shared normalizer returns them.
     const std::string wildcardIdentity = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFXIB";
     std::string topic1 = wildcardIdentity, topic2 = wildcardIdentity, topic3 = wildcardIdentity;
 
     if (filterParams.isMember("topic1") && filterParams["topic1"].isString()) {
-        std::string t = normalizeIdentity(filterParams["topic1"].asString());
-        if (!t.empty() && t.size() == 60) topic1 = t;
+        std::string t = ApiHelpers::normalizeTopicIdentity(filterParams["topic1"].asString());
+        if (!t.empty()) topic1 = t;
     }
     if (filterParams.isMember("topic2") && filterParams["topic2"].isString()) {
-        std::string t = normalizeIdentity(filterParams["topic2"].asString());
-        if (!t.empty() && t.size() == 60) topic2 = t;
+        std::string t = ApiHelpers::normalizeTopicIdentity(filterParams["topic2"].asString());
+        if (!t.empty()) topic2 = t;
     }
     if (filterParams.isMember("topic3") && filterParams["topic3"].isString()) {
-        std::string t = normalizeIdentity(filterParams["topic3"].asString());
-        if (!t.empty() && t.size() == 60) topic3 = t;
+        std::string t = ApiHelpers::normalizeTopicIdentity(filterParams["topic3"].asString());
+        if (!t.empty()) topic3 = t;
     }
 
     // Parse optional identity filter (JSON-RPC extension, not in findLog)
     std::string identity;
     bool hasIdentityFilter = false;
     if (filterParams.isMember("identity") && filterParams["identity"].isString()) {
-        identity = normalizeIdentity(filterParams["identity"].asString());
+        identity = ApiHelpers::normalizeTopicIdentity(filterParams["identity"].asString());
         hasIdentityFilter = !identity.empty();
     }
 
-    // Call getCustomLog from bobAPI.cpp - reuse existing implementation
-    uint16_t epoch = gCurrentProcessingEpoch.load();
+    // Resolve epoch: accept caller override; otherwise derive from fromTick.
+    // Falling back to the current processing epoch was returning empty results
+    // for any tick range outside it.
+    uint16_t epoch;
+    if (filterParams.isMember("epoch") && filterParams["epoch"].isNumeric()) {
+        epoch = static_cast<uint16_t>(filterParams["epoch"].asUInt());
+    } else {
+        epoch = ApiHelpers::resolveEpochForTick(fromTick);
+    }
     std::string logsJson = getCustomLog(scIndex, logType, topic1, topic2, topic3, epoch, fromTick, toTick);
 
     // Parse the JSON array returned by getCustomLog
@@ -525,21 +535,23 @@ Json::Value QubicRpcMethods::findLogIds(const Json::Value& filterParams) {
         return error;
     }
 
-    // Parse topic filters - use wildcard if not specified
+    // Parse topic filters - use wildcard if not specified. bobFindLog
+    // lowercases internally before hitting the index, so we only need to
+    // canonicalize the input via the shared normalizer.
     const std::string wildcardIdentity = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFXIB";
     std::string topic1 = wildcardIdentity, topic2 = wildcardIdentity, topic3 = wildcardIdentity;
 
     if (filterParams.isMember("topic1") && filterParams["topic1"].isString()) {
-        std::string t = normalizeIdentity(filterParams["topic1"].asString());
-        if (!t.empty() && t.size() == 60) topic1 = t;
+        std::string t = ApiHelpers::normalizeTopicIdentity(filterParams["topic1"].asString());
+        if (!t.empty()) topic1 = t;
     }
     if (filterParams.isMember("topic2") && filterParams["topic2"].isString()) {
-        std::string t = normalizeIdentity(filterParams["topic2"].asString());
-        if (!t.empty() && t.size() == 60) topic2 = t;
+        std::string t = ApiHelpers::normalizeTopicIdentity(filterParams["topic2"].asString());
+        if (!t.empty()) topic2 = t;
     }
     if (filterParams.isMember("topic3") && filterParams["topic3"].isString()) {
-        std::string t = normalizeIdentity(filterParams["topic3"].asString());
-        if (!t.empty() && t.size() == 60) topic3 = t;
+        std::string t = ApiHelpers::normalizeTopicIdentity(filterParams["topic3"].asString());
+        if (!t.empty()) topic3 = t;
     }
 
     std::string idsJson = bobFindLog(scIndex, logType, topic1, topic2, topic3, fromTick, toTick);
@@ -636,8 +648,8 @@ Json::Value QubicRpcMethods::getAssetBalance(const std::string& identityInput,
     result["issuer"] = issuer;
     result["assetName"] = assetName;
     result["manageSCIndex"] = manageSCIndex;
-    result["ownershipBalance"] = std::to_string(info.ownershipBalance);
-    result["possessionBalance"] = std::to_string(info.possessionBalance);
+    result["ownershipBalance"] = Json::Int64(info.ownershipBalance);
+    result["possessionBalance"] = Json::Int64(info.possessionBalance);
 
     return result;
 }
@@ -661,12 +673,22 @@ Json::Value QubicRpcMethods::getLogs(const Json::Value& filterParams) {
     uint32_t toTick = fromTick;
 
     if (filterParams.isMember("fromTick")) {
-        int64_t tick = QubicRpc::parseTickTag(filterParams["fromTick"].asString());
-        if (tick >= 0) fromTick = static_cast<uint32_t>(tick);
+        const Json::Value& v = filterParams["fromTick"];
+        if (v.isNumeric()) {
+            fromTick = v.asUInt();
+        } else if (v.isString()) {
+            int64_t tick = QubicRpc::parseTickTag(v.asString());
+            if (tick >= 0) fromTick = static_cast<uint32_t>(tick);
+        }
     }
     if (filterParams.isMember("toTick")) {
-        int64_t tick = QubicRpc::parseTickTag(filterParams["toTick"].asString());
-        if (tick >= 0) toTick = static_cast<uint32_t>(tick);
+        const Json::Value& v = filterParams["toTick"];
+        if (v.isNumeric()) {
+            toTick = v.asUInt();
+        } else if (v.isString()) {
+            int64_t tick = QubicRpc::parseTickTag(v.asString());
+            if (tick >= 0) toTick = static_cast<uint32_t>(tick);
+        }
     }
 
     // Limit range to prevent DoS
@@ -705,8 +727,13 @@ Json::Value QubicRpcMethods::getLogs(const Json::Value& filterParams) {
         }
     }
 
-    // Fetch logs
-    uint16_t epoch = gCurrentProcessingEpoch.load();
+    // Resolve epoch: accept caller override; otherwise derive from fromTick.
+    uint16_t epoch;
+    if (filterParams.isMember("epoch") && filterParams["epoch"].isNumeric()) {
+        epoch = static_cast<uint16_t>(filterParams["epoch"].asUInt());
+    } else {
+        epoch = ApiHelpers::resolveEpochForTick(fromTick);
+    }
     bool success;
     auto logs = db_get_logs_by_tick_range(epoch, fromTick, toTick, success);
 
@@ -1087,9 +1114,16 @@ Json::Value QubicRpcMethods::getAssetTransfers(const Json::Value& filterParams) 
         error["error"] = "Missing required parameter: identity";
         return error;
     }
-    if (!filterParams.isMember("issuer") || !filterParams["issuer"].isString()) {
+    // Accept either "issuer" or "assetIssuer" (the REST surface uses
+    // "assetIssuer"; both are tolerated here so the same payload works on
+    // both transports).
+    const Json::Value& issuerField =
+        filterParams.isMember("issuer") ? filterParams["issuer"] :
+        filterParams.isMember("assetIssuer") ? filterParams["assetIssuer"] :
+        Json::Value::null;
+    if (!issuerField.isString()) {
         Json::Value error;
-        error["error"] = "Missing required parameter: issuer";
+        error["error"] = "Missing required parameter: issuer (or assetIssuer)";
         return error;
     }
     if (!filterParams.isMember("assetName") || !filterParams["assetName"].isString()) {
@@ -1115,7 +1149,7 @@ Json::Value QubicRpcMethods::getAssetTransfers(const Json::Value& filterParams) 
         return error;
     }
 
-    std::string issuer = normalizeIdentity(filterParams["issuer"].asString());
+    std::string issuer = normalizeIdentity(issuerField.asString());
     if (issuer.empty()) {
         Json::Value error;
         error["error"] = "Invalid issuer format";
@@ -1149,10 +1183,15 @@ Json::Value QubicRpcMethods::getAssetTransfers(const Json::Value& filterParams) 
 }
 
 Json::Value QubicRpcMethods::getAllAssetTransfers(const Json::Value& filterParams) {
-    // Validate required parameters
-    if (!filterParams.isMember("issuer") || !filterParams["issuer"].isString()) {
+    // Accept either "issuer" or "assetIssuer" (REST equivalent uses
+    // "assetIssuer"; both tolerated here for compatibility).
+    const Json::Value& issuerField =
+        filterParams.isMember("issuer") ? filterParams["issuer"] :
+        filterParams.isMember("assetIssuer") ? filterParams["assetIssuer"] :
+        Json::Value::null;
+    if (!issuerField.isString()) {
         Json::Value error;
-        error["error"] = "Missing required parameter: issuer";
+        error["error"] = "Missing required parameter: issuer (or assetIssuer)";
         return error;
     }
     if (!filterParams.isMember("assetName") || !filterParams["assetName"].isString()) {
@@ -1171,7 +1210,7 @@ Json::Value QubicRpcMethods::getAllAssetTransfers(const Json::Value& filterParam
         return error;
     }
 
-    std::string issuer = normalizeIdentity(filterParams["issuer"].asString());
+    std::string issuer = normalizeIdentity(issuerField.asString());
     if (issuer.empty()) {
         Json::Value error;
         error["error"] = "Invalid issuer format";

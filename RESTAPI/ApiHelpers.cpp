@@ -1,4 +1,5 @@
 #include "ApiHelpers.h"
+#include "QubicRpcMapper.h"
 #include "K12AndKeyUtil.h"
 #include "Entity.h"
 #include "Asset.h"
@@ -191,6 +192,86 @@ TxExecutionDetails computeTxExecutionDetails(const std::string& txHash,
 
     out.executed = firstLogMatchesQuTransfer(out.logs.front(), tx);
     return out;
+}
+
+uint16_t resolveEpochForTick(uint32_t tick) {
+    TickData td{};
+    if (db_try_get_tick_data(tick, td) && td.epoch != 0) {
+        return td.epoch;
+    }
+    return gCurrentProcessingEpoch.load();
+}
+
+Json::Value tickVoteToJson(const TickVote& vote) {
+    Json::Value voteObj(Json::objectValue);
+
+    voteObj["computorIndex"] = vote.computorIndex;
+    voteObj["epoch"] = vote.epoch;
+    voteObj["tick"] = vote.tick;
+
+    voteObj["millisecond"] = vote.millisecond;
+    voteObj["second"] = vote.second;
+    voteObj["minute"] = vote.minute;
+    voteObj["hour"] = vote.hour;
+    voteObj["day"] = vote.day;
+    voteObj["month"] = vote.month;
+    voteObj["year"] = vote.year;
+
+    voteObj["prevResourceTestingDigest"]   = vote.prevResourceTestingDigest;
+    voteObj["saltedResourceTestingDigest"] = vote.saltedResourceTestingDigest;
+    voteObj["prevTransactionBodyDigest"]   = vote.prevTransactionBodyDigest;
+    voteObj["saltedTransactionBodyDigest"] = vote.saltedTransactionBodyDigest;
+
+    voteObj["prevSpectrumDigest"]   = vote.prevSpectrumDigest.toQubicHash();
+    voteObj["prevUniverseDigest"]   = vote.prevUniverseDigest.toQubicHash();
+    voteObj["prevComputerDigest"]   = vote.prevComputerDigest.toQubicHash();
+    voteObj["saltedSpectrumDigest"] = vote.saltedSpectrumDigest.toQubicHash();
+    voteObj["saltedUniverseDigest"] = vote.saltedUniverseDigest.toQubicHash();
+    voteObj["saltedComputerDigest"] = vote.saltedComputerDigest.toQubicHash();
+
+    voteObj["transactionDigest"] = vote.transactionDigest.toQubicHash();
+    voteObj["expectedNextTickTransactionDigest"] = vote.expectedNextTickTransactionDigest.toQubicHash();
+
+    voteObj["signature"] = bytesToHex(vote.signature, SIGNATURE_SIZE);
+
+    return voteObj;
+}
+
+std::string normalizeTopicIdentity(const std::string& input) {
+    // 0x-prefixed hex public key
+    auto hexToIdentity = [](const std::string& hex) -> std::string {
+        m256i pk{};
+        if (!QubicRpc::hexToPublicKey(hex, pk)) return "";
+        char identity[64] = {0};
+        getIdentityFromPublicKey(pk.m256i_u8, identity, false);
+        return std::string(identity);
+    };
+    if (input.size() == 66 && input[0] == '0' && (input[1] == 'x' || input[1] == 'X')) {
+        return hexToIdentity(input);
+    }
+    // 64-char raw hex (no prefix)
+    if (input.size() == 64) {
+        bool isHex = true;
+        for (char c : input) {
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+                isHex = false;
+                break;
+            }
+        }
+        if (isHex) return hexToIdentity("0x" + input);
+    }
+    // 60-char Qubic identity (either case). Canonicalize to uppercase.
+    if (input.size() == 60) {
+        std::string out(60, '\0');
+        for (size_t i = 0; i < 60; ++i) {
+            char c = input[i];
+            if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
+            if (c < 'A' || c > 'Z') return "";
+            out[i] = c;
+        }
+        return out;
+    }
+    return "";
 }
 
 bool isTxExecuted(const Transaction& tx,

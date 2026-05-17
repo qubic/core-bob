@@ -7,6 +7,7 @@
 #include "Entity.h"
 #include "structs.h"
 #include "logEventCore/LogEvent.h"
+#include <json/json.h>
 
 // ============================================================================
 // Shared Data Structures for API responses
@@ -143,6 +144,27 @@ bool isTxExecuted(const Transaction& tx,
                   long long fromLogId,
                   long long length,
                   const std::vector<LogEvent>& tickLogs);
+
+// Resolve the epoch that owns a given tick. Reads the tick's TickData (if
+// stored) to get its epoch; falls back to gCurrentProcessingEpoch if the
+// tick is unknown. Used by RPC methods that take a tick range and need the
+// right epoch for log lookups.
+uint16_t resolveEpochForTick(uint32_t tick);
+
+// Normalize a topic / identity string used by log-search APIs. Accepts:
+//   - 60-char uppercase Qubic identity (A-Z)
+//   - 60-char lowercase Qubic identity (a-z)
+//   - 66-char 0x-prefixed hex public key
+//   - 64-char hex public key (no prefix)
+// Returns the canonical 60-char UPPERCASE Qubic identity, or empty string
+// on invalid input. Callers that need lowercase (e.g. for the topic-index
+// key) should `std::tolower` the result themselves.
+std::string normalizeTopicIdentity(const std::string& input);
+
+// Convert a TickVote to its canonical JSON representation. Shared between
+// REST `/tick/{n}` and RPC `qubic_getTickByNumber` so the wire shape stays
+// identical and new fields surface on both surfaces automatically.
+Json::Value tickVoteToJson(const TickVote& vote);
 
 // Get epoch information
 EpochInfo getEpochInfo(uint16_t epoch);
