@@ -49,10 +49,9 @@
 // Forward declaration for the Redis client
 namespace sw { namespace redis { class Redis; }}
 
-// Placeholder definitions for constants from structs.h
-#define SIGNATURE_SIZE 64
-#define NUMBER_OF_TRANSACTIONS_PER_TICK 1024
-#define MAX_NUMBER_OF_CONTRACTS 1024
+// SIGNATURE_SIZE, NUMBER_OF_TRANSACTIONS_PER_TICK, MAX_NUMBER_OF_CONTRACTS
+// come from defines.h (via structs.h above). Defining them again here used
+// to silently shadow the real values and caused ODR/redefinition hazards.
 #define WILDCARD "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib"
 
 // ---- Database Interface ----

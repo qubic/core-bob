@@ -1,10 +1,24 @@
 #include "commonFunctions.h"
-#define NUMBER_OF_TRANSACTIONS_PER_TICK 1024
+
+// Canonical (post-cutover) max transactions per tick.
+// Core raised this from 1024 to 4096 starting at epoch 214 (2026-05-20).
+#define NUMBER_OF_TRANSACTIONS_PER_TICK 4096
+
+// Pre-epoch-214 wire / on-disk layout. Bob keeps the legacy size so it can
+// read historical ticks (stored in keydb/kvrocks under the old layout) and
+// receive legacy-format tick packets that may still arrive during catch-up.
+#define LEGACY_NUMBER_OF_TRANSACTIONS_PER_TICK 1024
+
+// First epoch where core uses the 4096-slot tick layout. Ticks in earlier
+// epochs are signed/serialized using the legacy 1024-slot layout.
+#define EPOCH_FIRST_4096_TX_PER_TICK 214
+
 #define NUMBER_OF_SPECIAL_EVENT_PER_TICK 6
 #define SIGNATURE_SIZE 64
 #define SPECTRUM_DEPTH 24 // Is derived from SPECTRUM_CAPACITY (=N)
 #define ASSETS_DEPTH 24 // Is derived from ASSETS_CAPACITY (=N)
 #define NUMBER_OF_COMPUTORS 676
+#define MAX_NUMBER_OF_CONTRACTS 1024
 #define REQUEST_TICK_DATA 16
 #define BROADCAST_TRANSACTION 24
 #define REQUEST_CURRENT_TICK_INFO 27

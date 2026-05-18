@@ -132,7 +132,7 @@ struct TickData
 
     m256i timelock;
     m256i transactionDigests[NUMBER_OF_TRANSACTIONS_PER_TICK];
-    long long contractFees[NUMBER_OF_TRANSACTIONS_PER_TICK];
+    long long contractFees[MAX_NUMBER_OF_CONTRACTS];
 
     unsigned char signature[SIGNATURE_SIZE];
     static constexpr unsigned char type()
@@ -140,6 +140,57 @@ struct TickData
         return 8;
     }
 };
+
+// Legacy wire/storage layout used by core through epoch 213 (pre-2026-05-20).
+// Only the transactionDigests slot count differs; every other field has the
+// same offset and type. We keep this struct around purely to:
+//   1. Decode tick packets that may still arrive for old ticks during sync.
+//   2. Decode historical tick blobs persisted under the old layout.
+// All in-memory processing happens on the canonical TickData (above).
+struct LegacyTickData
+{
+    unsigned short computorIndex;
+    unsigned short epoch;
+    unsigned int tick;
+
+    unsigned short millisecond;
+    unsigned char second;
+    unsigned char minute;
+    unsigned char hour;
+    unsigned char day;
+    unsigned char month;
+    unsigned char year;
+
+    m256i timelock;
+    m256i transactionDigests[LEGACY_NUMBER_OF_TRANSACTIONS_PER_TICK];
+    long long contractFees[MAX_NUMBER_OF_CONTRACTS];
+
+    unsigned char signature[SIGNATURE_SIZE];
+};
+
+// Copy a legacy 1024-slot tick into a canonical 4096-slot tick. Trailing
+// digest slots above LEGACY_NUMBER_OF_TRANSACTIONS_PER_TICK are zeroed.
+inline void upcastLegacyTickData(const LegacyTickData& src, TickData& dst)
+{
+    dst.computorIndex = src.computorIndex;
+    dst.epoch = src.epoch;
+    dst.tick = src.tick;
+    dst.millisecond = src.millisecond;
+    dst.second = src.second;
+    dst.minute = src.minute;
+    dst.hour = src.hour;
+    dst.day = src.day;
+    dst.month = src.month;
+    dst.year = src.year;
+    dst.timelock = src.timelock;
+    memcpy(dst.transactionDigests, src.transactionDigests,
+           sizeof(src.transactionDigests));
+    memset(reinterpret_cast<uint8_t*>(dst.transactionDigests) + sizeof(src.transactionDigests),
+           0,
+           sizeof(dst.transactionDigests) - sizeof(src.transactionDigests));
+    memcpy(dst.contractFees, src.contractFees, sizeof(src.contractFees));
+    memcpy(dst.signature, src.signature, SIGNATURE_SIZE);
+}
 
 
 // ---- Data Structures to be Stored ----
@@ -186,6 +237,21 @@ struct FullTickStruct
     TickData td;
     TickVote tv[676];
 };
+
+// Pre-epoch-214 compressed-archive layout (kvrocks key "vtick:<tick>").
+// TickVote layout is unchanged across the cutover; only TickData differs.
+struct LegacyFullTickStruct
+{
+    LegacyTickData td;
+    TickVote tv[676];
+};
+
+inline void upcastLegacyFullTickStruct(const LegacyFullTickStruct& src,
+                                       FullTickStruct& dst)
+{
+    upcastLegacyTickData(src.td, dst.td);
+    memcpy(dst.tv, src.tv, sizeof(src.tv));
+}
 typedef struct
 {
     unsigned int tick;
@@ -342,6 +408,42 @@ struct LogRangesPerTxInTick
         }
     }
 };
+
+// Pre-epoch-214 layout of LogRangesPerTxInTick. Used only as a transient
+// parse target when reading historical persisted blobs or legacy wire data.
+#define LEGACY_LOG_TX_PER_TICK (LEGACY_NUMBER_OF_TRANSACTIONS_PER_TICK + NUMBER_OF_SPECIAL_EVENT_PER_TICK)
+struct LegacyLogRangesPerTxInTick
+{
+    long long fromLogId[LEGACY_LOG_TX_PER_TICK];
+    long long length[LEGACY_LOG_TX_PER_TICK];
+};
+
+// Copy a legacy 1024-slot log range into a canonical 4096-slot one.
+// Transaction slots (the lower 1024) plus the 6 trailing special-event
+// slots are mapped to their new positions; intermediate slots are zeroed
+// to -1 (the "no logs for this tx" sentinel used elsewhere in bob).
+inline void upcastLegacyLogRanges(const LegacyLogRangesPerTxInTick& src,
+                                  LogRangesPerTxInTick& dst)
+{
+    // Initialize to sentinel.
+    for (size_t i = 0; i < LOG_TX_PER_TICK; ++i) {
+        dst.fromLogId[i] = -1;
+        dst.length[i] = -1;
+    }
+    // Copy regular tx slots.
+    for (int i = 0; i < LEGACY_NUMBER_OF_TRANSACTIONS_PER_TICK; ++i) {
+        dst.fromLogId[i] = src.fromLogId[i];
+        dst.length[i]    = src.length[i];
+    }
+    // Map the 6 special-event slots from the end of the legacy array to the
+    // end of the canonical array (they always live at +0..+5 past the tx slots).
+    for (int i = 0; i < NUMBER_OF_SPECIAL_EVENT_PER_TICK; ++i) {
+        dst.fromLogId[NUMBER_OF_TRANSACTIONS_PER_TICK + i] =
+            src.fromLogId[LEGACY_NUMBER_OF_TRANSACTIONS_PER_TICK + i];
+        dst.length[NUMBER_OF_TRANSACTIONS_PER_TICK + i] =
+            src.length[LEGACY_NUMBER_OF_TRANSACTIONS_PER_TICK + i];
+    }
+}
 
 
 struct RespondLog // Returns buffered log; clears the buffer; make sure you fetch log quickly enough, if the buffer is overflown log stops being written into it till the node restart

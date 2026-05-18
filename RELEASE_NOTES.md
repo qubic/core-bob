@@ -11,8 +11,71 @@ For exact commit boundaries, see `git log v<a>..v<b>`.
 
 ## 1.5.0 (unreleased)
 
-> **⚠️ Wire-incompatible change** to the `balance` / asset-balance fields.
-> See "Migration" below.
+> **Required for the epoch 214 cutover (2026-05-20)** — core raises max
+> transactions per tick from **1024 → 4096**. Bob must run this version
+> (or later) before the epoch boundary.
+>
+> Also contains a **wire-incompatible change** to the `balance` /
+> asset-balance fields. See "Migration" below.
+
+### Epoch-214 cutover: max tx per tick 1024 → 4096
+
+**Canonical layout bumped to 4096**
+- `NUMBER_OF_TRANSACTIONS_PER_TICK` is now `4096` in [common/defines.h](common/defines.h).
+- `LOG_TX_PER_TICK` auto-scales (4096 + 6 specials).
+- Per-tick signature buffers, indexer loops, request bit-flags, and
+  on-wire `TickData` size auto-scale.
+
+**Backwards compatibility (read-only)**
+- New `LegacyTickData`, `LegacyLogRangesPerTxInTick`, and
+  `LegacyFullTickStruct` structs in [common/structs.h](common/structs.h) describe the
+  pre-epoch-214 wire/storage layout.
+- `db_get_tick_data`, `db_get_vtick_from_kvrocks`,
+  `_db_get_log_ranges_by_key`, `db_get_cLogRange_from_kvrocks` all branch
+  on the stored blob's byte length and upcast the legacy layout in
+  memory. Historical ticks remain queryable via REST/RPC after the
+  upgrade.
+- `processTickData` accepts both canonical and legacy wire packets,
+  verifying each over the byte range matching its original signature.
+- All **writes** are in the canonical 4096-slot layout. The legacy
+  structs are read-only.
+
+**Behavior intentionally limited**
+- `replyTickData` refuses to serve ticks from epochs `< 214`. We only
+  hold them upcasted in memory; replying with the canonical layout
+  would fail signature verification on the peer side. Pre-cutover
+  peers must re-sync legacy ticks from each other or core's archive.
+
+**Constants cleanup**
+- Fixed a latent bug: `TickData::contractFees` was declared as
+  `contractFees[NUMBER_OF_TRANSACTIONS_PER_TICK]`. It is now correctly
+  sized by `MAX_NUMBER_OF_CONTRACTS`. Both used to be 1024 so the wire
+  layout happened to match; bumping `NUMBER_OF_TRANSACTIONS_PER_TICK`
+  to 4096 without this fix would have broken signature verification.
+- `MAX_NUMBER_OF_CONTRACTS` and `NUMBER_OF_TRANSACTIONS_PER_TICK` are
+  now defined exactly once (in `defines.h`); the duplicate "placeholder"
+  defines in `database/db.h` are removed.
+- `contractFees` JSON output loops in `RESTAPI/QubicRpcMapper.cpp` and
+  `RESTAPI/bobAPI.cpp` now iterate `MAX_NUMBER_OF_CONTRACTS` instead of
+  a literal `1024`.
+
+**Storage impact**
+- `tick_data:<tick>` in keydb roughly 4× per tick (mainly the digest
+  array). Historical pre-cutover blobs remain at the legacy size; only
+  new ticks pay the cost.
+- `vtick:<tick>` in kvrocks: nominally 4× but zstd compresses sparse
+  digest arrays well; realistic ~2×.
+- The bump only raises the ceiling. Actual storage grows with real tx
+  throughput.
+
+**Deployment**
+- Deploy `1.5.0` **before** the first tick of epoch 214.
+- A bob running an older binary across the cutover will signature-fail
+  every `TickData` packet for epoch 214+, silently halting sync.
+
+---
+
+### Other 1.5.0 changes
 
 **RPC/REST parity fixes (audit pass)**
 

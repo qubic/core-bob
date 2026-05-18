@@ -260,6 +260,14 @@ static bool _db_get_log_ranges_by_key(const std::string& key, LogRangesPerTxInTi
             }
             return true;
         }
+        // Pre-epoch-214 layout (1024-tx slots + 6 specials). Parse via the
+        // legacy struct and upcast to the canonical 4096-slot layout.
+        if (val->size() == sizeof(LegacyLogRangesPerTxInTick)) {
+            LegacyLogRangesPerTxInTick legacy{};
+            memcpy(&legacy, val->data(), sizeof(legacy));
+            upcastLegacyLogRanges(legacy, logRange);
+            return true;
+        }
         if (val->size() != sizeof(LogRangesPerTxInTick)) {
             Logger::get()->warn("LogRange size mismatch for key {}: got {}, expected {}",
                                 key.c_str(), val->size(), sizeof(LogRangesPerTxInTick));
@@ -848,6 +856,13 @@ bool db_get_tick_data(uint32_t tick, TickData& data) {
         auto val = g_redis->get(key);
         if (!val) {
             return false;
+        }
+        // Pre-epoch-214 tick blob: parse via the legacy struct and upcast.
+        if (val->size() == sizeof(LegacyTickData)) {
+            LegacyTickData legacy{};
+            memcpy(&legacy, val->data(), sizeof(legacy));
+            upcastLegacyTickData(legacy, data);
+            return true;
         }
         if (val->size() != sizeof(TickData)) {
             Logger::get()->warn("TickData size mismatch for key {}: got {}, expected {}",
@@ -1791,12 +1806,17 @@ bool db_get_vtick_from_kvrocks(uint32_t tick, FullTickStruct& outFullTick)
             return false;
         }
 
-        const size_t dstSize = sizeof(FullTickStruct);
+        // Decompress into a buffer large enough for the canonical layout.
+        // We can't know whether the stored blob is canonical or legacy until
+        // we see the decompressed size, so use the larger of the two as the
+        // working buffer.
+        const size_t canonicalSize = sizeof(FullTickStruct);
+        const size_t legacySize    = sizeof(LegacyFullTickStruct);
+        const size_t bufSize       = std::max(canonicalSize, legacySize);
+        std::vector<unsigned char> buf(bufSize);
         size_t const dSize = ZSTD_decompress(
-                reinterpret_cast<void*>(&outFullTick),
-                dstSize,
-                val->data(),
-                val->size()
+                buf.data(), bufSize,
+                val->data(), val->size()
         );
 
         if (ZSTD_isError(dSize)) {
@@ -1805,12 +1825,20 @@ bool db_get_vtick_from_kvrocks(uint32_t tick, FullTickStruct& outFullTick)
             return false;
         }
 
-        if (dSize != dstSize) {
-            Logger::get()->warn("Decompressed FullTickStruct size mismatch for key {}: got {}, expected {}",
-                                key.c_str(), dSize, dstSize);
-            return false;
+        if (dSize == canonicalSize) {
+            memcpy(&outFullTick, buf.data(), canonicalSize);
+            return true;
         }
-        return true;
+        if (dSize == legacySize) {
+            // Pre-epoch-214 archive — upcast to canonical layout in memory.
+            LegacyFullTickStruct legacy{};
+            memcpy(&legacy, buf.data(), legacySize);
+            upcastLegacyFullTickStruct(legacy, outFullTick);
+            return true;
+        }
+        Logger::get()->warn("Decompressed FullTickStruct size mismatch for key {}: got {}, expected {} or {}",
+                            key.c_str(), dSize, canonicalSize, legacySize);
+        return false;
     } catch (const sw::redis::Error& e) {
         Logger::get()->error("KVROCKs error in db_get_vtick: {}\n", e.what());
         return false;
@@ -1883,12 +1911,15 @@ bool db_get_cLogRange_from_kvrocks(uint32_t tick, LogRangesPerTxInTick& outLogRa
             return false;
         }
 
-        const size_t dstSize = sizeof(LogRangesPerTxInTick);
+        // Decompress into a buffer large enough for the canonical layout;
+        // we'll figure out which layout it is from the decompressed size.
+        const size_t canonicalSize = sizeof(LogRangesPerTxInTick);
+        const size_t legacySize    = sizeof(LegacyLogRangesPerTxInTick);
+        const size_t bufSize       = std::max(canonicalSize, legacySize);
+        std::vector<unsigned char> buf(bufSize);
         size_t const dSize = ZSTD_decompress(
-                reinterpret_cast<void*>(&outLogRange),
-                dstSize,
-                val->data(),
-                val->size()
+                buf.data(), bufSize,
+                val->data(), val->size()
         );
 
         if (ZSTD_isError(dSize)) {
@@ -1896,13 +1927,13 @@ bool db_get_cLogRange_from_kvrocks(uint32_t tick, LogRangesPerTxInTick& outLogRa
                                  ZSTD_getErrorName(dSize));
             return false;
         }
-        if (dstSize - dSize == 16) // oracle machine logging mismatches
-        {
+        // Legacy "oracle machine" 16-byte mismatch (1024+5 vs 1024+6 specials).
+        if (canonicalSize - dSize == 16) {
             struct {
                 long long fromLogId[1024+5];
                 long long length[1024+5];
             } old_struct;
-            memcpy(&old_struct, &outLogRange, dSize);
+            memcpy(&old_struct, buf.data(), dSize);
             memset(&outLogRange, 0, sizeof(outLogRange));
             for (int i = 0; i < 1024+5; i++)
             {
@@ -1911,12 +1942,20 @@ bool db_get_cLogRange_from_kvrocks(uint32_t tick, LogRangesPerTxInTick& outLogRa
             }
             return true;
         }
-        if (dSize != dstSize) {
-            Logger::get()->warn("Decompressed ResponseAllLogIdRangesFromTick size mismatch for key {}: got {}, expected {}",
-                                key.c_str(), dSize, dstSize);
-            return false;
+        if (dSize == canonicalSize) {
+            memcpy(&outLogRange, buf.data(), canonicalSize);
+            return true;
         }
-        return true;
+        if (dSize == legacySize) {
+            // Pre-epoch-214 archive — upcast to canonical layout.
+            LegacyLogRangesPerTxInTick legacy{};
+            memcpy(&legacy, buf.data(), legacySize);
+            upcastLegacyLogRanges(legacy, outLogRange);
+            return true;
+        }
+        Logger::get()->warn("Decompressed ResponseAllLogIdRangesFromTick size mismatch for key {}: got {}, expected {} or {}",
+                            key.c_str(), dSize, canonicalSize, legacySize);
+        return false;
     } catch (const sw::redis::Error& e) {
         Logger::get()->error("KVROCKS error in db_get_cLogRange_from_kvrocks: {}\n", e.what());
         return false;

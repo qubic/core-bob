@@ -307,13 +307,14 @@ Json::Value tickDataToQubicTick(uint32_t tick, const TickData& td,
         result["logIdEnd"] = Json::Value::null;
     }
 
-    // Per-contract fees collected this tick. Emit the full 1024-element array
-    // when at least one entry is non-zero; otherwise compress to a scalar 0
-    // so the response stays compact for typical empty ticks.
+    // Per-contract fees collected this tick. Emit the full
+    // MAX_NUMBER_OF_CONTRACTS-element array when at least one entry is
+    // non-zero; otherwise compress to a scalar 0 so the response stays
+    // compact for typical empty ticks.
     {
         bool nonZero = false;
         Json::Value fees(Json::arrayValue);
-        for (int i = 0; i < 1024; ++i) {
+        for (int i = 0; i < MAX_NUMBER_OF_CONTRACTS; ++i) {
             fees.append(static_cast<Json::Int64>(td.contractFees[i]));
             if (td.contractFees[i]) nonZero = true;
         }

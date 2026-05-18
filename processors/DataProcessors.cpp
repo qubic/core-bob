@@ -49,10 +49,28 @@ void processTickVote(uint8_t* ptr)
     }
 }
 
-void processTickData(uint8_t* ptr)
+void processTickData(uint8_t* ptr, uint32_t payloadSize)
 {
-    TickData _data;
-    memcpy((void*)&_data, ptr, sizeof(TickData));
+    // The wire payload is either a canonical 4096-slot TickData (post
+    // epoch 214) or a legacy 1024-slot LegacyTickData (pre 214). Branch
+    // by payload size; verify the signature over the bytes actually
+    // received (legacy ticks were signed over their 1024-slot byte range).
+    TickData _data{};
+    size_t verifySize = 0;
+    if (payloadSize == sizeof(TickData)) {
+        memcpy((void*)&_data, ptr, sizeof(TickData));
+        verifySize = sizeof(TickData);
+    } else if (payloadSize == sizeof(LegacyTickData)) {
+        LegacyTickData legacy{};
+        memcpy(&legacy, ptr, sizeof(LegacyTickData));
+        upcastLegacyTickData(legacy, _data);
+        verifySize = sizeof(LegacyTickData);
+    } else {
+        Logger::get()->warn("processTickData: unexpected payload size {} (canonical={} legacy={})",
+                            payloadSize, sizeof(TickData), sizeof(LegacyTickData));
+        return;
+    }
+
     auto* data = (TickData*)&_data;
     if (data->epoch != gCurrentProcessingEpoch) // may also tell that epoch switch
     {
@@ -67,7 +85,33 @@ void processTickData(uint8_t* ptr)
     }
     uint8_t* compPubkey = computorsList.publicKeys[data->computorIndex].m256i_u8;
     data->computorIndex ^= 8;
-    bool ok = verifySignature((void *) data, compPubkey, sizeof(TickData));
+    bool ok = false;
+    if (verifySize == sizeof(TickData)) {
+        ok = verifySignature((void *) data, compPubkey, sizeof(TickData));
+    } else {
+        // Legacy ticks were signed over their original 1024-slot byte range.
+        // Reconstruct a LegacyTickData buffer (the upcast preserves all
+        // fields one-for-one, so the original layout is recoverable) and
+        // verify against that.
+        LegacyTickData legacyForVerify{};
+        legacyForVerify.computorIndex = data->computorIndex;
+        legacyForVerify.epoch         = data->epoch;
+        legacyForVerify.tick          = data->tick;
+        legacyForVerify.millisecond   = data->millisecond;
+        legacyForVerify.second        = data->second;
+        legacyForVerify.minute        = data->minute;
+        legacyForVerify.hour          = data->hour;
+        legacyForVerify.day           = data->day;
+        legacyForVerify.month         = data->month;
+        legacyForVerify.year          = data->year;
+        legacyForVerify.timelock      = data->timelock;
+        memcpy(legacyForVerify.transactionDigests, data->transactionDigests,
+               sizeof(legacyForVerify.transactionDigests));
+        memcpy(legacyForVerify.contractFees, data->contractFees,
+               sizeof(legacyForVerify.contractFees));
+        memcpy(legacyForVerify.signature, data->signature, SIGNATURE_SIZE);
+        ok = verifySignature((void *) &legacyForVerify, compPubkey, sizeof(LegacyTickData));
+    }
     data->computorIndex ^= 8;
     if (ok)
     {
@@ -231,7 +275,8 @@ void DataProcessorThread()
                 processTickVote(const_cast<uint8_t*>(payload));
                 break;
             case TickData::type(): // TickData
-                processTickData(const_cast<uint8_t*>(payload));
+                // packet_size includes the 8-byte header; payload is the rest.
+                processTickData(const_cast<uint8_t*>(payload), packet_size - 8);
                 break;
             case BROADCAST_TRANSACTION: // Transaction
                 processTransaction(payload);
@@ -329,6 +374,17 @@ void replyTickData(QCPtr& conn, uint32_t dejavu, uint8_t* ptr)
     // since tick data has a valid signature, we can allow bob to broadcast not-yet-verified tick data
     TickData td;
     if (!db_try_get_tick_data(tick, td))
+    {
+        conn->sendEndPacket(dejavu);
+        return;
+    }
+    // Refuse to serve pre-epoch-214 ticks: we only have them upcasted to the
+    // canonical 4096-slot layout in memory, but the original signature was
+    // computed over the 1024-slot byte range. Replying with the canonical
+    // layout would fail signature verification on the requester, so we
+    // simply close the response. Pre-cutover peers should re-sync legacy
+    // ticks from each other (or from core's archive).
+    if (td.epoch != 0 && td.epoch < EPOCH_FIRST_4096_TX_PER_TICK)
     {
         conn->sendEndPacket(dejavu);
         return;
