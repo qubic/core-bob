@@ -85,6 +85,20 @@ void db_connect(const std::string& connectionString);
  */
 void db_close();
 
+// ---- Operational metrics ----
+
+// KeyDB / Redis memory stats parsed from `INFO memory`. All bytes.
+// `ok == false` if the INFO call failed (e.g. connection dropped). If
+// maxmemory is unconfigured (0 in INFO), `maxmemory_bytes` is 0 and
+// `used_pct` is also 0.
+struct RedisMemoryInfo {
+    bool ok = false;
+    long long used_memory_bytes = 0;
+    long long maxmemory_bytes = 0;
+    double used_pct = 0.0;
+};
+RedisMemoryInfo db_get_redis_memory_info();
+
 // ---- Insertion Functions ----
 
 /**

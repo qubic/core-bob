@@ -327,6 +327,11 @@ int runBob(int argc, char *argv[])
     const long long sleep_time = 5;
     int compareLocalTickWithNetworkCount = 0;
     int checkInQubicGlobalCount = 0;
+    // KeyDB memory stats: log roughly once per minute (every 12 ticks of the
+    // 5-second outer loop). Warn immediately if usage crosses 90%.
+    constexpr int MEM_LOG_EVERY_N = 12;
+    int memLogCounter = 0;
+    bool prevMemPressure = false;
     CheckInQubicGlobal();
     auto start_time = std::chrono::high_resolution_clock::now();
     while (!gStopFlag.load())
@@ -351,6 +356,44 @@ int runBob(int argc, char *argv[])
                 gCurrentVerifyLoggingTick.load(), verify_le_speed,
                 gLastCleanTickData, gLastCleanTransactionTick
                 );
+
+        // KeyDB memory check — every iteration we test the threshold (so a
+        // sudden spike is reported even between scheduled log lines), but
+        // we only emit a regular info line every MEM_LOG_EVERY_N rounds.
+        {
+            auto mem = db_get_redis_memory_info();
+            if (mem.ok && mem.maxmemory_bytes > 0) {
+                auto fmtBytes = [](long long b) {
+                    constexpr double KB = 1024.0, MB = 1024.0 * 1024.0, GB = 1024.0 * 1024.0 * 1024.0;
+                    char buf[32];
+                    if (b >= (long long)GB) std::snprintf(buf, sizeof(buf), "%.2f GB", b / GB);
+                    else if (b >= (long long)MB) std::snprintf(buf, sizeof(buf), "%.2f MB", b / MB);
+                    else if (b >= (long long)KB) std::snprintf(buf, sizeof(buf), "%.2f KB", b / KB);
+                    else std::snprintf(buf, sizeof(buf), "%lld B", b);
+                    return std::string(buf);
+                };
+                bool memPressure = mem.used_pct >= 90.0;
+                bool shouldLog = (memLogCounter % MEM_LOG_EVERY_N) == 0 || memPressure;
+                if (shouldLog) {
+                    if (memPressure) {
+                        Logger::get()->warn(
+                            "KeyDB memory pressure: {} / {} ({:.1f}%) — cleaner may be falling behind; consider raising REDIS_MAXMEMORY or lowering n_tickdata_to_store / tx_tick_to_live",
+                            fmtBytes(mem.used_memory_bytes), fmtBytes(mem.maxmemory_bytes), mem.used_pct);
+                    } else {
+                        Logger::get()->info(
+                            "KeyDB memory: {} / {} ({:.1f}%)",
+                            fmtBytes(mem.used_memory_bytes), fmtBytes(mem.maxmemory_bytes), mem.used_pct);
+                    }
+                }
+                prevMemPressure = memPressure;
+            } else if (mem.ok && mem.maxmemory_bytes == 0 &&
+                       (memLogCounter % MEM_LOG_EVERY_N) == 0) {
+                // maxmemory unset — only worth saying once a minute.
+                Logger::get()->info("KeyDB memory: used {} B (no maxmemory limit configured)",
+                                    mem.used_memory_bytes);
+            }
+            ++memLogCounter;
+        }
         requestMapperFrom.clean();
         requestMapperTo.clean();
         responseSCData.clean(10);

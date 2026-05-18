@@ -26,6 +26,9 @@ public:
     sw::redis::Redis *getPtr() { return &_r; }
     void ping() override { _r.ping(); }
     bool exists(const std::string& k) override { return _r.exists(k); }
+    std::string info(const std::string& section) override {
+        return section.empty() ? _r.info() : _r.info(section);
+    }
 
     void set(const std::string& k, sw::redis::StringView v,
              std::chrono::milliseconds ttl, sw::redis::UpdateType type) override {

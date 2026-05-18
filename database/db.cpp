@@ -245,23 +245,10 @@ static bool _db_get_log_ranges_by_key(const std::string& key, LogRangesPerTxInTi
         if (!val) {
             return false;
         }
-        if (sizeof(LogRangesPerTxInTick) - val->size() == 16) // oracle machine logging mismatches
-        {
-            struct {
-                long long fromLogId[1024 + 5];
-                long long length[1024 + 5];
-            } old_struct;
-            memcpy(&old_struct, val->data(), val->size());
-            memset(&logRange, 0, sizeof(logRange));
-            for (int i = 0; i < 1024 + 5; i++)
-            {
-                logRange.fromLogId[i] = old_struct.fromLogId[i];
-                logRange.length[i]    = old_struct.length[i];
-            }
-            return true;
-        }
-        // Pre-epoch-214 layout (1024-tx slots + 6 specials). Parse via the
-        // legacy struct and upcast to the canonical 4096-slot layout.
+        // The "oracle machine 16-byte mismatch" branch that used to live
+        // here only made sense when LogRangesPerTxInTick was 1024+6 slots.
+        // After the 4096-slot bump it can't fire correctly; legacy 1024+6
+        // blobs are now handled by the legacy-size branch below.
         if (val->size() == sizeof(LegacyLogRangesPerTxInTick)) {
             LegacyLogRangesPerTxInTick legacy{};
             memcpy(&legacy, val->data(), sizeof(legacy));
@@ -847,6 +834,43 @@ bool db_get_tick_votes(uint32_t tick, std::vector<TickVote>& votes) {
         Logger::get()->error("Redis error in db_get_tick_votes: {}\n", e.what());
     }
     return true;
+}
+
+RedisMemoryInfo db_get_redis_memory_info() {
+    RedisMemoryInfo info;
+    if (!g_redis) return info;
+    try {
+        const std::string section = g_redis->info("memory");
+        // INFO replies are CRLF-delimited "key:value" lines. We only care
+        // about used_memory and maxmemory.
+        auto parseField = [&](const char* name) -> long long {
+            const std::string key = std::string(name) + ":";
+            size_t pos = 0;
+            while ((pos = section.find(key, pos)) != std::string::npos) {
+                // Must be at line start (preceded by '\n' or string-begin).
+                if (pos != 0 && section[pos - 1] != '\n') { ++pos; continue; }
+                size_t valStart = pos + key.size();
+                size_t valEnd = section.find_first_of("\r\n", valStart);
+                if (valEnd == std::string::npos) valEnd = section.size();
+                try {
+                    return std::stoll(section.substr(valStart, valEnd - valStart));
+                } catch (...) { return 0; }
+            }
+            return 0;
+        };
+        info.used_memory_bytes = parseField("used_memory");
+        info.maxmemory_bytes   = parseField("maxmemory");
+        if (info.maxmemory_bytes > 0) {
+            info.used_pct = 100.0 * static_cast<double>(info.used_memory_bytes)
+                          / static_cast<double>(info.maxmemory_bytes);
+        }
+        info.ok = true;
+    } catch (const sw::redis::Error& e) {
+        Logger::get()->error("Redis error in db_get_redis_memory_info: {}", e.what());
+    } catch (const std::exception& e) {
+        Logger::get()->error("Error parsing INFO memory: {}", e.what());
+    }
+    return info;
 }
 
 bool db_get_tick_data(uint32_t tick, TickData& data) {
@@ -1927,21 +1951,11 @@ bool db_get_cLogRange_from_kvrocks(uint32_t tick, LogRangesPerTxInTick& outLogRa
                                  ZSTD_getErrorName(dSize));
             return false;
         }
-        // Legacy "oracle machine" 16-byte mismatch (1024+5 vs 1024+6 specials).
-        if (canonicalSize - dSize == 16) {
-            struct {
-                long long fromLogId[1024+5];
-                long long length[1024+5];
-            } old_struct;
-            memcpy(&old_struct, buf.data(), dSize);
-            memset(&outLogRange, 0, sizeof(outLogRange));
-            for (int i = 0; i < 1024+5; i++)
-            {
-                outLogRange.fromLogId[i] = old_struct.fromLogId[i];
-                outLogRange.length[i] = old_struct.length[i];
-            }
-            return true;
-        }
+        // The "oracle machine 16-byte mismatch" branch that used to live
+        // here only made sense when LogRangesPerTxInTick was 1024+6 slots;
+        // after the 4096-slot bump the math doesn't carry over (the legacy
+        // 1024+6 layout is now handled below). Anything that doesn't match
+        // either of the two known layouts is rejected.
         if (dSize == canonicalSize) {
             memcpy(&outLogRange, buf.data(), canonicalSize);
             return true;
