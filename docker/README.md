@@ -126,6 +126,9 @@ docker run -d --name qubic-bob \
 
 > To use external KeyDB/Kvrocks instances, update `keydb-url` and `kvrocks-url` to point to your hosts.
 
+> **All available env variables** (39 total, covering bob.json + redis.conf + kvrocks.conf) are listed in
+> [docs/DOCKER_ENV.md](../docs/DOCKER_ENV.md). Env vars override bob.json at container startup.
+
 ### P2P Node Format
 
 ```json
