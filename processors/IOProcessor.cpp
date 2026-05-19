@@ -98,8 +98,36 @@ bool verifyQuorum(uint32_t tick, TickData& td, std::vector<TickVote>& votes)
     {
         return false;
     }
+    // Pre-epoch-214 ticks were hashed over the 1024-slot legacy layout.
+    // Bob holds them upcasted to 4096-slot canonical in memory; we need
+    // to reconstruct the legacy byte-range for the hash comparison or
+    // consensus will always mismatch on those ticks.
     uint8_t tdHash[32];
-    KangarooTwelve((uint8_t*)&td, sizeof(TickData), tdHash, 32);
+    if (td.epoch != 0 && td.epoch < EPOCH_FIRST_4096_TX_PER_TICK)
+    {
+        LegacyTickData legacyForHash{};
+        legacyForHash.computorIndex = td.computorIndex;
+        legacyForHash.epoch         = td.epoch;
+        legacyForHash.tick          = td.tick;
+        legacyForHash.millisecond   = td.millisecond;
+        legacyForHash.second        = td.second;
+        legacyForHash.minute        = td.minute;
+        legacyForHash.hour          = td.hour;
+        legacyForHash.day           = td.day;
+        legacyForHash.month         = td.month;
+        legacyForHash.year          = td.year;
+        legacyForHash.timelock      = td.timelock;
+        memcpy(legacyForHash.transactionDigests, td.transactionDigests,
+               sizeof(legacyForHash.transactionDigests));
+        memcpy(legacyForHash.contractFees, td.contractFees,
+               sizeof(legacyForHash.contractFees));
+        memcpy(legacyForHash.signature, td.signature, SIGNATURE_SIZE);
+        KangarooTwelve((uint8_t*)&legacyForHash, sizeof(LegacyTickData), tdHash, 32);
+    }
+    else
+    {
+        KangarooTwelve((uint8_t*)&td, sizeof(TickData), tdHash, 32);
+    }
     if (memcmp(tdHash, maxDigest.m256i_u8, 32) != 0)
     {
         Logger::get()->critical("Consensus error: tickData {} is mismatched (there are potentially 2 tick data). Delete the current one in DB.", td.tick);
