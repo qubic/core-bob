@@ -49,10 +49,9 @@
 // Forward declaration for the Redis client
 namespace sw { namespace redis { class Redis; }}
 
-// Placeholder definitions for constants from structs.h
-#define SIGNATURE_SIZE 64
-#define NUMBER_OF_TRANSACTIONS_PER_TICK 1024
-#define MAX_NUMBER_OF_CONTRACTS 1024
+// SIGNATURE_SIZE, NUMBER_OF_TRANSACTIONS_PER_TICK, MAX_NUMBER_OF_CONTRACTS
+// come from defines.h (via structs.h above). Defining them again here used
+// to silently shadow the real values and caused ODR/redefinition hazards.
 #define WILDCARD "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib"
 
 // ---- Database Interface ----
@@ -85,6 +84,20 @@ void db_connect(const std::string& connectionString);
  * - None
  */
 void db_close();
+
+// ---- Operational metrics ----
+
+// KeyDB / Redis memory stats parsed from `INFO memory`. All bytes.
+// `ok == false` if the INFO call failed (e.g. connection dropped). If
+// maxmemory is unconfigured (0 in INFO), `maxmemory_bytes` is 0 and
+// `used_pct` is also 0.
+struct RedisMemoryInfo {
+    bool ok = false;
+    long long used_memory_bytes = 0;
+    long long maxmemory_bytes = 0;
+    double used_pct = 0.0;
+};
+RedisMemoryInfo db_get_redis_memory_info();
 
 // ---- Insertion Functions ----
 

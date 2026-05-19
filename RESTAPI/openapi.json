@@ -313,6 +313,49 @@
         }
       }
     },
+    "/getEndEpochLog/{epoch}": {
+      "get": {
+        "tags": ["Logs"],
+        "summary": "Get end-of-epoch logs",
+        "description": "Returns all log events emitted during the virtual end-of-epoch tick of the given epoch. The end-of-epoch tick runs after the last regular tick of the epoch and contains protocol housekeeping logs (e.g. dividend distribution, epoch transition events).",
+        "operationId": "getEndEpochLog",
+        "parameters": [
+          {
+            "name": "epoch",
+            "in": "path",
+            "required": true,
+            "description": "Epoch number",
+            "schema": {
+              "type": "integer",
+              "format": "uint16",
+              "example": 152
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "End-of-epoch log events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid epoch parameter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/findLog": {
       "post": {
         "tags": ["Logs"],
@@ -383,12 +426,12 @@
         }
       }
     },
-    "/getQuTransferForIdentity": {
+    "/getQuTransfersForIdentity": {
       "post": {
         "tags": ["Transfers"],
         "summary": "Get QU transfers for identity",
         "description": "Returns all QU transfers involving a specific identity within a tick range.",
-        "operationId": "getQuTransferForIdentity",
+        "operationId": "getQuTransfersForIdentity",
         "requestBody": {
           "required": true,
           "content": {
@@ -413,12 +456,12 @@
         }
       }
     },
-    "/getAssetTransferForIdentity": {
+    "/getAssetTransfersForIdentity": {
       "post": {
         "tags": ["Transfers"],
         "summary": "Get asset transfers for identity",
         "description": "Returns all transfers of a specific asset involving a specific identity within a tick range.",
-        "operationId": "getAssetTransferForIdentity",
+        "operationId": "getAssetTransfersForIdentity",
         "requestBody": {
           "required": true,
           "content": {
@@ -443,12 +486,12 @@
         }
       }
     },
-    "/getAllAssetTransfer": {
+    "/getAllAssetTransfers": {
       "post": {
         "tags": ["Transfers"],
         "summary": "Get all transfers of an asset",
         "description": "Returns all transfers of a specific asset within a tick range.",
-        "operationId": "getAllAssetTransfer",
+        "operationId": "getAllAssetTransfers",
         "requestBody": {
           "required": true,
           "content": {
@@ -556,6 +599,369 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/qubic": {
+      "post": {
+        "tags": ["JSON-RPC"],
+        "summary": "JSON-RPC 2.0 endpoint",
+        "description": "Single HTTP POST endpoint that accepts a JSON-RPC 2.0 request envelope. The `method` field selects the operation, and `params` carries the method-specific arguments (almost always a single-element array — either a primitive or a filter object).\n\nSwagger UI users: pick a method from the **Examples** dropdown below to see a fully filled-in request body.\n\nResponse shapes vary per method. For full per-method documentation of result fields, error codes, constraints, and Ethereum-equivalent mappings, see [QUBIC_JSON_RPC.md](../docs/QUBIC_JSON_RPC.md).\n\n**Methods grouped by domain:**\n- **Chain info:** `qubic_chainId`, `qubic_clientVersion`, `qubic_syncing`, `qubic_status`, `qubic_getCurrentEpoch`\n- **Tick:** `qubic_getTickNumber`, `qubic_getTickByNumber`, `qubic_getTickByHash`, `qubic_getTickLogRanges`\n- **Transaction:** `qubic_getTransactionByHash`, `qubic_getTransactionReceipt`, `qubic_broadcastTransaction`, `qubic_sendRawTransaction` (alias of broadcast)\n- **Account / Balance:** `qubic_getBalance`\n- **Transfers:** `qubic_getTransfers`, `qubic_getQuTransfers`, `qubic_getAssetTransfers`, `qubic_getAllAssetTransfers`\n- **Asset:** `qubic_getAssetBalance`, `qubic_getAssets`\n- **Logs:** `qubic_getLogs`, `qubic_findLogIds`, `qubic_getLogsByIdRange`, `qubic_getEndEpochLogs`\n- **Epoch:** `qubic_getEpochInfo`\n- **Network:** `qubic_getComputors`\n- **Smart Contract:** `qubic_querySmartContract`\n- **Subscriptions (WebSocket only):** `qubic_subscribe`, `qubic_unsubscribe` — calling these over HTTP returns a METHOD_NOT_FOUND error directing you to `/ws/qubic`.",
+        "operationId": "qubicJsonRpc",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JsonRpcRequest"
+              },
+              "examples": {
+                "qubic_chainId": {
+                  "summary": "qubic_chainId - get Qubic chain identifier",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_chainId",
+                    "params": []
+                  }
+                },
+                "qubic_clientVersion": {
+                  "summary": "qubic_clientVersion - get node software version string",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_clientVersion",
+                    "params": []
+                  }
+                },
+                "qubic_syncing": {
+                  "summary": "qubic_syncing - returns false when fully synced, otherwise sync progress object",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_syncing",
+                    "params": []
+                  }
+                },
+                "qubic_status": {
+                  "summary": "qubic_status - node status (optional challenge param echoes back signed)",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_status",
+                    "params": []
+                  }
+                },
+                "qubic_getCurrentEpoch": {
+                  "summary": "qubic_getCurrentEpoch - current processing epoch number",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_getCurrentEpoch",
+                    "params": []
+                  }
+                },
+                "qubic_getTickNumber": {
+                  "summary": "qubic_getTickNumber - latest verified tick number",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_getTickNumber",
+                    "params": []
+                  }
+                },
+                "qubic_getTickByNumber": {
+                  "summary": "qubic_getTickByNumber - tick metadata; params: [tickTag, includeTransactions?]",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_getTickByNumber",
+                    "params": ["latest", false]
+                  }
+                },
+                "qubic_getTickByHash": {
+                  "summary": "qubic_getTickByHash - currently disabled (returns METHOD_NOT_FOUND)",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_getTickByHash",
+                    "params": ["0xdeadbeef..."]
+                  }
+                },
+                "qubic_getTickLogRanges": {
+                  "summary": "qubic_getTickLogRanges - map tick numbers to logId ranges (params[0] = array of ticks, max 1000)",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_getTickLogRanges",
+                    "params": [[41000100, 41000200, 41000305]]
+                  }
+                },
+                "qubic_getTransactionByHash": {
+                  "summary": "qubic_getTransactionByHash - lookup transaction by 60-char hash",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_getTransactionByHash",
+                    "params": ["abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefgh"]
+                  }
+                },
+                "qubic_getTransactionReceipt": {
+                  "summary": "qubic_getTransactionReceipt - receipt with logs emitted by the transaction",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_getTransactionReceipt",
+                    "params": ["abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefgh"]
+                  }
+                },
+                "qubic_broadcastTransaction": {
+                  "summary": "qubic_broadcastTransaction - submit a hex-encoded signed transaction",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_broadcastTransaction",
+                    "params": ["0x0102030405060708..."]
+                  }
+                },
+                "qubic_sendRawTransaction": {
+                  "summary": "qubic_sendRawTransaction - Ethereum-style alias of qubic_broadcastTransaction",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_sendRawTransaction",
+                    "params": ["0x0102030405060708..."]
+                  }
+                },
+                "qubic_getBalance": {
+                  "summary": "qubic_getBalance - QU balance for a 60-char Qubic identity",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_getBalance",
+                    "params": ["BZBQFLLBNCXEMGLOBHUVFTLUPLVCPQUASSILFABOFFBCADQSSUPNWLZBQEXK"]
+                  }
+                },
+                "qubic_getTransfers": {
+                  "summary": "qubic_getTransfers - generic log filter (identity, fromTick, toTick, scIndex, logType, topic1-3, epoch)",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_getTransfers",
+                    "params": [{
+                      "identity": "BZBQFLLBNCXEMGLOBHUVFTLUPLVCPQUASSILFABOFFBCADQSSUPNWLZBQEXK",
+                      "fromTick": 51000000,
+                      "toTick": 51000100
+                    }]
+                  }
+                },
+                "qubic_getQuTransfers": {
+                  "summary": "qubic_getQuTransfers - QU transfer hashes for identity in tick range (max 1000 ticks)",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_getQuTransfers",
+                    "params": [{
+                      "identity": "BZBQFLLBNCXEMGLOBHUVFTLUPLVCPQUASSILFABOFFBCADQSSUPNWLZBQEXK",
+                      "fromTick": 51000000,
+                      "toTick": 51000100
+                    }]
+                  }
+                },
+                "qubic_getAssetTransfers": {
+                  "summary": "qubic_getAssetTransfers - transfers of one asset involving one identity (max 1000 ticks)",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_getAssetTransfers",
+                    "params": [{
+                      "identity": "BZBQFLLBNCXEMGLOBHUVFTLUPLVCPQUASSILFABOFFBCADQSSUPNWLZBQEXK",
+                      "issuer": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFUDG",
+                      "assetName": "QFT",
+                      "fromTick": 51000000,
+                      "toTick": 51000100
+                    }]
+                  }
+                },
+                "qubic_getAllAssetTransfers": {
+                  "summary": "qubic_getAllAssetTransfers - all transfers of an asset (no identity filter, max 1000 ticks)",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_getAllAssetTransfers",
+                    "params": [{
+                      "issuer": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFUDG",
+                      "assetName": "QFT",
+                      "fromTick": 51000000,
+                      "toTick": 51000100
+                    }]
+                  }
+                },
+                "qubic_getAssetBalance": {
+                  "summary": "qubic_getAssetBalance - positional form: [identity, issuer, assetName, manageSCIndex?]",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_getAssetBalance",
+                    "params": [
+                      "BZBQFLLBNCXEMGLOBHUVFTLUPLVCPQUASSILFABOFFBCADQSSUPNWLZBQEXK",
+                      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFUDG",
+                      "QFT",
+                      0
+                    ]
+                  }
+                },
+                "qubic_getAssetBalance_named": {
+                  "summary": "qubic_getAssetBalance - named-object form",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_getAssetBalance",
+                    "params": [{
+                      "identity": "BZBQFLLBNCXEMGLOBHUVFTLUPLVCPQUASSILFABOFFBCADQSSUPNWLZBQEXK",
+                      "issuer": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFUDG",
+                      "assetName": "QFT",
+                      "manageSCIndex": 0
+                    }]
+                  }
+                },
+                "qubic_getAssets": {
+                  "summary": "qubic_getAssets - list all assets owned by an identity",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_getAssets",
+                    "params": ["BZBQFLLBNCXEMGLOBHUVFTLUPLVCPQUASSILFABOFFBCADQSSUPNWLZBQEXK"]
+                  }
+                },
+                "qubic_getLogs": {
+                  "summary": "qubic_getLogs - filter logs by tick range, identity, logType, etc.",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_getLogs",
+                    "params": [{
+                      "fromTick": 51000000,
+                      "toTick": 51000100,
+                      "scIndex": 1,
+                      "logType": 6,
+                      "topic1": "BZBQFLLBNCXEMGLOBHUVFTLUPLVCPQUASSILFABOFFBCADQSSUPNWLZBQEXK"
+                    }]
+                  }
+                },
+                "qubic_findLogIds": {
+                  "summary": "qubic_findLogIds - efficient ID-only filter (required: scIndex, logType, fromTick, toTick)",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_findLogIds",
+                    "params": [{
+                      "scIndex": 0,
+                      "logType": 0,
+                      "fromTick": 51000000,
+                      "toTick": 51000100
+                    }]
+                  }
+                },
+                "qubic_getLogsByIdRange": {
+                  "summary": "qubic_getLogsByIdRange - positional [epoch, fromLogId, toLogId]",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_getLogsByIdRange",
+                    "params": [192, 1000000, 1000010]
+                  }
+                },
+                "qubic_getEndEpochLogs": {
+                  "summary": "qubic_getEndEpochLogs - logs from end-of-epoch virtual tick",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_getEndEpochLogs",
+                    "params": [152]
+                  }
+                },
+                "qubic_getEpochInfo": {
+                  "summary": "qubic_getEpochInfo - epoch metadata (initial tick, end tick, log ranges)",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_getEpochInfo",
+                    "params": [152]
+                  }
+                },
+                "qubic_getComputors": {
+                  "summary": "qubic_getComputors - computor list for epoch (defaults to current)",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_getComputors",
+                    "params": [152]
+                  }
+                },
+                "qubic_querySmartContract": {
+                  "summary": "qubic_querySmartContract - async SC read; resend same nonce to poll for result",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_querySmartContract",
+                    "params": [{
+                      "nonce": 12345,
+                      "scIndex": 1,
+                      "funcNumber": 1,
+                      "data": "0x00000000"
+                    }]
+                  }
+                },
+                "qubic_subscribe": {
+                  "summary": "qubic_subscribe - WebSocket only. Over HTTP returns METHOD_NOT_FOUND. Shown here for reference (tickStream example).",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_subscribe",
+                    "params": ["tickStream", {
+                      "startTick": 51000000,
+                      "skipEmptyTicks": true,
+                      "includeInputData": true,
+                      "txFilters": [{"from": "BZBQFLLBNCXEMGLOBHUVFTLUPLVCPQUASSILFABOFFBCADQSSUPNWLZBQEXK", "minAmount": 1000, "inputType": 0}],
+                      "logFilters": [{"scIndex": 0, "logType": 0, "transferMinAmount": 100}]
+                    }]
+                  }
+                },
+                "qubic_unsubscribe": {
+                  "summary": "qubic_unsubscribe - WebSocket only. Pass the subscription id returned by qubic_subscribe.",
+                  "value": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "qubic_unsubscribe",
+                    "params": ["qubic_sub_1"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "JSON-RPC response envelope. Contains either a `result` (on success) or an `error` object (on failure). The HTTP status is always 200 for well-formed JSON-RPC requests, even when the embedded `error` is set.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonRpcResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON or non-JSON-RPC body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonRpcResponse"
                 }
               }
             }
@@ -1012,6 +1418,104 @@
           }
         }
       },
+      "JsonRpcRequest": {
+        "type": "object",
+        "required": ["jsonrpc", "method"],
+        "properties": {
+          "jsonrpc": {
+            "type": "string",
+            "enum": ["2.0"],
+            "description": "JSON-RPC protocol version. Must be exactly \"2.0\"."
+          },
+          "id": {
+            "description": "Request identifier. Echoed back in the response. May be a string, number, or null. Omit for notifications.",
+            "oneOf": [
+              {"type": "string"},
+              {"type": "number"},
+              {"type": "null"}
+            ],
+            "example": 1
+          },
+          "method": {
+            "type": "string",
+            "description": "JSON-RPC method name. See the operation description for the full list and link to the QUBIC_JSON_RPC.md reference for per-method response shapes.",
+            "enum": [
+              "qubic_chainId",
+              "qubic_clientVersion",
+              "qubic_syncing",
+              "qubic_status",
+              "qubic_getCurrentEpoch",
+              "qubic_getTickNumber",
+              "qubic_getTickByNumber",
+              "qubic_getTickByHash",
+              "qubic_getTickLogRanges",
+              "qubic_getTransactionByHash",
+              "qubic_getTransactionReceipt",
+              "qubic_broadcastTransaction",
+              "qubic_sendRawTransaction",
+              "qubic_getBalance",
+              "qubic_getTransfers",
+              "qubic_getQuTransfers",
+              "qubic_getAssetTransfers",
+              "qubic_getAllAssetTransfers",
+              "qubic_getAssetBalance",
+              "qubic_getAssets",
+              "qubic_getLogs",
+              "qubic_findLogIds",
+              "qubic_getLogsByIdRange",
+              "qubic_getEndEpochLogs",
+              "qubic_getEpochInfo",
+              "qubic_getComputors",
+              "qubic_querySmartContract",
+              "qubic_subscribe",
+              "qubic_unsubscribe"
+            ]
+          },
+          "params": {
+            "type": "array",
+            "description": "Positional parameter array. Most methods take a single object as params[0]; some take positional primitives. See the example dropdown for per-method shapes.",
+            "items": {}
+          }
+        }
+      },
+      "JsonRpcResponse": {
+        "type": "object",
+        "required": ["jsonrpc"],
+        "properties": {
+          "jsonrpc": {
+            "type": "string",
+            "enum": ["2.0"]
+          },
+          "id": {
+            "description": "Echoes the id from the request.",
+            "oneOf": [
+              {"type": "string"},
+              {"type": "number"},
+              {"type": "null"}
+            ]
+          },
+          "result": {
+            "description": "Method-specific result. Present on success. Shape varies per method - see QUBIC_JSON_RPC.md for full schemas."
+          },
+          "error": {
+            "type": "object",
+            "description": "Present on failure. Mutually exclusive with result.",
+            "required": ["code", "message"],
+            "properties": {
+              "code": {
+                "type": "integer",
+                "description": "JSON-RPC error code (e.g. -32600 invalid request, -32601 method not found, -32602 invalid params, -32603 internal error)."
+              },
+              "message": {
+                "type": "string"
+              },
+              "data": {
+                "description": "Optional additional error context."
+              }
+            }
+          }
+        }
+      }
     }
   },
   "tags": [
@@ -1024,6 +1528,7 @@
     {"name": "Tick", "description": "Tick data"},
     {"name": "Logs", "description": "Logging event queries"},
     {"name": "Transfers", "description": "Transfer history queries"},
-    {"name": "Smart Contract", "description": "Smart contract queries"}
+    {"name": "Smart Contract", "description": "Smart contract queries"},
+    {"name": "JSON-RPC", "description": "Ethereum-like JSON-RPC 2.0 API. Single POST endpoint that accepts a JSON-RPC request envelope; the method field selects the operation."}
   ]
 }

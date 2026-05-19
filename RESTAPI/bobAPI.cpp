@@ -345,11 +345,11 @@ std::string bobGetTick(const uint32_t tick) {
         tdJson["transactionDigests"] = digests;
     }
 
-    // contractFees[1024] as numeric array
+    // contractFees as numeric array (sized by MAX_NUMBER_OF_CONTRACTS).
     {
         bool nonZero = false;
         Json::Value fees(Json::arrayValue);
-        for (int i = 0; i < 1024; ++i) {
+        for (int i = 0; i < MAX_NUMBER_OF_CONTRACTS; ++i) {
             fees.append(static_cast<Json::Int64>(td.contractFees[i]));
             if (td.contractFees[i]) nonZero = true;
         }

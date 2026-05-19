@@ -58,6 +58,7 @@ COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/redis.conf /etc/redis/redis.conf
 COPY docker/kvrocks.conf /etc/kvrocks/kvrocks.conf
 COPY docker/bob.json /app/bob.json
+COPY RESTAPI/openapi.json /app/openapi.json
 COPY docker/entrypoint.sh /app/entrypoint.sh
 COPY docker/cleanup.sh /app/cleanup.sh
 RUN chmod +x /app/entrypoint.sh /app/cleanup.sh

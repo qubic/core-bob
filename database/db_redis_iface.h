@@ -21,6 +21,10 @@ struct IRedis {
     virtual void ping() = 0;
     virtual bool exists(const std::string& key) = 0;
 
+    // Run `INFO <section>` and return the raw reply. Empty section returns
+    // the full INFO output. Used by operational metrics (memory usage).
+    virtual std::string info(const std::string& section) = 0;
+
     virtual void set(const std::string& key, sw::redis::StringView val,
                      std::chrono::milliseconds ttl = std::chrono::milliseconds(0),
                      sw::redis::UpdateType type    = sw::redis::UpdateType::ALWAYS) = 0;

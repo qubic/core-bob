@@ -56,18 +56,27 @@ namespace {
     void registerRoutes() {
         using namespace drogon;
 
-        // Load OpenAPI spec once
+        // Load OpenAPI spec once. Tries several locations so the spec
+        // resolves regardless of whether bob runs from a source build
+        // (cwd = repo root, file at RESTAPI/openapi.json) or from the
+        // docker image (cwd = /data/bob, file copied to /app/openapi.json
+        // by the Dockerfile).
         std::call_once(g_openApiLoadOnce, []() {
-            // Try to load from file first (for development)
-            std::ifstream file("RESTAPI/openapi.json");
-            if (!file.is_open()) {
-                file.open("openapi.json");
+            const char* candidates[] = {
+                "RESTAPI/openapi.json",   // source build, run from repo root
+                "openapi.json",           // source build, run from RESTAPI/ dir
+                "/app/openapi.json",      // docker image
+            };
+            std::ifstream file;
+            for (const char* path : candidates) {
+                file.open(path);
+                if (file.is_open()) break;
             }
             if (file.is_open()) {
                 std::stringstream buffer;
                 buffer << file.rdbuf();
                 g_openApiSpec = buffer.str();
-                file.close();  // Explicitly close the file
+                file.close();
             } else {
                 // Minimal fallback spec
                 g_openApiSpec = R"({"openapi":"3.0.3","info":{"title":"QubicBob API","version":"1.0.0"},"paths":{}})";

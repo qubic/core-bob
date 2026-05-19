@@ -28,6 +28,7 @@ class MockRedis : public IRedis {
 public:
     MOCK_METHOD(void, ping, (), (override));
     MOCK_METHOD(bool, exists, (const std::string&), (override));
+    MOCK_METHOD(std::string, info, (const std::string&), (override));
 
     MOCK_METHOD(void, set, (const std::string&, sw::redis::StringView, std::chrono::milliseconds, sw::redis::UpdateType), (override));
     MOCK_METHOD(void, set, (const std::string&, const std::string&), (override));
