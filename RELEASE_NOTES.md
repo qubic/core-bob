@@ -9,7 +9,7 @@ For exact commit boundaries, see `git log v<a>..v<b>`.
 
 ---
 
-## 1.5.0 (unreleased)
+## 1.5.1
 
 > **Required for the epoch 214 cutover (2026-05-20)** — core raises max
 > transactions per tick from **1024 → 4096**. Bob must run this version
@@ -75,7 +75,7 @@ For exact commit boundaries, see `git log v<a>..v<b>`.
 
 ---
 
-### Other 1.5.0 changes
+### Other 1.5.1 changes
 
 **RPC/REST parity fixes (audit pass)**
 
