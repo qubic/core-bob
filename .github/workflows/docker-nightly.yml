@@ -1,22 +1,37 @@
 name: Docker Nightly
 
+# Triggered automatically every day, or manually with a custom tag.
+# Manual runs let you push an image under any tag without cutting a release —
+# e.g. set `tag: EP214-4096-TX-PER-TICK` to publish a named pre-release build.
 on:
   schedule:
     - cron: "0 2 * * *" # daily at 2:00 AM UTC
-  workflow_dispatch: # manual trigger
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Docker image tag to push to qubiccore/bob (default: nightly)'
+        required: false
+        default: 'nightly'
+        type: string
 
 jobs:
-  publish-docker-nightly:
+  publish-docker:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Resolve tag
+        id: tag
+        # Schedule runs leave `inputs.tag` empty; fall back to "nightly" so
+        # the cron-triggered build always lands on qubiccore/bob:nightly.
+        run: echo "value=${{ inputs.tag || 'nightly' }}" >> "$GITHUB_OUTPUT"
+
       - name: Build Docker image
-        run: docker build -t qubiccore/bob:nightly -f docker/Dockerfile .
+        run: docker build -t qubiccore/bob:${{ steps.tag.outputs.value }} -f docker/Dockerfile .
 
       - name: Log in to Docker Hub
         run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
       - name: Push Docker image
-        run: docker push qubiccore/bob:nightly
+        run: docker push qubiccore/bob:${{ steps.tag.outputs.value }}
