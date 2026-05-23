@@ -187,7 +187,7 @@ void IORequestThread(ConnectionPool& conn_pool, std::chrono::milliseconds reques
             }
             if (waitForIndexerFlag)
             {
-                if (gCurrentFetchingTick > gCurrentIndexingTick + 50) // only resume again when offset is under 50
+                if (gCurrentFetchingTick > gCurrentIndexingTick + BATCH_VERIFICATION + 1) // only resume again when offset is under (BATCH_VERIFICATION+1)
                 {
                     SLEEP(idleBackoff);
                     continue;
