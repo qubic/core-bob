@@ -9,6 +9,14 @@ For exact commit boundaries, see `git log v<a>..v<b>`.
 
 ---
 
+## 1.5.2
+
+### Bug Fixes
+
+- **Fixed a three-way deadlock between the tick fetcher, indexer, and log verifier** that could freeze synchronization indefinitely when catching up from far behind.
+
+---
+
 ## 1.5.1
 
 > **Required for the epoch 214 cutover (2026-05-20)** — core raises max
