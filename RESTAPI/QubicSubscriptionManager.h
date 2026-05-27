@@ -187,6 +187,16 @@ private:
                              int64_t totalProcessed, int64_t totalMatched,
                              uint16_t epoch, int64_t lastPosition);
 
+    // Synthetic event sent during catch-up when the cursor crosses a known
+    // numerical gap between the end-tick of one epoch and the init-tick of
+    // the next. Instead of iterating tens-of-thousands of placeholder ticks
+    // bob emits one boundary marker and jumps the cursor.
+    void sendEpochBoundary(const drogon::WebSocketConnectionPtr& conn,
+                           const std::string& subscriptionId,
+                           uint16_t fromEpoch, uint16_t toEpoch,
+                           uint32_t lastEpochEndTick, uint32_t newEpochInitTick,
+                           int64_t skippedTicks);
+
     // TickStream filter matching helpers
     bool matchesTxFilter(const std::string& from, const std::string& to,
                          int64_t amount, uint16_t inputType,

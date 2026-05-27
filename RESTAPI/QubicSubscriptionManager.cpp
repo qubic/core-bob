@@ -383,6 +383,23 @@ void QubicSubscriptionManager::sendCatchUpProgress(
     sendSubscriptionMessage(conn, subscriptionId, result);
 }
 
+void QubicSubscriptionManager::sendEpochBoundary(
+    const drogon::WebSocketConnectionPtr& conn,
+    const std::string& subscriptionId,
+    uint16_t fromEpoch, uint16_t toEpoch,
+    uint32_t lastEpochEndTick, uint32_t newEpochInitTick,
+    int64_t skippedTicks)
+{
+    Json::Value result(Json::objectValue);
+    result["type"] = "epochBoundary";
+    result["fromEpoch"] = fromEpoch;
+    result["toEpoch"] = toEpoch;
+    result["lastEpochEndTick"] = lastEpochEndTick;
+    result["newEpochInitTick"] = newEpochInitTick;
+    result["skippedTicks"] = static_cast<Json::Int64>(skippedTicks);
+    sendSubscriptionMessage(conn, subscriptionId, result);
+}
+
 void QubicSubscriptionManager::sendCatchUpComplete(
     const drogon::WebSocketConnectionPtr& conn,
     const std::string& subscriptionId,
@@ -983,6 +1000,49 @@ void QubicSubscriptionManager::performCatchUp(
             }
             if (stopFlag_.load() || !conn->connected()) break;
 
+            // Numerical-gap detection: if `tick` is past the recorded end
+            // of `lastEpoch` AND before the next epoch's recorded init tick,
+            // we're traversing the dead range between epochs. Emit a single
+            // synthetic "epochBoundary" event and jump the cursor straight
+            // to the next epoch's init tick instead of iterating thousands
+            // of empty placeholders.
+            if (lastEpoch != 0) {
+                uint32_t endOfLastEpoch = 0;
+                if (db_get_u32("end_epoch_tick:" + std::to_string(lastEpoch), endOfLastEpoch)
+                    && endOfLastEpoch > 0 && tick > endOfLastEpoch)
+                {
+                    uint32_t nextInitTick = 0;
+                    if (db_get_u32("init_tick:" + std::to_string(lastEpoch + 1), nextInitTick)
+                        && nextInitTick > tick)
+                    {
+                        const int64_t skipped =
+                            static_cast<int64_t>(nextInitTick) - static_cast<int64_t>(endOfLastEpoch) - 1;
+                        sendEpochBoundary(conn, subId,
+                                          lastEpoch,
+                                          static_cast<uint16_t>(lastEpoch + 1),
+                                          endOfLastEpoch, nextInitTick, skipped);
+                        Logger::get()->debug(
+                            "TickStream catch-up {}: epoch boundary {}→{}, jumping {} → {} (skipped {})",
+                            subId, lastEpoch, lastEpoch + 1, tick, nextInitTick, skipped);
+                        // Update sub.lastTick so a disconnect-and-resume
+                        // doesn't replay the gap.
+                        {
+                            std::unique_lock lock(mutex_);
+                            auto it = subscriptions_.find(subId);
+                            if (it != subscriptions_.end()) {
+                                it->second.lastTick = nextInitTick - 1;
+                            }
+                        }
+                        // Advance lastEpoch so we don't re-emit the boundary
+                        // on the next iteration. The for-loop's ++tick will
+                        // land us on nextInitTick.
+                        lastEpoch = static_cast<uint16_t>(lastEpoch + 1);
+                        tick = nextInitTick - 1;
+                        continue;
+                    }
+                }
+            }
+
             // Get tick data from DB. If it's missing the tick may be
             // quorum-skipped (e.g. the empty first tick of an epoch) or
             // evicted under lastNTick storage. Don't drop it from the stream
@@ -1017,20 +1077,31 @@ void QubicSubscriptionManager::performCatchUp(
             // tick number — which means db_get_logs_by_tick_range above misses
             // SC_END_EPOCH_TX log events. Recover them via the backup keys and
             // merge into this tick's stream.
+            // The endTick we're looking for may belong to either:
+            //  - `epoch - 1` (CONTIGUOUS cutover: the new epoch's initTick
+            //    overwrote tick_data, so td.epoch is the new epoch).
+            //  - `epoch` itself (GAP cutover: tick_data still belongs to the
+            //    ending epoch because the next epoch's initTick is later).
+            // Check both candidates; whichever has end_epoch_tick == tick is
+            // the source epoch for the SC_END_EPOCH log batch.
             std::vector<LogEvent> endEpochLogs;
             LogRangesPerTxInTick endLr{-1};
-            if (epoch > 0) {
-                const uint16_t prevEpoch = static_cast<uint16_t>(epoch - 1);
-                uint32_t prevEndTick = 0;
-                if (db_get_u32("end_epoch_tick:" + std::to_string(prevEpoch), prevEndTick)
-                    && prevEndTick == tick)
-                {
+            {
+                std::vector<uint16_t> candidates;
+                if (epoch > 0) candidates.push_back(static_cast<uint16_t>(epoch - 1));
+                if (epoch != 0) candidates.push_back(epoch);
+                for (uint16_t candidate : candidates) {
+                    uint32_t candidateEndTick = 0;
+                    if (!db_get_u32("end_epoch_tick:" + std::to_string(candidate), candidateEndTick))
+                        continue;
+                    if (candidateEndTick != tick) continue;
                     long long endStart = -1, endLength = -1;
-                    if (db_get_endepoch_log_range_info(prevEpoch, endStart, endLength, endLr)
+                    if (db_get_endepoch_log_range_info(candidate, endStart, endLength, endLr)
                         && endStart >= 0 && endLength > 0)
                     {
-                        endEpochLogs = db_try_get_logs(prevEpoch, endStart, endStart + endLength - 1);
+                        endEpochLogs = db_try_get_logs(candidate, endStart, endStart + endLength - 1);
                     }
+                    if (!endEpochLogs.empty()) break;
                 }
             }
 

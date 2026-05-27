@@ -9,6 +9,57 @@ For exact commit boundaries, see `git log v<a>..v<b>`.
 
 ---
 
+## 1.5.4
+
+**TickStream catch-up: epoch-boundary jump**
+
+Previously, when catch-up spanned the numerical gap between one epoch's
+last tick and the next epoch's `initTick`, bob iterated every tick in
+that gap and emitted a placeholder for each — potentially hundreds of
+thousands of empty messages over a slow WebSocket.
+
+Catch-up now detects the boundary via the persisted `end_epoch_tick:<e>`
+and `init_tick:<e+1>` keys, emits **one** synthetic event:
+
+```json
+{
+  "type": "epochBoundary",
+  "fromEpoch": 214,
+  "toEpoch":   215,
+  "lastEpochEndTick": 52500000,
+  "newEpochInitTick": 52800000,
+  "skippedTicks": 299999
+}
+```
+
+…and jumps the cursor directly to the next epoch's `initTick`. The
+`sub.lastTick` is updated so a reconnect-during-catch-up doesn't replay
+the gap.
+
+If the cutover is contiguous (no numerical gap), no boundary event is
+emitted — the existing tick events carry the transition naturally
+(including the SC_END_EPOCH log merge from 1.5.3).
+
+Multiple epoch transitions in a single catch-up range are handled
+iteratively — each gap fires its own boundary event.
+
+**End-epoch logs are still delivered before the jump**
+
+The catch-up loop still visits the prior epoch's `endTick` first and
+emits its tick event including the merged SC_END_EPOCH log batch. Only
+the empty numerical range after that endTick is jumped.
+
+The 1.5.3 end-epoch-log merge looked up `end_epoch_tick:<td.epoch - 1>`,
+which was based on a stale assumption that the new epoch's `initTick`
+could equal the prior epoch's `endTick`. In practice an epoch's `endTick`
+is always strictly less than the next epoch's `initTick`, so at the
+endTick `td.epoch` is always the *ending* epoch — the previous logic
+looked one epoch too far back and missed the merge. The lookup now
+checks both `td.epoch` and `td.epoch - 1` against `end_epoch_tick:<e>`
+so the SC_END_EPOCH batch is delivered correctly.
+
+---
+
 ## 1.5.3
 
 **Special-event log delivery fixes for TickStream catch-up**
