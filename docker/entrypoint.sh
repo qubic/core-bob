@@ -119,6 +119,39 @@ if [ -n "$P2P_NODES" ]; then
     jq --arg v "$P2P_NODES" '.["p2p-node"] = ($v | split(",") | map(. | ltrimstr(" ") | rtrimstr(" ")))' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
+# --- External service URLs ---
+# PEER_DISCOVERY_URLS: comma-separated list of base URLs (failover order).
+if [ -n "$PEER_DISCOVERY_URLS" ]; then
+    jq --arg v "$PEER_DISCOVERY_URLS" '.["peer-discovery-urls"] = ($v | split(",") | map(. | ltrimstr(" ") | rtrimstr(" ")))' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+fi
+
+# CURRENT_TICK_ENDPOINTS: semicolon-separated list of url|path|shape triples.
+# Example: "https://api.qubic.global|/currenttick|flat;https://rpc.qubic.org|/live/v1/tick-info|nested"
+if [ -n "$CURRENT_TICK_ENDPOINTS" ]; then
+    jq --arg v "$CURRENT_TICK_ENDPOINTS" '
+      .["current-tick-endpoints"] = ($v
+        | split(";")
+        | map(split("|"))
+        | map({
+            "url":   (.[0] // ""),
+            "path":  (.[1] // "/currenttick"),
+            "shape": (.[2] // "flat")
+          })
+        | map(select(.url != "")))' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+fi
+
+# STATE_FILES_URLS: comma-separated list of base URLs (failover order).
+# STATE_FILES_URL (singular) is also accepted for back-compat.
+if [ -n "$STATE_FILES_URLS" ]; then
+    jq --arg v "$STATE_FILES_URLS" '.["state-files-urls"] = ($v | split(",") | map(. | ltrimstr(" ") | rtrimstr(" ")))' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+elif [ -n "$STATE_FILES_URL" ]; then
+    jq --arg v "$STATE_FILES_URL" '.["state-files-urls"] = [$v]' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+fi
+
+if [ -n "$CHECKIN_URL" ]; then
+    jq --arg v "$CHECKIN_URL" '.["checkin-url"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+fi
+
 # --- Redis/KeyDB settings ---
 REDIS_CONF="/etc/redis/redis.conf"
 

@@ -103,6 +103,10 @@ int runBob(int argc, char *argv[])
     gAllowReceiveLogFromIncomingConnection = cfg.allow_receive_log_from_incoming_connections;
     gMaxActivitiesPerIndexKey = cfg.indexer_max_activities_per_key;
     gPersistOracleTx = cfg.persist_oracle_tx;
+    gPeerDiscoveryUrls    = cfg.peer_discovery_urls;
+    gCurrentTickEndpoints = cfg.current_tick_endpoints;
+    gStateFilesUrls       = cfg.state_files_urls;
+    gCheckinUrl           = cfg.checkin_url;
     gIsTestnet = false;
 
     // Defaults for new knobs are already in AppConfig

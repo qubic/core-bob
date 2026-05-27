@@ -61,6 +61,10 @@
 #define gStartTimeUnix (GS().startTimeUnix)
 #define gAllowCheckInQubicGlobal (GS().allowCheckInQubicGlobal)
 #define gPersistOracleTx (GS().persistOracleTx)
+#define gPeerDiscoveryUrls    (GS().peerDiscoveryUrls)
+#define gCurrentTickEndpoints (GS().currentTickEndpoints)
+#define gStateFilesUrls       (GS().stateFilesUrls)
+#define gCheckinUrl           (GS().checkinUrl)
 #define gTCM (GS().TCM)
 #define gMaxActivitiesPerIndexKey (GS().gMaxActivitiesPerIndexKey)
 

@@ -72,8 +72,21 @@ the [example compose file](../docker/examples/docker-compose.yml).
 | Env var | bob.json key | Default | Description |
 |---|---|---|---|
 | `ENABLE_ADMIN_ENDPOINTS` | `enable-admin-endpoints` | `false` | Expose `/_admin/*` routes (e.g. `/_admin/checkTransactions`). Keep `false` in public deployments. |
-| `ALLOW_CHECK_IN_QUBIC_GLOBAL` | `allow-check-in-qubic-global` | `true` | Allow bob to register itself with `qubic.global` for peer discovery. Disable if you run isolated. |
+| `ALLOW_CHECK_IN_QUBIC_GLOBAL` | `allow-check-in-qubic-global` | `true` | Allow bob to register itself with the peer-discovery directory (`CHECKIN_URL`). Disable if you run isolated. |
 | `ALLOW_RECEIVE_LOG_FROM_INCOMING` | `allow-receive-log-from-incoming-connections` | `false` | Accept log-event packets from non-trusted incoming peers. Off by default since malformed payloads can pollute the local DB. |
+
+## External service URLs
+
+These let you redirect bob's outbound HTTP calls to alternative endpoints
+(e.g. a private mirror or a sealed network). All defaults point at
+`*.qubic.global`.
+
+| Env var | bob.json key | Default | Description |
+|---|---|---|---|
+| `PEER_DISCOVERY_URLS` | `peer-discovery-urls` | `["https://api.qubic.global"]` | Comma-separated list of base URLs that serve `/random-peers?...`. Bob tries each in order until one returns a non-empty peer list (failover). |
+| `CURRENT_TICK_ENDPOINTS` | `current-tick-endpoints` | three built-in entries (qubic.global, qubic.li, rpc.qubic.org) | Semicolon-separated `url\|path\|shape` triples for the "current network tick" lookup. `shape` is `flat` (`{tick, epoch}` at root) or `nested` (`{tickInfo: {tick, epoch}}`). Example: `https://api.qubic.global\|/currenttick\|flat;https://rpc.qubic.org\|/live/v1/tick-info\|nested` |
+| `STATE_FILES_URLS` | `state-files-urls` | `["https://dl.qubic.global/ep{EPOCH}.zip", "https://bobapi.qubic.li/public/{EPOCH}/ep{EPOCH}.zip"]` | Comma-separated list of **URL templates** (failover order) for per-epoch state snapshots. Each entry may use the placeholder `{EPOCH}`, which is substituted with the actual epoch number. Two layouts are common: `https://dl.qubic.global/ep{EPOCH}.zip` and `https://storage.example.com/{EPOCH}/ep{EPOCH}.zip`. Entries without `{EPOCH}` are treated as a base URL and get `/ep<epoch>.zip` appended (back-compat). Bob tries entries in order until a download+unzip succeeds. `STATE_FILES_URL` (singular) is still accepted and promotes to a 1-element list. |
+| `CHECKIN_URL` | `checkin-url` | `https://api.qubic.global` | Base URL for the `/checkin` registration POST. Set empty to disable, or pair with `ALLOW_CHECK_IN_QUBIC_GLOBAL=false`. |
 
 ## Bundled KeyDB (`/etc/redis/redis.conf`)
 

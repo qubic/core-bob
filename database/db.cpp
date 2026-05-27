@@ -1768,13 +1768,22 @@ bool db_get_endepoch_log_range_info(const uint16_t epoch, long long &start, long
         start = std::stoll(*vals[0]);
         length = std::stoll(*vals[1]);
 
-        // Get log ranges from end_epoch:log_ranges:<epoch>
+        // Get log ranges from end_epoch:log_ranges:<epoch>.
+        // Accept either the canonical 4096-slot layout (post-epoch-213) or
+        // the legacy 1024-slot layout from end-epoch boundaries that were
+        // archived before the cutover.
         const std::string key_lr = "end_epoch:log_ranges:" + std::to_string(epoch);
         auto val = g_redis->get(key_lr);
-        if (!val || val->size() != sizeof(LogRangesPerTxInTick)) {
+        if (!val) return false;
+        if (val->size() == sizeof(LogRangesPerTxInTick)) {
+            memcpy(&lr, val->data(), sizeof(LogRangesPerTxInTick));
+        } else if (val->size() == sizeof(LegacyLogRangesPerTxInTick)) {
+            LegacyLogRangesPerTxInTick legacy{};
+            memcpy(&legacy, val->data(), sizeof(legacy));
+            upcastLegacyLogRanges(legacy, lr);
+        } else {
             return false;
         }
-        memcpy(&lr, val->data(), sizeof(LogRangesPerTxInTick));
 
         return true;
     } catch (const sw::redis::Error &e) {

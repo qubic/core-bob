@@ -9,6 +9,76 @@ For exact commit boundaries, see `git log v<a>..v<b>`.
 
 ---
 
+## 1.5.3
+
+**Special-event log delivery fixes for TickStream catch-up**
+
+Two bugs caused `SC_INITIALIZE_TX`, `SC_BEGIN_EPOCH_TX`, and `SC_END_EPOCH_TX`
+log events to sometimes be missing for clients using TickStream catch-up:
+
+1. **`SC_END_EPOCH` events were unreachable via catch-up.** At each epoch
+   transition the verifier renames `tick_log_range:<endTick>` and
+   `log_ranges:<endTick>` into `backup_end_epoch:*` keys so the new epoch
+   can reuse the same tick number. The standard `db_get_logs_by_tick_range`
+   only looks at the canonical key, so catch-up returned nothing for the
+   end-tick of any past epoch. Live broadcast was fine; only clients that
+   reconnected and asked for catch-up across an epoch boundary missed
+   these events.
+
+   Fixed by checking the end-epoch backup keys in
+   [`performCatchUp`](RESTAPI/QubicSubscriptionManager.cpp) when a tick
+   matches the previous epoch's `end_epoch_tick:<epoch>` value, and
+   merging those log events into the tick's stream with their original
+   slot index (typically `SC_END_EPOCH_TX`).
+
+2. **Race at the start of a new epoch.** A client subscribing right after
+   bob restarted for a new epoch could race past `initTick` before the
+   indexer had populated `tick_log_range:<initTick>`, missing the
+   `SC_INITIALIZE_TX` and `SC_BEGIN_EPOCH_TX` log events. Fixed by waiting
+   for `gCurrentIndexingTick` to advance past each tick before reading
+   its logs. The wait is a no-op when catch-up is far behind the cursor;
+   it only blocks at the leading edge.
+
+**Also fixed**: `db_get_endepoch_log_range_info` now accepts both the
+canonical 4096-slot and the legacy 1024-slot LogRangesPerTxInTick layout,
+so end-epoch metadata archived before the 4096-tx-per-tick cutover remains
+queryable.
+
+**Configurable external service URLs + peer-discovery failover**
+
+All outbound HTTP URLs are now configurable via bob.json keys / docker
+env vars. Defaults remain the public `*.qubic.global` / `qubic.li`
+endpoints, so existing deployments work unchanged.
+
+New env vars (see [docs/DOCKER_ENV.md](docs/DOCKER_ENV.md) for full reference):
+
+| Env var | Effect |
+|---|---|
+| `PEER_DISCOVERY_URLS` | Comma-separated list of base URLs that serve `/random-peers`. Bob tries each in order until one returns peers (new failover behavior). |
+| `CURRENT_TICK_ENDPOINTS` | Semicolon-separated `url\|path\|shape` triples for the network's current-tick lookup. `shape` is `flat` or `nested`. |
+| `STATE_FILES_URLS` | Comma-separated list of **URL templates** (failover order) for per-epoch state snapshot downloads. Each entry may include `{EPOCH}` which is substituted at download time (so mirrors with different layouts work: `https://dl.qubic.global/ep{EPOCH}.zip` vs `https://storage.example.com/{EPOCH}/ep{EPOCH}.zip`). Entries without `{EPOCH}` fall back to `<base>/ep<epoch>.zip` (back-compat). `STATE_FILES_URL` (singular) still accepted. |
+| `CHECKIN_URL` | Base URL for the `/checkin` POST. Empty to disable. |
+
+Refactor: all the previously hard-coded `https://api.qubic.global`,
+`https://api.qubic.li`, `https://rpc.qubic.org`, `https://dl.qubic.global`
+literals in [connection/NodeIntroducer.cpp](connection/NodeIntroducer.cpp)
+are now driven by runtime config.
+
+**Peer-discovery failover (new behavior)** — previously bob queried only
+`api.qubic.global` for peer discovery and returned an empty list if it
+failed. With `PEER_DISCOVERY_URLS` listing multiple base URLs, bob walks
+the list in order and uses the first non-empty response — same failover
+pattern that the current-tick lookup has used for some time.
+
+**Path-prefix handling fix** — drogon's `HttpClient::newHttpClient`
+silently drops the path portion of its base URL, so a configured
+endpoint like `https://api.qubic.li/public` would hit `/random-peers`
+on the wrong host path. A new `splitOriginAndPath()` helper now extracts
+the prefix and prepends it to the request path, so prefix-qualified URLs
+work as expected across peer-discovery, current-tick, and check-in calls.
+
+---
+
 ## 1.5.2
 
 ### Bug Fixes

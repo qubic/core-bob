@@ -1,5 +1,7 @@
 #pragma once
 #include <map>
+#include <vector>
+#include <string>
 #include <atomic>
 #include "Config.h"
 #include "structs.h"
@@ -93,6 +95,12 @@ struct GlobalState {
     bool isTestNet;
 
     bool persistOracleTx = true;
+
+    // External-service URLs (overridable via bob.json / env vars).
+    std::vector<std::string> peerDiscoveryUrls;
+    std::vector<AppConfig::TickEndpoint> currentTickEndpoints;
+    std::vector<std::string> stateFilesUrls;
+    std::string checkinUrl;
 
     std::atomic_bool gStopFlag;
 

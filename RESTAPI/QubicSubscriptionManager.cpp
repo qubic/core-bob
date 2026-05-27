@@ -971,6 +971,18 @@ void QubicSubscriptionManager::performCatchUp(
                 filter = it->second.tickStreamFilter;
             }
 
+            // Wait until the indexer has processed this tick before we read
+            // its logs. Without this, a subscriber that connects right after
+            // an epoch restart can race past the new epoch's initTick before
+            // SC_INITIALIZE_TX / SC_BEGIN_EPOCH_TX log events are indexed and
+            // miss them entirely. The wait is a no-op when catch-up is far
+            // behind the cursor (gCurrentIndexingTick is already past tick).
+            while (gCurrentIndexingTick.load() <= tick) {
+                if (stopFlag_.load() || !conn->connected()) break;
+                SLEEP(100);
+            }
+            if (stopFlag_.load() || !conn->connected()) break;
+
             // Get tick data from DB. If it's missing the tick may be
             // quorum-skipped (e.g. the empty first tick of an epoch) or
             // evicted under lastNTick storage. Don't drop it from the stream
@@ -997,6 +1009,30 @@ void QubicSubscriptionManager::performCatchUp(
             // Get log ranges
             LogRangesPerTxInTick lr{-1};
             bool logRangesAvailable = db_try_get_log_ranges(tick, lr);
+
+            // End-epoch overlap. The virtual end-tick of epoch N has the same
+            // tick number as the init-tick of epoch N+1. At the boundary, the
+            // previous epoch's `tick_log_range:<endTick>` and `log_ranges:<endTick>`
+            // are renamed away by the verifier so the new epoch can reuse the
+            // tick number — which means db_get_logs_by_tick_range above misses
+            // SC_END_EPOCH_TX log events. Recover them via the backup keys and
+            // merge into this tick's stream.
+            std::vector<LogEvent> endEpochLogs;
+            LogRangesPerTxInTick endLr{-1};
+            if (epoch > 0) {
+                const uint16_t prevEpoch = static_cast<uint16_t>(epoch - 1);
+                uint32_t prevEndTick = 0;
+                if (db_get_u32("end_epoch_tick:" + std::to_string(prevEpoch), prevEndTick)
+                    && prevEndTick == tick)
+                {
+                    long long endStart = -1, endLength = -1;
+                    if (db_get_endepoch_log_range_info(prevEpoch, endStart, endLength, endLr)
+                        && endStart >= 0 && endLength > 0)
+                    {
+                        endEpochLogs = db_try_get_logs(prevEpoch, endStart, endStart + endLength - 1);
+                    }
+                }
+            }
 
             // Build and filter transactions
             std::vector<StreamTx> matchedTxs;
@@ -1246,6 +1282,11 @@ void QubicSubscriptionManager::performCatchUp(
                     matchedLogs.emplace_back(log, txIndex);
                 }
             }
+
+            // (The queued-pending-tick path receives end-epoch logs via the
+            // live broadcastVerifiedLogs queue, so no backup-key recovery
+            // is needed here — only the from-history catch-up loop above
+            // needs it.)
 
             // Check if we should skip this tick
             bool hasMatches = !matchedTxs.empty() || !matchedLogs.empty();

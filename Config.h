@@ -63,6 +63,44 @@ struct AppConfig {
 
     // When true, persist oracle tx data and log events. Default: true.
     bool persist_oracle_tx = true;
+
+    // External service URLs. Operators can override these (e.g. for a
+    // private/sealed network) or extend the failover chain.
+
+    // Peer-discovery endpoints: each is queried with /random-peers until
+    // one returns a usable list of peers.
+    std::vector<std::string> peer_discovery_urls = {
+        "https://api.qubic.global",
+        "https://api.qubic.li/public",
+    };
+    // Current-tick lookups. Each entry is a {base_url, path, shape} triple
+    // tried in order. Empty entries are skipped, which lets operators
+    // disable a specific failover without removing it from config.
+    // Shape values: "flat" → {"tick": N, "epoch": N}
+    //               "nested" → {"tickInfo": {"tick": N, "epoch": N}}
+    struct TickEndpoint { std::string url; std::string path; std::string shape; };
+    std::vector<TickEndpoint> current_tick_endpoints = {
+        {"https://api.qubic.global", "/currenttick",       "flat"},
+        {"https://api.qubic.li",     "/public/currenttick","flat"},
+        {"https://rpc.qubic.org",    "/live/v1/tick-info", "nested"},
+    };
+    // Where to download per-epoch spectrum/universe state files. Each entry
+    // is a URL template that may contain the placeholder `{EPOCH}`, which
+    // is substituted with the actual epoch number at download time. This
+    // accommodates mirrors that use different layouts, e.g.:
+    //   "https://dl.qubic.global/ep{EPOCH}.zip"
+    //   "https://storage.qubic.li/{EPOCH}/ep{EPOCH}.zip"
+    // For back-compat, an entry without `{EPOCH}` is treated as a base URL
+    // and gets "/ep<epoch>.zip" appended (the historical behavior). Bob
+    // tries entries in order until one downloads + unzips successfully.
+    // Empty list disables the download.
+    std::vector<std::string> state_files_urls = {
+        "https://dl.qubic.global/ep{EPOCH}.zip",
+        "https://storage.qubic.li/network/{EPOCH}/ep{EPOCH}.zip",
+    };
+    // Where bob reports its status for peer-discovery directories. Empty
+    // disables the call (use this together with allow_check_in_qubic_global=false).
+    std::string checkin_url = "https://api.qubic.global";
 };
 
 // Returns true on success; on failure returns false and fills error with a human-readable message.

@@ -380,6 +380,73 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
         out.persist_oracle_tx = true;
     }
 
+    // External-service URL overrides. All optional; defaults in AppConfig.
+    if (root.isMember("peer-discovery-urls")) {
+        if (!root["peer-discovery-urls"].isArray()) {
+            error = "Invalid type: array required for key 'peer-discovery-urls'";
+            return false;
+        }
+        out.peer_discovery_urls.clear();
+        for (const auto& v : root["peer-discovery-urls"]) {
+            if (!v.isString()) {
+                error = "Invalid type: elements of 'peer-discovery-urls' must be strings";
+                return false;
+            }
+            std::string s = v.asString();
+            if (!s.empty()) out.peer_discovery_urls.emplace_back(std::move(s));
+        }
+    }
+    if (root.isMember("current-tick-endpoints")) {
+        if (!root["current-tick-endpoints"].isArray()) {
+            error = "Invalid type: array required for key 'current-tick-endpoints'";
+            return false;
+        }
+        out.current_tick_endpoints.clear();
+        for (const auto& v : root["current-tick-endpoints"]) {
+            if (!v.isObject() || !v.isMember("url") || !v["url"].isString()) {
+                error = "Each 'current-tick-endpoints' entry must be {url, path, shape}";
+                return false;
+            }
+            AppConfig::TickEndpoint t;
+            t.url   = v["url"].asString();
+            t.path  = v.isMember("path")  && v["path"].isString()  ? v["path"].asString()  : "/currenttick";
+            t.shape = v.isMember("shape") && v["shape"].isString() ? v["shape"].asString() : "flat";
+            if (!t.url.empty()) out.current_tick_endpoints.emplace_back(std::move(t));
+        }
+    }
+    if (root.isMember("state-files-urls")) {
+        if (!root["state-files-urls"].isArray()) {
+            error = "Invalid type: array required for key 'state-files-urls'";
+            return false;
+        }
+        out.state_files_urls.clear();
+        for (const auto& v : root["state-files-urls"]) {
+            if (!v.isString()) {
+                error = "Invalid type: elements of 'state-files-urls' must be strings";
+                return false;
+            }
+            std::string s = v.asString();
+            if (!s.empty()) out.state_files_urls.emplace_back(std::move(s));
+        }
+    } else if (root.isMember("state-files-url")) {
+        // Back-compat: accept the single-URL form. Promotes to a 1-element
+        // failover list internally.
+        if (!root["state-files-url"].isString()) {
+            error = "Invalid type: string required for key 'state-files-url'";
+            return false;
+        }
+        out.state_files_urls.clear();
+        std::string s = root["state-files-url"].asString();
+        if (!s.empty()) out.state_files_urls.emplace_back(std::move(s));
+    }
+    if (root.isMember("checkin-url")) {
+        if (!root["checkin-url"].isString()) {
+            error = "Invalid type: string required for key 'checkin-url'";
+            return false;
+        }
+        out.checkin_url = root["checkin-url"].asString();
+    }
+
     if (out.tick_storage_mode == TickStorageMode::LastNTick)
     {
         if (out.tx_storage_mode != TxStorageMode::LastNTick && out.tx_storage_mode != TxStorageMode::Free)
