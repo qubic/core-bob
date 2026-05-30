@@ -404,6 +404,7 @@ SyncStatus getSyncStatus() {
     status.currentIndexingTick = gCurrentIndexingTick.load();
     status.lastSeenNetworkTick = gLastSeenNetworkTick.load();
 
+    status.targetTickVoteSignature = TARGET_TICK_VOTE_SIGNATURE;
     status.computorListSignature = 0;
     if (computorsList.epoch == gCurrentProcessingEpoch.load())
     {

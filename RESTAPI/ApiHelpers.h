@@ -78,6 +78,7 @@ struct SyncStatus {
     uint32_t currentVerifyLoggingTick = 0;
     uint32_t currentIndexingTick = 0;
     uint32_t lastSeenNetworkTick = 0;  // 0 = unknown
+    uint32_t targetTickVoteSignature = TARGET_TICK_VOTE_SIGNATURE;
     uint64_t computorListSignature = 0;
     bool isSyncing = false;
     double progress = 0.0;
