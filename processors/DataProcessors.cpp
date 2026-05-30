@@ -39,6 +39,11 @@ void processTickVote(uint8_t* ptr)
     vote->computorIndex ^= 3;
     bool ok = verifySignature((void *) vote, compPubkey, sizeof(TickVote));
     vote->computorIndex ^= 3;
+    unsigned int score = __builtin_bswap64(((unsigned int*)vote->signature)[0]);
+    if (score > TARGET_TICK_VOTE_SIGNATURE) {
+        Logger::get()->warn("Vote {}:{} has low-diff signature", vote->tick, vote->computorIndex);
+        ok = false;
+    }
     if (ok)
     {
         db_insert_tick_vote(*vote);
