@@ -6,6 +6,11 @@ refactors and test additions are summarized only when they affect runtime
 behavior.
 
 For exact commit boundaries, see `git log v<a>..v<b>`.
+---
+
+## 1.5.5
+
+**Config key normalization** — `bob.json` keys are now lowercased and `-` is converted to `_` before parsing, so mixed naming styles (e.g. `log-level`, `Log_Level`) all resolve to the same canonical key.
 
 ---
 
