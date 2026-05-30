@@ -404,6 +404,13 @@ SyncStatus getSyncStatus() {
     status.currentIndexingTick = gCurrentIndexingTick.load();
     status.lastSeenNetworkTick = gLastSeenNetworkTick.load();
 
+    status.computorListSignature = 0;
+    if (computorsList.epoch == gCurrentProcessingEpoch.load())
+    {
+        uint64_t value = 0;
+        memcpy(&value, computorsList.signature, 8);
+        status.computorListSignature = value;
+    }
     // Determine sync status
     uint32_t verifyLoggingTick = status.currentVerifyLoggingTick;
     uint32_t fetchingTick = status.currentFetchingTick;

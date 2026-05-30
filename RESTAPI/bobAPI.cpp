@@ -555,7 +555,6 @@ std::string bobGetExtraStatus(const std::string& challenge)
 std::string bobGetStatus(const std::string& challenge)
 {
     auto status = ApiHelpers::getSyncStatus();
-
     return std::string("{") +
            "\"currentProcessingEpoch\":" + std::to_string(status.epoch) +
            ",\"currentFetchingTick\":" + std::to_string(status.currentFetchingTick) +
@@ -563,6 +562,7 @@ std::string bobGetStatus(const std::string& challenge)
            ",\"currentVerifyLoggingTick\":" + std::to_string(status.currentVerifyLoggingTick) +
            ",\"currentIndexingTick\":" + std::to_string(status.currentIndexingTick) +
            ",\"initialTick\":" + std::to_string(status.initialTick) +
+            ",\"computorListSignature\":" + std::to_string(status.computorListSignature) +
            R"(,"bobVersion": ")" + BOB_VERSION + "\""
            ",\"bobVersionGitHash\": \"" + GIT_COMMIT_HASH + "\""
            ",\"bobCompiler\": \"" + COMPILER_NAME + "\""

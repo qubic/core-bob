@@ -116,6 +116,8 @@ Json::Value QubicRpcMethods::syncing() {
     result["epoch"] = status.epoch;
     result["initialTick"] = status.initialTick;
 
+    result["computorListSignature"] = status.computorListSignature;
+
     // Tick status breakdown
     result["currentFetchingTick"] = status.currentFetchingTick;
     result["currentFetchingLogTick"] = status.currentFetchingLogTick;
