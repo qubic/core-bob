@@ -1327,6 +1327,10 @@ Json::Value QubicRpcMethods::getComputors(uint16_t epoch) {
         computorsArray.append(std::string(identity));
     }
     result["computors"] = computorsArray;
-
+    {
+        char hex[66] = {0};
+        byteToHex(comps.signature, hex, SIGNATURE_SIZE);
+        result["signature"] = std::string(hex);
+    }
     return result;
 }
