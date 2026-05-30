@@ -6,6 +6,44 @@
 #include <string>
 #include <memory>
 #include <thread>
+#include <algorithm>
+#include <cctype>
+
+namespace {
+    // Normalize a single key: lowercase + replace '-' with '_'.
+    std::string NormalizeKey(const std::string& key) {
+        std::string out;
+        out.reserve(key.size());
+        for (char c : key) {
+            if (c == '-') {
+                out.push_back('_');
+            } else {
+                out.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+            }
+        }
+        return out;
+    }
+
+    // Recursively normalize all object keys in a Json::Value.
+    // Arrays are traversed; scalar leaves are left untouched.
+    Json::Value NormalizeKeys(const Json::Value& in) {
+        if (in.isObject()) {
+            Json::Value out(Json::objectValue);
+            for (const auto& name : in.getMemberNames()) {
+                out[NormalizeKey(name)] = NormalizeKeys(in[name]);
+            }
+            return out;
+        }
+        if (in.isArray()) {
+            Json::Value out(Json::arrayValue);
+            for (const auto& v : in) {
+                out.append(NormalizeKeys(v));
+            }
+            return out;
+        }
+        return in;
+    }
+}
 
 bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
     std::ifstream ifs(path);
@@ -22,27 +60,31 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
     builder["collectComments"] = false;
     std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
 
-    Json::Value root;
+    Json::Value rawRoot;
     std::string errs;
-    if (!reader->parse(json.data(), json.data() + json.size(), &root, &errs)) {
+    if (!reader->parse(json.data(), json.data() + json.size(), &rawRoot, &errs)) {
         error = "invalid JSON: " + errs;
         return false;
     }
 
-    if (!root.isObject()) {
+    if (!rawRoot.isObject()) {
         error = "invalid JSON: root must be an object";
         return false;
     }
 
-    // merge 'p2p-node' to trusted node
-    if (root.isMember("p2p-node")) {
-        if (!root["p2p-node"].isArray()) {
-            error = "Invalid type: array required for key 'p2p-node'";
+    // Pre-process: lowercase all keys and convert '-' to '_'.
+    // After this point, every lookup must use the normalized form.
+    const Json::Value root = NormalizeKeys(rawRoot);
+
+    // merge 'p2p_node' to trusted node
+    if (root.isMember("p2p_node")) {
+        if (!root["p2p_node"].isArray()) {
+            error = "Invalid type: array required for key 'p2p_node'";
             return false;
         }
-        for (const auto& v : root["p2p-node"]) {
+        for (const auto& v : root["p2p_node"]) {
             if (!v.isString()) {
-                error = "Invalid type: elements of 'p2p-node' must be strings";
+                error = "Invalid type: elements of 'p2p_node' must be strings";
                 return false;
             }
             out.p2p_nodes.emplace_back(v.asString());
@@ -50,98 +92,98 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
     }
 
     // Optional fields (use defaults from AppConfig if absent)
-    if (root.isMember("log-level")) {
-        if (!root["log-level"].isString()) {
-            error = "Invalid type: string required for key 'log-level'";
+    if (root.isMember("log_level")) {
+        if (!root["log_level"].isString()) {
+            error = "Invalid type: string required for key 'log_level'";
             return false;
         }
-        out.log_level = root["log-level"].asString();
+        out.log_level = root["log_level"].asString();
     }
 
-    if (root.isMember("keydb-url")) {
-        if (!root["keydb-url"].isString()) {
-            error = "Invalid type: string required for key 'keydb-url'";
+    if (root.isMember("keydb_url")) {
+        if (!root["keydb_url"].isString()) {
+            error = "Invalid type: string required for key 'keydb_url'";
             return false;
         }
-        out.keydb_url = root["keydb-url"].asString();
+        out.keydb_url = root["keydb_url"].asString();
     }
 
-    if (root.isMember("kvrocks-url")) {
-        if (!root["kvrocks-url"].isString()) {
-            error = "Invalid type: string required for key 'kvrocks-url'";
+    if (root.isMember("kvrocks_url")) {
+        if (!root["kvrocks_url"].isString()) {
+            error = "Invalid type: string required for key 'kvrocks_url'";
             return false;
         }
-        out.kvrocks_url = root["kvrocks-url"].asString();
+        out.kvrocks_url = root["kvrocks_url"].asString();
     } else {
         if (out.kvrocks_url.empty()) {
             out.kvrocks_url = "tcp://127.0.0.1:6666";
         }
     }
 
-    if (root.isMember("indexer-max-activities-per-key")) {
-        if (!root["indexer-max-activities-per-key"].isNumeric()) {
-            error = "Invalid type: number required for key 'indexer-max-activities-per-key'";
+    if (root.isMember("indexer_max_activities_per_key")) {
+        if (!root["indexer_max_activities_per_key"].isNumeric()) {
+            error = "Invalid type: number required for key 'indexer_max_activities_per_key'";
             return false;
         }
-        out.indexer_max_activities_per_key = root["indexer-max-activities-per-key"].asUInt64();
+        out.indexer_max_activities_per_key = root["indexer_max_activities_per_key"].asUInt64();
     }
 
     // this config is use in kvrocks mode only, it will determine how many tickData stays on RAM
     // usually use by core BOB for faster distribution
-    if (root.isMember("n-tickdata-to-store")) {
-        const auto& v = root["n-tickdata-to-store"];
+    if (root.isMember("n_tickdata_to_store")) {
+        const auto& v = root["n_tickdata_to_store"];
         if (v.isUInt()) {
             out.n_tickdata_to_store = v.asUInt();
         } else if (v.isInt()) {
             int i = v.asInt();
             if (i < 0) {
-                error = "Negative integer is invalid for key 'n-tickdata-to-store'";
+                error = "Negative integer is invalid for key 'n_tickdata_to_store'";
                 return false;
             }
             out.n_tickdata_to_store = static_cast<unsigned>(i);
         } else {
-            error = "Invalid type: unsigned integer required for key 'n-tickdata-to-store'";
+            error = "Invalid type: unsigned integer required for key 'n_tickdata_to_store'";
             return false;
         }
     } else {
         out.n_tickdata_to_store = 5;
     }
 
-    if (root.isMember("arbitrator-identity")) {
-        if (!root["arbitrator-identity"].isString()) {
-            error = "Invalid type: string required for key 'arbitrator-identity'";
+    if (root.isMember("arbitrator_identity")) {
+        if (!root["arbitrator_identity"].isString()) {
+            error = "Invalid type: string required for key 'arbitrator_identity'";
             return false;
         }
-        out.arbitrator_identity = root["arbitrator-identity"].asString();
+        out.arbitrator_identity = root["arbitrator_identity"].asString();
     }
     else
     {
-        error = "string required for key 'arbitrator-identity'";
+        error = "string required for key 'arbitrator_identity'";
         return false;
     }
 
-    if (root.isMember("run-server")) {
-        if (!root["run-server"].isBool()) {
-            error = "Invalid type: boolean required for key 'run-server'";
+    if (root.isMember("run_server")) {
+        if (!root["run_server"].isBool()) {
+            error = "Invalid type: boolean required for key 'run_server'";
             return false;
         }
-        out.run_server = root["run-server"].asBool();
+        out.run_server = root["run_server"].asBool();
     }
 
-    if (root.isMember("allow-receive-log-from-incoming-connections")) {
-        if (!root["allow-receive-log-from-incoming-connections"].isBool()) {
-            error = "Invalid type: boolean required for key 'allow-receive-log-from-incoming-connections'";
+    if (root.isMember("allow_receive_log_from_incoming_connections")) {
+        if (!root["allow_receive_log_from_incoming_connections"].isBool()) {
+            error = "Invalid type: boolean required for key 'allow_receive_log_from_incoming_connections'";
             return false;
         }
-        out.allow_receive_log_from_incoming_connections = root["allow-receive-log-from-incoming-connections"].asBool();
+        out.allow_receive_log_from_incoming_connections = root["allow_receive_log_from_incoming_connections"].asBool();
     }
 
-    if (root.isMember("is-testnet")) {
-        if (!root["is-testnet"].isBool()) {
-            error = "Invalid type: boolean required for key 'is-testnet'";
+    if (root.isMember("is_testnet")) {
+        if (!root["is_testnet"].isBool()) {
+            error = "Invalid type: boolean required for key 'is_testnet'";
             return false;
         }
-        out.is_testnet = root["is-testnet"].asBool();
+        out.is_testnet = root["is_testnet"].asBool();
     }
 
     auto validate_uint = [&](const char* key, unsigned& target) -> bool {
@@ -164,58 +206,58 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
         return false;
     };
 
-    if (!validate_uint("request-cycle-ms", out.request_cycle_ms)) return false;
-    if (!validate_uint("request-logging-cycle-ms", out.request_logging_cycle_ms)) return false;
-    if (!validate_uint("future-offset", out.future_offset)) return false;
-    if (!validate_uint("server-port", out.server_port)) return false;
-    if (!validate_uint("rpc-port", out.rpc_port)) return false;
+    if (!validate_uint("request_cycle_ms", out.request_cycle_ms)) return false;
+    if (!validate_uint("request_logging_cycle_ms", out.request_logging_cycle_ms)) return false;
+    if (!validate_uint("future_offset", out.future_offset)) return false;
+    if (!validate_uint("server_port", out.server_port)) return false;
+    if (!validate_uint("rpc_port", out.rpc_port)) return false;
 
     // Enable admin endpoints (default false)
-    if (root.isMember("enable-admin-endpoints")) {
-        if (!root["enable-admin-endpoints"].isBool()) {
-            error = "Invalid type: boolean required for key 'enable-admin-endpoints'";
+    if (root.isMember("enable_admin_endpoints")) {
+        if (!root["enable_admin_endpoints"].isBool()) {
+            error = "Invalid type: boolean required for key 'enable_admin_endpoints'";
             return false;
         }
-        out.enable_admin_endpoints = root["enable-admin-endpoints"].asBool();
+        out.enable_admin_endpoints = root["enable_admin_endpoints"].asBool();
     }
 
     // Maximum threads the system can use (0 means auto/unlimited)
-    if (!validate_uint("max-thread", out.max_thread)) return false;
+    if (!validate_uint("max_thread", out.max_thread)) return false;
     if (out.max_thread == 0)
     {
         out.max_thread = std::thread::hardware_concurrency();
     }
 
     // Spam/Junk QU transfer detection threshold (default 0)
-    if (!validate_uint("spam-qu-threshold", out.spam_qu_threshold)) return false;
+    if (!validate_uint("spam_qu_threshold", out.spam_qu_threshold)) return false;
 
-    if (root.isMember("node-seed")) {
-        if (!root["node-seed"].isString()) {
-            error = "Invalid type: string required for key 'node-seed'";
+    if (root.isMember("node_seed")) {
+        if (!root["node_seed"].isString()) {
+            error = "Invalid type: string required for key 'node_seed'";
             return false;
         }
-        out.node_seed = root["node-seed"].asString();
+        out.node_seed = root["node_seed"].asString();
     } else {
         out.node_seed = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     }
 
-    if (root.isMember("node-alias")) {
-        if (!root["node-alias"].isString()) {
-            error = "Invalid type: string required for key 'node-alias'";
+    if (root.isMember("node_alias")) {
+        if (!root["node_alias"].isString()) {
+            error = "Invalid type: string required for key 'node_alias'";
             return false;
         }
-        out.nodeAlias = root["node-alias"].asString();
+        out.nodeAlias = root["node_alias"].asString();
     }
 
-    // Parse 'tick-storage-mode' and related options
+    // Parse 'tick_storage_mode' and related options
     {
         std::string mode = "lastNTick";
-        if (root.isMember("tick-storage-mode")) {
-            if (!root["tick-storage-mode"].isString()) {
-                error = "Invalid type: string required for key 'tick-storage-mode'";
+        if (root.isMember("tick_storage_mode")) {
+            if (!root["tick_storage_mode"].isString()) {
+                error = "Invalid type: string required for key 'tick_storage_mode'";
                 return false;
             }
-            mode = root["tick-storage-mode"].asString();
+            mode = root["tick_storage_mode"].asString();
         }
 
         if (mode == "lastNTick") {
@@ -249,20 +291,20 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
             out.tick_storage_mode = TickStorageMode::Free;
             // No related options; implies no garbage cleaner.
         } else {
-            error = "Invalid value for 'tick-storage-mode': must be one of 'lastNTick', 'kvrocks', or 'free'";
+            error = "Invalid value for 'tick_storage_mode': must be one of 'lastNTick', 'kvrocks', or 'free'";
             return false;
         }
     }
 
-    // Parse 'tx-storage-mode' and related options
+    // Parse 'tx_storage_mode' and related options
     {
         std::string mode = "lastNTick";
-        if (root.isMember("tx-storage-mode")) {
-            if (!root["tx-storage-mode"].isString()) {
-                error = "Invalid type: string required for key 'tx-storage-mode'";
+        if (root.isMember("tx_storage_mode")) {
+            if (!root["tx_storage_mode"].isString()) {
+                error = "Invalid type: string required for key 'tx_storage_mode'";
                 return false;
             }
-            mode = root["tx-storage-mode"].asString();
+            mode = root["tx_storage_mode"].asString();
         }
 
         if (mode == "lastNTick") {
@@ -292,13 +334,13 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
         } else if (mode == "kvrocks") {
             out.tx_storage_mode = TxStorageMode::Kvrocks;
 
-            // kvrocks-url (default tcp://127.0.0.1:6666) — reuse same URL
-            if (root.isMember("kvrocks-url")) {
-                if (!root["kvrocks-url"].isString()) {
-                    error = "Invalid type: string required for key 'kvrocks-url'";
+            // kvrocks_url (default tcp://127.0.0.1:6666) — reuse same URL
+            if (root.isMember("kvrocks_url")) {
+                if (!root["kvrocks_url"].isString()) {
+                    error = "Invalid type: string required for key 'kvrocks_url'";
                     return false;
                 }
-                out.kvrocks_url = root["kvrocks-url"].asString();
+                out.kvrocks_url = root["kvrocks_url"].asString();
             } else {
                 if (out.kvrocks_url.empty()) {
                     out.kvrocks_url = "tcp://127.0.0.1:6666";
@@ -330,7 +372,7 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
             out.tx_storage_mode = TxStorageMode::Free;
             // Do nothing; leave cleanup to keydb.
         } else {
-            error = "Invalid value for 'tx-storage-mode': must be one of 'lastNTick', 'kvrocks', or 'free'";
+            error = "Invalid value for 'tx_storage_mode': must be one of 'lastNTick', 'kvrocks', or 'free'";
             return false;
         }
     }
@@ -361,50 +403,50 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
         }
     }
 
-    if (root.isMember("allow-check-in-qubic-global")) {
-        if (!root["allow-check-in-qubic-global"].isBool()) {
-            error = "Invalid type: boolean required for key 'allow-check-in-qubic-global'";
+    if (root.isMember("allow_check_in_qubic_global")) {
+        if (!root["allow_check_in_qubic_global"].isBool()) {
+            error = "Invalid type: boolean required for key 'allow_check_in_qubic_global'";
             return false;
         }
-        out.allow_check_in_qubic_global = root["allow-check-in-qubic-global"].asBool();
+        out.allow_check_in_qubic_global = root["allow_check_in_qubic_global"].asBool();
     }
 
-    // persist-oracle-tx: when true, oracle tx data and log events are persisted (default: true)
-    if (root.isMember("persist-oracle-tx")) {
-        if (!root["persist-oracle-tx"].isBool()) {
-            error = "Invalid type: boolean required for key 'persist-oracle-tx'";
+    // persist_oracle_tx: when true, oracle tx data and log events are persisted (default: true)
+    if (root.isMember("persist_oracle_tx")) {
+        if (!root["persist_oracle_tx"].isBool()) {
+            error = "Invalid type: boolean required for key 'persist_oracle_tx'";
             return false;
         }
-        out.persist_oracle_tx = root["persist-oracle-tx"].asBool();
+        out.persist_oracle_tx = root["persist_oracle_tx"].asBool();
     } else {
         out.persist_oracle_tx = true;
     }
 
     // External-service URL overrides. All optional; defaults in AppConfig.
-    if (root.isMember("peer-discovery-urls")) {
-        if (!root["peer-discovery-urls"].isArray()) {
-            error = "Invalid type: array required for key 'peer-discovery-urls'";
+    if (root.isMember("peer_discovery_urls")) {
+        if (!root["peer_discovery_urls"].isArray()) {
+            error = "Invalid type: array required for key 'peer_discovery_urls'";
             return false;
         }
         out.peer_discovery_urls.clear();
-        for (const auto& v : root["peer-discovery-urls"]) {
+        for (const auto& v : root["peer_discovery_urls"]) {
             if (!v.isString()) {
-                error = "Invalid type: elements of 'peer-discovery-urls' must be strings";
+                error = "Invalid type: elements of 'peer_discovery_urls' must be strings";
                 return false;
             }
             std::string s = v.asString();
             if (!s.empty()) out.peer_discovery_urls.emplace_back(std::move(s));
         }
     }
-    if (root.isMember("current-tick-endpoints")) {
-        if (!root["current-tick-endpoints"].isArray()) {
-            error = "Invalid type: array required for key 'current-tick-endpoints'";
+    if (root.isMember("current_tick_endpoints")) {
+        if (!root["current_tick_endpoints"].isArray()) {
+            error = "Invalid type: array required for key 'current_tick_endpoints'";
             return false;
         }
         out.current_tick_endpoints.clear();
-        for (const auto& v : root["current-tick-endpoints"]) {
+        for (const auto& v : root["current_tick_endpoints"]) {
             if (!v.isObject() || !v.isMember("url") || !v["url"].isString()) {
-                error = "Each 'current-tick-endpoints' entry must be {url, path, shape}";
+                error = "Each 'current_tick_endpoints' entry must be {url, path, shape}";
                 return false;
             }
             AppConfig::TickEndpoint t;
@@ -414,37 +456,37 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
             if (!t.url.empty()) out.current_tick_endpoints.emplace_back(std::move(t));
         }
     }
-    if (root.isMember("state-files-urls")) {
-        if (!root["state-files-urls"].isArray()) {
-            error = "Invalid type: array required for key 'state-files-urls'";
+    if (root.isMember("state_files_urls")) {
+        if (!root["state_files_urls"].isArray()) {
+            error = "Invalid type: array required for key 'state_files_urls'";
             return false;
         }
         out.state_files_urls.clear();
-        for (const auto& v : root["state-files-urls"]) {
+        for (const auto& v : root["state_files_urls"]) {
             if (!v.isString()) {
-                error = "Invalid type: elements of 'state-files-urls' must be strings";
+                error = "Invalid type: elements of 'state_files_urls' must be strings";
                 return false;
             }
             std::string s = v.asString();
             if (!s.empty()) out.state_files_urls.emplace_back(std::move(s));
         }
-    } else if (root.isMember("state-files-url")) {
+    } else if (root.isMember("state_files_url")) {
         // Back-compat: accept the single-URL form. Promotes to a 1-element
         // failover list internally.
-        if (!root["state-files-url"].isString()) {
-            error = "Invalid type: string required for key 'state-files-url'";
+        if (!root["state_files_url"].isString()) {
+            error = "Invalid type: string required for key 'state_files_url'";
             return false;
         }
         out.state_files_urls.clear();
-        std::string s = root["state-files-url"].asString();
+        std::string s = root["state_files_url"].asString();
         if (!s.empty()) out.state_files_urls.emplace_back(std::move(s));
     }
-    if (root.isMember("checkin-url")) {
-        if (!root["checkin-url"].isString()) {
-            error = "Invalid type: string required for key 'checkin-url'";
+    if (root.isMember("checkin_url")) {
+        if (!root["checkin_url"].isString()) {
+            error = "Invalid type: string required for key 'checkin_url'";
             return false;
         }
-        out.checkin_url = root["checkin-url"].asString();
+        out.checkin_url = root["checkin_url"].asString();
     }
 
     if (out.tick_storage_mode == TickStorageMode::LastNTick)
