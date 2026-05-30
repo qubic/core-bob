@@ -12,6 +12,8 @@ For exact commit boundaries, see `git log v<a>..v<b>`.
 
 **Config key normalization** — `bob.json` keys are now lowercased and `-` is converted to `_` before parsing, so mixed naming styles (e.g. `log-level`, `Log_Level`) all resolve to the same canonical key.
 
+**Enhanced computor verification** — Added `TARGET_TICK_VOTE_SIGNATURE`, `computorListSignature`, and arbitrator signature to status/computor endpoints for fast signature verification.
+
 ---
 
 ## 1.5.4
