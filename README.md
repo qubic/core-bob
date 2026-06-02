@@ -139,7 +139,7 @@ An example configuration file, `default_config_bob.json`, ships with the reposit
   "tick-storage-mode": "kvrocks",
   "kvrocks-url": "tcp://127.0.0.1:6666",
   "tx-storage-mode": "kvrocks",
-  "tx_tick_to_live": 3000,
+  "tx_tick_to_live": 1000,
   "max-thread": 8,
   "spam-qu-threshold": 0
 }
