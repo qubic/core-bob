@@ -8,6 +8,21 @@ behavior.
 For exact commit boundaries, see `git log v<a>..v<b>`.
 ---
 
+## 1.5.6
+
+**Default `tx_tick_to_live` lowered to 1000** (was 3000) in both
+[docker/bob.json](docker/bob.json) and the documented example in
+[README.md](README.md). With the post-cutover 4096-tx-per-tick ceiling
+the previous 3000-tick window kept a lot of `transaction:*` blobs in
+KeyDB; 1000 keeps roughly 30 minutes of recent tx data resident and
+migrates the rest to kvrocks faster, easing memory pressure on
+guardian hosts.
+
+Operators that rely on instant lookups of older recent txs from KeyDB
+can revert to the previous value via `TX_TICK_TO_LIVE=3000`.
+
+---
+
 ## 1.5.5
 
 **Config key normalization** — `bob.json` keys are now lowercased and `-` is converted to `_` before parsing, so mixed naming styles (e.g. `log-level`, `Log_Level`) all resolve to the same canonical key.
