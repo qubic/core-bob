@@ -33,9 +33,9 @@ static int do_connect(const char* nodeIp, int nodePort)
         }
     }
 
-    // Configure timeouts (best-effort)
+    // Configure timeouts for fast init (1s)
     struct timeval tv;
-    tv.tv_sec = 10;
+    tv.tv_sec = 1;
     tv.tv_usec = 0;
     if (setsockopt(serverSocket, SOL_SOCKET, SO_RCVTIMEO, (const void*)&tv, sizeof tv) < 0) {
         Logger::get()->warn("setsockopt(SO_RCVTIMEO) failed: {} ({})", errno, strerror(errno));
@@ -72,6 +72,16 @@ static int do_connect(const char* nodeIp, int nodePort)
 //        Logger::get()->error("Failed to connect {}:{} | errno {} ({})", nodeIp, nodePort, errno, strerror(errno));
         close(serverSocket);
         return -1;
+    }
+
+    // After successful connection, set timeout to 10s
+    tv.tv_sec = 10;
+    tv.tv_usec = 0;
+    if (setsockopt(serverSocket, SOL_SOCKET, SO_RCVTIMEO, (const void*)&tv, sizeof tv) < 0) {
+        Logger::get()->warn("setsockopt(SO_RCVTIMEO) failed: {} ({})", errno, strerror(errno));
+    }
+    if (setsockopt(serverSocket, SOL_SOCKET, SO_SNDTIMEO, (const void*)&tv, sizeof tv) < 0) {
+        Logger::get()->warn("setsockopt(SO_SNDTIMEO) failed: {} ({})", errno, strerror(errno));
     }
 
     return serverSocket;
@@ -299,15 +309,15 @@ void QubicConnection::getBootstrapTickInfo(uint32_t& tick, uint16_t& epoch)
 
     // Set 1-second timeout for bootstrap
     struct timeval tv;
-    tv.tv_sec = 1;
-    tv.tv_usec = 0;
+    tv.tv_sec = 0;
+    tv.tv_usec = 100000;
     setsockopt(mSocket, SOL_SOCKET, SO_RCVTIMEO, (const void*)&tv, sizeof(tv));
     setsockopt(mSocket, SOL_SOCKET, SO_SNDTIMEO, (const void*)&tv, sizeof(tv));
 
     RequestResponseHeader header{};
     std::vector<uint8_t> packet;
     int count = 0;
-    const int maxAttempts = 200; // give up after ~200 receive attempts
+    const int maxAttempts = 60; // give up after ~60 receive attempts
     while (count < maxAttempts)
     {
         // trying to get until tickinfo packet arrive
@@ -606,9 +616,6 @@ void doHandshakeAndGetBootstrapInfo(ConnectionPool& cp, bool isTrusted, uint32_t
                     {
                         uint32_t initTick = 0;
                         uint16_t initEpoch = 0;
-                        if (conn->isBM()) {
-                            conn->doHandshake();
-                        }
                         conn->getBootstrapTickInfo(initTick, initEpoch);
                         localMaxTick = std::max(localMaxTick, initTick);
                         localMaxEpoch = std::max(localMaxEpoch, initEpoch);
