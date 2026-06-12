@@ -292,6 +292,18 @@ void QubicConnection::updateLatestTick(uint32_t tick)
 
 void QubicConnection::getBootstrapTickInfo(uint32_t& tick, uint16_t& epoch)
 {
+    // Save current timeout values
+    struct timeval oldTv;
+    socklen_t oldTvLen = sizeof(oldTv);
+    getsockopt(mSocket, SOL_SOCKET, SO_RCVTIMEO, &oldTv, &oldTvLen);
+
+    // Set 1-second timeout for bootstrap
+    struct timeval tv;
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+    setsockopt(mSocket, SOL_SOCKET, SO_RCVTIMEO, (const void*)&tv, sizeof(tv));
+    setsockopt(mSocket, SOL_SOCKET, SO_SNDTIMEO, (const void*)&tv, sizeof(tv));
+
     RequestResponseHeader header{};
     std::vector<uint8_t> packet;
     int count = 0;
@@ -317,12 +329,20 @@ void QubicConnection::getBootstrapTickInfo(uint32_t& tick, uint16_t& epoch)
                     memcpy((void*)&ctick, packet.data()+8, sizeof(CurrentTickInfo));
                     tick = ctick.initialTick;
                     epoch = ctick.epoch;
+
+                    // Restore original timeout
+                    setsockopt(mSocket, SOL_SOCKET, SO_RCVTIMEO, (const void*)&oldTv, sizeof(oldTv));
+                    setsockopt(mSocket, SOL_SOCKET, SO_SNDTIMEO, (const void*)&oldTv, sizeof(oldTv));
                     return;
                 }
             }
         }
     }
     Logger::get()->warn("getBootstrapTickInfo: timed out waiting for response from {}:{}", mNodeIp, mNodePort);
+
+    // Restore original timeout before returning
+    setsockopt(mSocket, SOL_SOCKET, SO_RCVTIMEO, (const void*)&oldTv, sizeof(oldTv));
+    setsockopt(mSocket, SOL_SOCKET, SO_SNDTIMEO, (const void*)&oldTv, sizeof(oldTv));
 }
 
 void QubicConnection::disconnect()
