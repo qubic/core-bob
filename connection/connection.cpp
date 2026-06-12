@@ -35,7 +35,7 @@ static int do_connect(const char* nodeIp, int nodePort)
 
     // Configure timeouts for fast init (1s)
     struct timeval tv;
-    tv.tv_sec = 1;
+    tv.tv_sec = 3;
     tv.tv_usec = 0;
     if (setsockopt(serverSocket, SOL_SOCKET, SO_RCVTIMEO, (const void*)&tv, sizeof tv) < 0) {
         Logger::get()->warn("setsockopt(SO_RCVTIMEO) failed: {} ({})", errno, strerror(errno));
