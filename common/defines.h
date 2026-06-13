@@ -1,5 +1,6 @@
 #include "commonFunctions.h"
 
+#define MAXIMUM_NUMBER_OF_LOG_PER_TICK 4096ULL*1024ULL
 // Canonical (post-cutover) max transactions per tick.
 // Core raised this from 1024 to 4096 starting at epoch 214 (2026-05-20).
 #define NUMBER_OF_TRANSACTIONS_PER_TICK 4096
