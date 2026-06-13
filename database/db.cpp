@@ -193,6 +193,7 @@ bool db_insert_log_range(uint32_t tick, const LogRangesPerTxInTick& logRange) {
         std::string key_struct = "log_ranges:" + std::to_string(tick);
         if (isArrayZero((uint8_t*)&logRange, sizeof(LogRangesPerTxInTick)))
         {
+            Logger::get()->warn("db_insert_log_range: Discarding tick {} - log range array is all zeros\n", tick);
             return false;
         }
 
@@ -206,11 +207,13 @@ bool db_insert_log_range(uint32_t tick, const LogRangesPerTxInTick& logRange) {
 
             // Rule 1: Only the first tick can have fromId == 0
             if (from_id == 0 && tick != gInitialTick) {
+                Logger::get()->warn("db_insert_log_range: Discarding tick {} slot {} - fromLogId is 0 but tick is not initial tick\n", tick, slot);
                 return false;
             }
 
             // Rule 2: If fromLogId is not -1, length never be zero
             if (from_id != -1 && length == 0) {
+                Logger::get()->warn("db_insert_log_range: Discarding tick {} slot {} - fromLogId is {} but length is 0\n", tick, slot, from_id);
                 return false;
             }
 
@@ -218,6 +221,7 @@ bool db_insert_log_range(uint32_t tick, const LogRangesPerTxInTick& logRange) {
             // If there is -1 (invalid data), the rest must be -1
             if (seen_invalid) {
                 if (from_id != -1) {
+                    Logger::get()->warn("db_insert_log_range: Discarding tick {} slot {} - fromLogId is {} but previous slot had -1 (all subsequent must be -1)\n", tick, slot, from_id);
                     return false;
                 }
             } else {
@@ -226,6 +230,7 @@ bool db_insert_log_range(uint32_t tick, const LogRangesPerTxInTick& logRange) {
                 } else {
                     // Check that fromLogId is increasing (only after first valid slot)
                     if (prev_from_id >= 0 && from_id <= prev_from_id) {
+                        Logger::get()->warn("db_insert_log_range: Discarding tick {} slot {} - fromLogId {} is not greater than previous fromLogId {}\n", tick, slot, from_id, prev_from_id);
                         return false;
                     }
                     prev_from_id = from_id;
@@ -239,11 +244,13 @@ bool db_insert_log_range(uint32_t tick, const LogRangesPerTxInTick& logRange) {
         logRange.getMinMax(min_log_id, max_log_id);
         if (min_log_id < -1LL || max_log_id < -1LL)
         {
+            Logger::get()->warn("db_insert_log_range: Discarding tick {} - invalid min_log_id {} or max_log_id {}\n", tick, min_log_id, max_log_id);
             return false;
         }
 
         if (max_log_id > min_log_id) {
             if (max_log_id - min_log_id > MAXIMUM_NUMBER_OF_LOG_PER_TICK) { // too many log for a tick
+                Logger::get()->warn("db_insert_log_range: Discarding tick {} - log range {} exceeds maximum {}\n", tick, max_log_id - min_log_id, MAXIMUM_NUMBER_OF_LOG_PER_TICK);
                 return false;
             }
         }
