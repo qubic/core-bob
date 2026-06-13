@@ -383,7 +383,7 @@ struct LogRangesPerTxInTick
     void getMinMax(long long& min_log_id, long long& max_log_id) const
     {
         min_log_id = INTMAX_MAX;
-        max_log_id = -1;
+        max_log_id = -1LL;
         for (size_t i = 0; i < LOG_TX_PER_TICK; ++i) {
             if (fromLogId[i] == -1 || length[i] == -1) continue;
             min_log_id = std::min(min_log_id, fromLogId[i]);
@@ -403,8 +403,8 @@ struct LogRangesPerTxInTick
         }
 
         if (min_log_id == INTMAX_MAX) {
-            min_log_id = -1;
-            max_log_id = -1;
+            min_log_id = -1LL;
+            max_log_id = -1LL;
         }
     }
 };

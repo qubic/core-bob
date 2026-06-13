@@ -199,7 +199,7 @@ bool db_insert_log_range(uint32_t tick, const LogRangesPerTxInTick& logRange) {
         long long min_log_id = INTMAX_MAX;
         long long max_log_id = -1;
         logRange.getMinMax(min_log_id, max_log_id);
-        if (min_log_id < -1 || max_log_id < -1)
+        if (min_log_id < -1LL || max_log_id < -1LL)
         {
             return false;
         }
@@ -211,7 +211,7 @@ bool db_insert_log_range(uint32_t tick, const LogRangesPerTxInTick& logRange) {
         std::string key_summary = "tick_log_range:" + std::to_string(tick);
         std::unordered_map<std::string, std::string> fields;
         fields["fromLogId"] = std::to_string(min_log_id);
-        fields["length"] = (min_log_id == -1) ? std::to_string(-1) : std::to_string(max_log_id - min_log_id);
+        fields["length"] = (min_log_id == -1 || max_log_id < min_log_id) ? std::to_string(-1) : std::to_string(max_log_id - min_log_id);
         g_redis->hmset(key_summary, fields.begin(), fields.end());
     } catch (const sw::redis::Error& e) {
         Logger::get()->error("Redis error in db_insert_log_range: {}\n", e.what());
