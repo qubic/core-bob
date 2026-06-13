@@ -199,7 +199,6 @@ bool db_insert_log_range(uint32_t tick, const LogRangesPerTxInTick& logRange) {
 
         // Validate the log ranges per slot
         long long prev_from_id = -2; // Initialize to -2 to detect first slot
-        bool seen_invalid = false;
 
         for (int slot = 0; slot < NUMBER_OF_TRANSACTIONS_PER_TICK; ++slot) {
             long long from_id = logRange.fromLogId[slot];
@@ -217,24 +216,13 @@ bool db_insert_log_range(uint32_t tick, const LogRangesPerTxInTick& logRange) {
                 return false;
             }
 
-            // Rule 3: The fromLogId must be increased thru each slot
-            // If there is -1 (invalid data), the rest must be -1
-            if (seen_invalid) {
-                if (from_id != -1) {
-                    Logger::get()->warn("db_insert_log_range: Discarding tick {} slot {} - fromLogId is {} but previous slot had -1 (all subsequent must be -1)\n", tick, slot, from_id);
+            // Rule 3: The fromLogId must be increased thru each slot (skip -1 values)
+            if (from_id != -1) {
+                if (prev_from_id >= 0 && from_id <= prev_from_id) {
+                    Logger::get()->warn("db_insert_log_range: Discarding tick {} slot {} - fromLogId {} is not greater than previous fromLogId {}\n", tick, slot, from_id, prev_from_id);
                     return false;
                 }
-            } else {
-                if (from_id == -1) {
-                    seen_invalid = true;
-                } else {
-                    // Check that fromLogId is increasing (only after first valid slot)
-                    if (prev_from_id >= 0 && from_id <= prev_from_id) {
-                        Logger::get()->warn("db_insert_log_range: Discarding tick {} slot {} - fromLogId {} is not greater than previous fromLogId {}\n", tick, slot, from_id, prev_from_id);
-                        return false;
-                    }
-                    prev_from_id = from_id;
-                }
+                prev_from_id = from_id;
             }
         }
 
