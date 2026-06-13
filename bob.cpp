@@ -152,8 +152,18 @@ int runBob(int argc, char *argv[])
     }
     parseConnection(connPool, cfg.p2p_nodes);
 
+    Logger::get()->info("Start handshaking");
     // user randomlyRemoveBob here to avoid to kick out all BM nodes when there are too many connections
-    while (connPool.size() > 6) connPool.randomlyRemoveBob();
+    int prevSize = connPool.size();
+    while (connPool.size() > 6) {
+        connPool.randomlyRemoveBob();
+        if (connPool.size() == prevSize) {
+            Logger::get()->info("No more bob nodes to remove");
+            break;
+        }
+        prevSize = connPool.size();
+    }
+
     // If still over 6 (e.g. many BM nodes), fall back to random removal
     while (connPool.size() > 6) connPool.randomlyRemove();
 
@@ -177,6 +187,7 @@ int runBob(int argc, char *argv[])
     std::string key = "end_epoch_tick:" + std::to_string(gCurrentProcessingEpoch);
     bool isThisEpochAlreadyEnd = db_get_u32(key, endEpochTick);
     int retryCount = 0;
+    Logger::get()->info("Start handshaking");
     while ((initTick == 0 ||
             ( (initEpoch < gCurrentProcessingEpoch && !isThisEpochAlreadyEnd) ||
               (initEpoch <= gCurrentProcessingEpoch && isThisEpochAlreadyEnd)
