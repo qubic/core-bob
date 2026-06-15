@@ -7,6 +7,13 @@ behavior.
 
 For exact commit boundaries, see `git log v<a>..v<b>`.
 ---
+## 1.5.10
+
+- **Database validation**: Added validation rules to discard garbage log range data (prevents corrupted data storage)
+- **Bug fix**: Fixed log range validation to correctly handle non-contiguous log slots
+- **Logging**: Added detailed warning logs for database validation failures to aid debugging
+
+---
 
 ## 1.5.6
 

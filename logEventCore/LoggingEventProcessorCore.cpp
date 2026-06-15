@@ -9,6 +9,9 @@ void processQuTransfer(const QuTransfer& qt, uint32_t tick)
         if (!decreaseEnergy(src_idx, qt.amount, tick))
         {
             Logger::get()->critical("QUs transfer: Failed to decrease energy");
+            Logger::get()->info("from: {}", qt.sourcePublicKey.toQubicHashUpperCase());
+            Logger::get()->info("to: {}", qt.destinationPublicKey.toQubicHashUpperCase());
+            Logger::get()->info("amount: {}", qt.amount);
         }
     }
     else
