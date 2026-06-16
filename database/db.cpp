@@ -39,7 +39,7 @@ static IRedis* g_kvrocks = nullptr;
 
 void db_connect(const std::string& connectionString) {
     if (g_redis) {
-        Logger::get()->info("Database connection already open.\n");
+        Logger::get()->info("Database connection already open.");
         return;
     }
     try {
@@ -79,7 +79,7 @@ bool db_insert_tick_vote(const TickVote& vote) {
         sw::redis::StringView val(reinterpret_cast<const char *>(&vote), sizeof(vote));
         g_redis->set(key, val, std::chrono::milliseconds(0), sw::redis::UpdateType::NOT_EXIST);
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error: {}\n", e.what());
+        Logger::get()->error("Redis error: {}", e.what());
         return false;
     }
     return true;
@@ -92,7 +92,7 @@ bool db_insert_tick_data(const TickData& data) {
         sw::redis::StringView val(reinterpret_cast<const char*>(&data), sizeof(data));
         g_redis->set(key, val, std::chrono::milliseconds(0), sw::redis::UpdateType::NOT_EXIST);
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error: {}\n", e.what());
+        Logger::get()->error("Redis error: {}", e.what());
         return false;
     }
     return true;
@@ -110,7 +110,7 @@ bool db_insert_transaction(const Transaction* tx) {
         sw::redis::StringView val(reinterpret_cast<const char*>(tx), tx_size);
         g_redis->set(key, val, std::chrono::milliseconds(0), sw::redis::UpdateType::NOT_EXIST);
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error: {}\n", e.what());
+        Logger::get()->error("Redis error: {}", e.what());
         return false;
     }
     return true;
@@ -123,7 +123,7 @@ bool db_delete_transaction(std::string hash)
         std::string key = "transaction:" + hash;
         g_redis->unlink(key);
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error: {}\n", e.what());
+        Logger::get()->error("Redis error: {}", e.what());
         return false;
     }
     return true;
@@ -138,7 +138,7 @@ bool db_delete_many_from_redis(const std::vector<std::string>& keys)
             g_redis->unlink(keys.begin(), keys.end());
         }
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error: {}\n", e.what());
+        Logger::get()->error("Redis error: {}", e.what());
         return false;
     }
     return true;
@@ -162,7 +162,7 @@ bool db_delete_logs_from_redis(uint16_t epoch, long long start, long long end)
             g_redis->unlink(keys.begin(), keys.end());
         }
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error: {}\n", e.what());
+        Logger::get()->error("Redis error: {}", e.what());
         return false;
     }
     return true;
@@ -181,7 +181,7 @@ bool db_insert_log(uint16_t epoch, uint32_t tick, uint64_t logId, int logSize, c
         // std::string index_key = "log_index:" + std::to_string(epoch) + ":" + std::to_string(tick);
         // g_redis->sadd(index_key, key);
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error: {}\n", e.what());
+        Logger::get()->error("Redis error: {}", e.what());
         return false;
     }
     return true;
@@ -193,7 +193,7 @@ bool db_insert_log_range(uint32_t tick, const LogRangesPerTxInTick& logRange) {
         std::string key_struct = "log_ranges:" + std::to_string(tick);
         if (isArrayZero((uint8_t*)&logRange, sizeof(LogRangesPerTxInTick)))
         {
-            Logger::get()->warn("db_insert_log_range: Discarding tick {} - log range array is all zeros\n", tick);
+            Logger::get()->warn("db_insert_log_range: Discarding tick {} - log range array is all zeros", tick);
             return false;
         }
 
@@ -206,20 +206,20 @@ bool db_insert_log_range(uint32_t tick, const LogRangesPerTxInTick& logRange) {
 
             // Rule 1: Only the first tick can have fromId == 0
             if (from_id == 0 && tick != gInitialTick) {
-                Logger::get()->warn("db_insert_log_range: Discarding tick {} slot {} - fromLogId is 0 but tick is not initial tick\n", tick, slot);
+                Logger::get()->warn("db_insert_log_range: Discarding tick {} slot {} - fromLogId is 0 but tick is not initial tick", tick, slot);
                 return false;
             }
 
             // Rule 2: If fromLogId is not -1, length never be zero
             if (from_id != -1 && length == 0) {
-                Logger::get()->warn("db_insert_log_range: Discarding tick {} slot {} - fromLogId is {} but length is 0\n", tick, slot, from_id);
+                Logger::get()->warn("db_insert_log_range: Discarding tick {} slot {} - fromLogId is {} but length is 0", tick, slot, from_id);
                 return false;
             }
 
             // Rule 3: The fromLogId must be increased thru each slot (skip -1 values)
             if (from_id != -1) {
                 if (prev_from_id >= 0 && from_id <= prev_from_id) {
-                    Logger::get()->warn("db_insert_log_range: Discarding tick {} slot {} - fromLogId {} is not greater than previous fromLogId {}\n", tick, slot, from_id, prev_from_id);
+                    Logger::get()->warn("db_insert_log_range: Discarding tick {} slot {} - fromLogId {} is not greater than previous fromLogId {}", tick, slot, from_id, prev_from_id);
                     return false;
                 }
                 prev_from_id = from_id;
@@ -232,13 +232,14 @@ bool db_insert_log_range(uint32_t tick, const LogRangesPerTxInTick& logRange) {
         logRange.getMinMax(min_log_id, max_log_id);
         if (min_log_id < -1LL || max_log_id < -1LL)
         {
-            Logger::get()->warn("db_insert_log_range: Discarding tick {} - invalid min_log_id {} or max_log_id {}\n", tick, min_log_id, max_log_id);
+            if (min_log_id == -3LL && max_log_id == -3LL) return false; // not yet ready on this node - exit to avoid logging
+            Logger::get()->warn("db_insert_log_range: Discarding tick {} - invalid min_log_id {} or max_log_id {}", tick, min_log_id, max_log_id);
             return false;
         }
 
         if (max_log_id > min_log_id) {
             if (max_log_id - min_log_id > MAXIMUM_NUMBER_OF_LOG_PER_TICK) { // too many log for a tick
-                Logger::get()->warn("db_insert_log_range: Discarding tick {} - log range {} exceeds maximum {}\n", tick, max_log_id - min_log_id, MAXIMUM_NUMBER_OF_LOG_PER_TICK);
+                Logger::get()->warn("db_insert_log_range: Discarding tick {} - log range {} exceeds maximum {}", tick, max_log_id - min_log_id, MAXIMUM_NUMBER_OF_LOG_PER_TICK);
                 return false;
             }
         }
@@ -253,7 +254,7 @@ bool db_insert_log_range(uint32_t tick, const LogRangesPerTxInTick& logRange) {
         fields["length"] = (min_log_id == -1 || max_log_id < min_log_id) ? std::to_string(-1) : std::to_string(max_log_id - min_log_id);
         g_redis->hmset(key_summary, fields.begin(), fields.end());
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error in db_insert_log_range: {}\n", e.what());
+        Logger::get()->error("Redis error in db_insert_log_range: {}", e.what());
         return false;
     }
     return true;
@@ -266,7 +267,7 @@ bool db_check_log_range(uint32_t tick)
         std::string key = "log_ranges:" + std::to_string(tick);
         return g_redis->exists(key);
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in check_log_range: {}\n", e.what());
+        Logger::get()->error("Redis error in check_log_range: {}", e.what());
         return false;
     }
     return false;
@@ -302,7 +303,7 @@ static bool _db_get_log_ranges_by_key(const std::string& key, LogRangesPerTxInTi
         memcpy((void*)&logRange, val->data(), sizeof(LogRangesPerTxInTick));
         return true;
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error in _db_get_log_ranges_by_key (key={}): {}\n",
+        Logger::get()->error("Redis error in _db_get_log_ranges_by_key (key={}): {}",
                              key.c_str(), e.what());
         return false;
     }
@@ -322,7 +323,7 @@ bool db_log_exists(uint16_t epoch, uint64_t logId) {
         std::string key = "log:" + std::to_string(epoch) + ":" + std::to_string(logId);
         return g_redis->exists(key);
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in db_log_exists: {}\n", e.what());
+        Logger::get()->error("Redis error in db_log_exists: {}", e.what());
         return false;
     }
     return false;
@@ -338,7 +339,7 @@ bool db_delete_log_ranges(uint32_t tick) {
         g_redis->unlink(key_log_range);
         return true;
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error in db_delete_log_ranges: {}\n", e.what());
+        Logger::get()->error("Redis error in db_delete_log_ranges: {}", e.what());
         return false;
     }
 }
@@ -381,10 +382,10 @@ bool db_try_get_log_range_for_tick(uint32_t tick, long long& fromLogId, long lon
             }
             return false;
         } catch (const sw::redis::Error &e) {
-            Logger::get()->error("Redis error in db_try_get_log_range_for_tick: {}\n", e.what());
+            Logger::get()->error("Redis error in db_try_get_log_range_for_tick: {}", e.what());
             return false;
         } catch (const std::logic_error &e) {
-            Logger::get()->error("Parsing error in db_try_get_log_range_for_tick: {}\n", e.what());
+            Logger::get()->error("Parsing error in db_try_get_log_range_for_tick: {}", e.what());
             return false;
         }
     };
@@ -443,7 +444,7 @@ return 0
         std::vector<std::string> args = {std::to_string(tick), std::to_string(epoch)};
         g_redis->eval_ll(script, keys.begin(), keys.end(), args.begin(), args.end());
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error: {}\n", e.what());
+        Logger::get()->error("Redis error: {}", e.what());
         return false;
     }
     return true;
@@ -466,10 +467,10 @@ bool db_get_latest_tick_and_epoch(uint32_t& tick, uint16_t& epoch)
             epoch = std::stoi(*vals[1]);
         }
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error: {}\n", e.what());
+        Logger::get()->error("Redis error: {}", e.what());
         return false;
     } catch (const std::logic_error& e) {
-        Logger::get()->error("Parsing error while getting latest tick/epoch: {}\n", e.what());
+        Logger::get()->error("Parsing error while getting latest tick/epoch: {}", e.what());
         return false;
     }
     return true;
@@ -486,7 +487,7 @@ bool db_update_latest_event_tick_and_epoch(uint32_t tick, uint16_t epoch) {
                               {"latest_event_epoch", std::to_string(epoch)}
                       });
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error: {}\n", e.what());
+        Logger::get()->error("Redis error: {}", e.what());
         return false;
     }
     return true;
@@ -509,10 +510,10 @@ bool db_get_latest_event_tick_and_epoch(uint32_t& tick, uint16_t& epoch)
             epoch = std::stoi(*vals[1]);
         }
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error: {}\n", e.what());
+        Logger::get()->error("Redis error: {}", e.what());
         return false;
     } catch (const std::logic_error& e) {
-        Logger::get()->error("Parsing error while getting latest event tick/epoch: {}\n", e.what());
+        Logger::get()->error("Parsing error while getting latest event tick/epoch: {}", e.what());
         return false;
     }
     return true;
@@ -532,9 +533,9 @@ bool db_get_end_epoch_log_range(uint16_t epoch, long long &fromLogId, long long 
             return true;
         }
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in db_get_end_epoch_log_range: {}\n", e.what());
+        Logger::get()->error("Redis error in db_get_end_epoch_log_range: {}", e.what());
     } catch (const std::logic_error &e) {
-        Logger::get()->error("Parsing error in db_get_end_epoch_log_range: {}\n", e.what());
+        Logger::get()->error("Parsing error in db_get_end_epoch_log_range: {}", e.what());
     }
     return false;
 }
@@ -556,10 +557,10 @@ return 0
         std::vector<std::string> args = {std::to_string(logId)};
         g_redis->eval_ll(script, keys.begin(), keys.end(), args.begin(), args.end());
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error: {}\n", e.what());
+        Logger::get()->error("Redis error: {}", e.what());
         return false;
     } catch (const std::logic_error &e) {
-        Logger::get()->error("Parsing error in db_update_latest_log_id: {}\n", e.what());
+        Logger::get()->error("Parsing error in db_update_latest_log_id: {}", e.what());
         return false;
     }
     return true;
@@ -574,9 +575,9 @@ long long db_get_latest_log_id(uint16_t epoch) {
             return std::stoll(*result);
         }
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in db_get_latest_log_id: {}\n", e.what());
+        Logger::get()->error("Redis error in db_get_latest_log_id: {}", e.what());
     } catch (const std::exception &e) {
-        Logger::get()->error("Exception in db_get_latest_log_id: {}\n", e.what());
+        Logger::get()->error("Exception in db_get_latest_log_id: {}", e.what());
     }
     return -1;
 }
@@ -598,7 +599,7 @@ return 0
         g_redis->eval_ll(script, keys.begin(), keys.end(), args.begin(), args.end());
         return true;
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in db_update_latest_verified_tick: {}\n", e.what());
+        Logger::get()->error("Redis error in db_update_latest_verified_tick: {}", e.what());
         return false;
     }
     return false;
@@ -613,9 +614,9 @@ long long db_get_latest_verified_tick() {
             return std::stoll(*val);
         }
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in db_get_latest_verified_tick: {}\n", e.what());
+        Logger::get()->error("Redis error in db_get_latest_verified_tick: {}", e.what());
     } catch (const std::logic_error &e) {
-        Logger::get()->error("Parsing error while getting latest verified tick: {}\n", e.what());
+        Logger::get()->error("Parsing error while getting latest verified tick: {}", e.what());
     }
     return -1;
 }
@@ -644,7 +645,7 @@ bool _db_get_log(uint16_t epoch, uint64_t logId, LogEvent &log) {
         }
         return true;
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in db_try_get_log: {}\n", e.what());
+        Logger::get()->error("Redis error in db_try_get_log: {}", e.what());
         return false;
     }
 }
@@ -678,7 +679,7 @@ bool db_try_get_log(uint16_t epoch, uint64_t logId, LogEvent &log)
         }
         return true;
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Kvrocks error in db_try_get_log: {}\n", e.what());
+        Logger::get()->error("Kvrocks error in db_try_get_log: {}", e.what());
         return false;
     }
 }
@@ -760,11 +761,11 @@ std::vector<LogEvent> db_get_logs_by_tick_range(uint16_t epoch, uint32_t start_t
             }
         }
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error in db_get_logs_by_tick_range: {}\n", e.what());
+        Logger::get()->error("Redis error in db_get_logs_by_tick_range: {}", e.what());
         out.clear();
         return out;
     } catch (const std::exception& e) {
-        Logger::get()->error("Exception in db_get_logs_by_tick_range: {}\n", e.what());
+        Logger::get()->error("Exception in db_get_logs_by_tick_range: {}", e.what());
         out.clear();
         return out;
     }
@@ -808,7 +809,7 @@ long long db_get_tick_vote_count(uint32_t tick) {
         }
         return count;
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error: {}\n", e.what());
+        Logger::get()->error("Redis error: {}", e.what());
         return -1;
     }
 }
@@ -825,7 +826,7 @@ bool db_get_tick_vote(uint32_t tick, uint16_t computorIndex, TickVote& vote) {
             return true;
         }
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error in db_get_tick_vote: {}\n", e.what());
+        Logger::get()->error("Redis error in db_get_tick_vote: {}", e.what());
     }
     return false;
 }
@@ -870,7 +871,7 @@ bool db_get_tick_votes(uint32_t tick, std::vector<TickVote>& votes) {
         }
     } catch (const sw::redis::Error& e) {
         return false;
-        Logger::get()->error("Redis error in db_get_tick_votes: {}\n", e.what());
+        Logger::get()->error("Redis error in db_get_tick_votes: {}", e.what());
     }
     return true;
 }
@@ -935,7 +936,7 @@ bool db_get_tick_data(uint32_t tick, TickData& data) {
         memcpy((void*)&data, val->data(), sizeof(TickData));
         return true;
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error in db_get_tick_data: {}\n", e.what());
+        Logger::get()->error("Redis error in db_get_tick_data: {}", e.what());
     }
     return false;
 }
@@ -954,7 +955,7 @@ bool db_get_many_transaction_from_keydb(const std::vector<std::string>& fullKeys
         g_redis->mget(fullKeys.begin(), fullKeys.end(), std::back_inserter(txVal));
         return true;
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error in db_get_many_transaction: {}\n", e.what());
+        Logger::get()->error("Redis error in db_get_many_transaction: {}", e.what());
         return false;
     }
 }
@@ -971,7 +972,7 @@ bool _db_get_transaction(const std::string& tx_hash, std::vector<uint8_t>& tx_da
         tx_data.assign(val->begin(), val->end());
         return true;
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error in db_try_get_transaction (by hash, tick ignored): {}\n", e.what());
+        Logger::get()->error("Redis error in db_try_get_transaction (by hash, tick ignored): {}", e.what());
     }
     return false;
 }
@@ -993,7 +994,7 @@ bool db_try_get_transaction(const std::string& tx_hash, std::vector<uint8_t>& tx
         tx_data.assign(val->begin(), val->end());
         return true;
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Kvrocks error in db_try_get_transaction: {}\n", e.what());
+        Logger::get()->error("Kvrocks error in db_try_get_transaction: {}", e.what());
     }
     return false;
 }
@@ -1005,7 +1006,7 @@ bool db_check_transaction_exist(const std::string& tx_hash) {
         const std::string key = "transaction:" + tx_hash;
         return g_redis->exists(key);
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error in db_check_transaction_exist: {}\n", e.what());
+        Logger::get()->error("Redis error in db_check_transaction_exist: {}", e.what());
     }
     return false;
 }
@@ -1018,7 +1019,7 @@ bool db_has_tick_data(uint32_t tick) {
         const std::string key2 = "vtick:" + std::to_string(tick);
         return g_redis->exists(key) || g_redis->exists(key2);
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in db_has_tick_data: {}\n", e.what());
+        Logger::get()->error("Redis error in db_has_tick_data: {}", e.what());
         return false;
     }
     return false;
@@ -1039,7 +1040,7 @@ std::vector<TickVote> db_get_tick_votes_from_vtick(uint32_t tick) {
         }
         return votes;
     } catch (const std::exception &e) {
-        Logger::get()->error("Error in db_get_tick_votes_from_vtick: {}\n", e.what());
+        Logger::get()->error("Error in db_get_tick_votes_from_vtick: {}", e.what());
         votes.clear();
         return votes;
     }
@@ -1107,7 +1108,7 @@ bool db_insert_computors(const Computors& comps) {
         std::string key = "computor:" + std::to_string(comps.epoch);
         g_redis->set(key, val);
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error in db_insert_computors: {}\n", e.what());
+        Logger::get()->error("Redis error in db_insert_computors: {}", e.what());
         return false;
     }
     return true;
@@ -1130,7 +1131,7 @@ bool db_get_computors(uint16_t epoch, Computors& comps) {
         std::memcpy((void*)&comps, val->data(), sizeof(Computors));
         return true;
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error in db_get_computors: {}\n", e.what());
+        Logger::get()->error("Redis error in db_get_computors: {}", e.what());
         return false;
     }
     return false;
@@ -1143,7 +1144,7 @@ bool db_delete_tick_data(uint32_t tick) {
         g_redis->unlink(key);
         return true;
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error in db_delete_tick_data: {}\n", e.what());
+        Logger::get()->error("Redis error in db_delete_tick_data: {}", e.what());
         return false;
     }
 }
@@ -1168,7 +1169,7 @@ bool db_delete_tick_vote(uint32_t tick) {
         }
         return true;
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in db_delete_tick_vote: {}\n", e.what());
+        Logger::get()->error("Redis error in db_delete_tick_vote: {}", e.what());
         return false;
     }
 }
@@ -1181,9 +1182,9 @@ long long db_get_last_indexed_tick() {
             return std::stoll(*val);
         }
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in db_get_last_indexed_tick: {}\n", e.what());
+        Logger::get()->error("Redis error in db_get_last_indexed_tick: {}", e.what());
     } catch (const std::logic_error &e) {
-        Logger::get()->error("Parsing error while getting last_indexed_tick: {}\n", e.what());
+        Logger::get()->error("Parsing error while getting last_indexed_tick: {}", e.what());
     }
     return -1;
 }
@@ -1205,7 +1206,7 @@ return 0
         g_redis->eval_ll(script, keys.begin(), keys.end(), args.begin(), args.end());
         return true;
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in db_update_last_indexed_tick: {}\n", e.what());
+        Logger::get()->error("Redis error in db_update_last_indexed_tick: {}", e.what());
         return false;
     }
 }
@@ -1227,7 +1228,7 @@ bool db_add_indexer(const std::string &key, uint32_t tickNumber)
 
         return true;
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in db_add_indexer: {}\n", e.what());
+        Logger::get()->error("Redis error in db_add_indexer: {}", e.what());
         return false;
     }
 }
@@ -1267,7 +1268,7 @@ bool db_add_many_indexer(const std::vector<std::string> &keys, uint32_t tickNumb
 
     } catch (const sw::redis::Error &e) {
         return false;
-        Logger::get()->error("Redis error in db_add_many_indexer: {}\n", e.what());
+        Logger::get()->error("Redis error in db_add_many_indexer: {}", e.what());
     }
     return true;
 }
@@ -1463,7 +1464,7 @@ std::vector<uint32_t> db_search_log(uint32_t scIndex, uint32_t scLogType, uint32
             }
         }
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("Redis error in db_search_log: {}\n", e.what());
+        Logger::get()->error("Redis error in db_search_log: {}", e.what());
         result.clear();
     }
 
@@ -1476,7 +1477,7 @@ bool db_update_field(const std::string key, const std::string field, const std::
         g_redis->hset(key, field, value);
         return true;
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in db_update_field: {}\n", e.what());
+        Logger::get()->error("Redis error in db_update_field: {}", e.what());
         return false;
     }
 }
@@ -1499,7 +1500,7 @@ bool db_copy_transaction_to_kvrocks(const std::string &tx_hash) {
 
         return true;
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in db_migrate_transaction: {}\n", e.what());
+        Logger::get()->error("Redis error in db_migrate_transaction: {}", e.what());
         return false;
     }
 }
@@ -1510,7 +1511,7 @@ bool db_add_many_transactions_to_kvrocks(const std::vector<std::string>& txKeys,
     if (!g_kvrocks) return false;
     if (txKeys.empty()) return true;
     if (txKeys.size() != txVal.size()) {
-        Logger::get()->error("db_add_many_transactions_to_kvrocks: txKeys and txVal size mismatch\n");
+        Logger::get()->error("db_add_many_transactions_to_kvrocks: txKeys and txVal size mismatch");
         return false;
     }
 
@@ -1533,7 +1534,7 @@ bool db_add_many_transactions_to_kvrocks(const std::vector<std::string>& txKeys,
 
         return true;
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in db_add_many_transactions_to_kvrocks: {}\n", e.what());
+        Logger::get()->error("Redis error in db_add_many_transactions_to_kvrocks: {}", e.what());
         return false;
     }
 }
@@ -1557,7 +1558,7 @@ bool db_copy(const std::string &key1, const std::string &key2) {
         g_redis->set(key2, *val);
         return true;
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in db_copy: {}\n", e.what());
+        Logger::get()->error("Redis error in db_copy: {}", e.what());
         return false;
     }
 }
@@ -1572,7 +1573,7 @@ bool db_hcopy(const std::string &key1, const std::string &key2) {
         }
         return true;
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in db_hcopy: {}\n", e.what());
+        Logger::get()->error("Redis error in db_hcopy: {}", e.what());
         return false;
     }
 }
@@ -1583,7 +1584,7 @@ bool db_insert_u32(const std::string key, uint32_t value) {
         g_redis->set(key, std::to_string(value));
         return true;
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in db_insert_u32: {}\n", e.what());
+        Logger::get()->error("Redis error in db_insert_u32: {}", e.what());
         return false;
     }
 }
@@ -1595,7 +1596,7 @@ bool db_key_exists(const std::string &key) {
     try {
         return g_redis->exists(key);
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in db_key_exists: {}\n", e.what());
+        Logger::get()->error("Redis error in db_key_exists: {}", e.what());
         return false;
     }
 }
@@ -1610,10 +1611,10 @@ bool db_get_u32(const std::string key, uint32_t &value) {
         value = static_cast<uint32_t>(std::stoul(*val));
         return true;
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in db_get_u32: {}\n", e.what());
+        Logger::get()->error("Redis error in db_get_u32: {}", e.what());
         return false;
     } catch (const std::logic_error &e) {
-        Logger::get()->error("Parsing error in db_get_u32: {}\n", e.what());
+        Logger::get()->error("Parsing error in db_get_u32: {}", e.what());
         return false;
     }
 }
@@ -1669,7 +1670,7 @@ bool db_move_log_to_kvrocks(uint16_t epoch, uint64_t logId) {
 
         return true;
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in db_migrate_log: {}\n", e.what());
+        Logger::get()->error("Redis error in db_migrate_log: {}", e.what());
         return false;
     }
 }
@@ -1716,7 +1717,7 @@ bool db_move_logs_to_kvrocks_by_range(uint16_t epoch, long long fromLogId, long 
                             kvPairs.size(), epoch, fromLogId, toLogId);
         return true;
     } catch (const std::exception &e) {
-        Logger::get()->error("Error in db_move_logs_to_kvrocks_by_range: {}\n", e.what());
+        Logger::get()->error("Error in db_move_logs_to_kvrocks_by_range: {}", e.what());
         return false;
     }
 }
@@ -1787,7 +1788,7 @@ bool db_move_logs_to_kvrocks_by_range_filtered(
             kvPairs.size(), epoch, fromLogId, toLogId, skippedByType);
         return true;
     } catch (const std::exception& e) {
-        Logger::get()->error("Error in db_move_logs_to_kvrocks_by_range_filtered: {}\n", e.what());
+        Logger::get()->error("Error in db_move_logs_to_kvrocks_by_range_filtered: {}", e.what());
         return false;
     }
 }
@@ -1826,10 +1827,10 @@ bool db_get_endepoch_log_range_info(const uint16_t epoch, long long &start, long
 
         return true;
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in db_get_endepoch_log_range_info: {}\n", e.what());
+        Logger::get()->error("Redis error in db_get_endepoch_log_range_info: {}", e.what());
         return false;
     } catch (const std::exception &e) {
-        Logger::get()->error("Error in db_get_endepoch_log_range_info: {}\n", e.what());
+        Logger::get()->error("Error in db_get_endepoch_log_range_info: {}", e.what());
         return false;
     }
 }
@@ -1863,7 +1864,7 @@ bool db_insert_vtick_to_kvrocks(uint32_t tick, const FullTickStruct& fullTick, s
         g_kvrocks->set(key, val, std::chrono::seconds(gKvrocksTTL));
         return true;
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("KVROCKS error in db_insert_vtick: {}\n", e.what());
+        Logger::get()->error("KVROCKS error in db_insert_vtick: {}", e.what());
         return false;
     }
 }
@@ -1912,7 +1913,7 @@ bool db_get_vtick_from_kvrocks(uint32_t tick, FullTickStruct& outFullTick)
                             key.c_str(), dSize, canonicalSize, legacySize);
         return false;
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("KVROCKs error in db_get_vtick: {}\n", e.what());
+        Logger::get()->error("KVROCKs error in db_get_vtick: {}", e.what());
         return false;
     }
 }
@@ -1929,7 +1930,7 @@ bool db_insert_TickLogRange_to_kvrocks(uint32_t tick, long long& logStart, long 
         g_kvrocks->expire(key_summary, std::chrono::seconds(gKvrocksTTL));
         return true;
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("KVROCKS error in db_insert_TickLogRange_to_kvrocks: {}\n", e.what());
+        Logger::get()->error("KVROCKS error in db_insert_TickLogRange_to_kvrocks: {}", e.what());
         return false;
     }
     return true;
@@ -1967,7 +1968,7 @@ bool db_insert_cLogRange_to_kvrocks(uint32_t tick, const LogRangesPerTxInTick& l
         g_kvrocks->set(key, val, std::chrono::seconds(gKvrocksTTL));
         return true;
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("KVROCKS error in db_insert_cLogRange_to_kvrocks: {}\n", e.what());
+        Logger::get()->error("KVROCKS error in db_insert_cLogRange_to_kvrocks: {}", e.what());
         return false;
     }
 }
@@ -2019,7 +2020,7 @@ bool db_get_cLogRange_from_kvrocks(uint32_t tick, LogRangesPerTxInTick& outLogRa
                             key.c_str(), dSize, canonicalSize, legacySize);
         return false;
     } catch (const sw::redis::Error& e) {
-        Logger::get()->error("KVROCKS error in db_get_cLogRange_from_kvrocks: {}\n", e.what());
+        Logger::get()->error("KVROCKS error in db_get_cLogRange_from_kvrocks: {}", e.what());
         return false;
     }
 }
@@ -2028,8 +2029,7 @@ bool db_get_cLogRange_from_kvrocks(uint32_t tick, LogRangesPerTxInTick& outLogRa
 
 void db_kvrocks_connect(const std::string &connectionString) {
     if (g_kvrocks) {
-        Logger::get()->info("Kvrocks connection already open.\n");
-        return;
+        Logger::get()->info("Kvrocks connection already open.        return;
     }
     try {
         std::string uri_with_pool = connectionString;
