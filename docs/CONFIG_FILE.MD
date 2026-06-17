@@ -188,7 +188,7 @@ Remember, this configuration file gives you complete control over how your Qubic
 {
   "request-cycle-ms": 300,
   "request-logging-cycle-ms": 10,
-  "future-offset": 32,
+  "future-offset": 10,
   "log-level": "info",
   "keydb-url": "tcp://127.0.0.1:6379",
   "run-server": true,

@@ -186,7 +186,8 @@ std::vector<int> ConnectionPool::sendToMany(uint8_t* buffer, int sz, std::size_t
     return results;
 }
 
-int ConnectionPool::sendWithPasscodeToRandom(uint8_t* buffer, int passcodeOffset, int sz, uint8_t type, bool randomDejavu, int nodeType) {
+int ConnectionPool::sendWithPasscodeToRandom(uint8_t* buffer, int passcodeOffset, int sz, uint8_t type, bool randomDejavu, int nodeType,
+                                             std::string* destSummary) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (conns_.empty()) return -1;
 
@@ -204,6 +205,9 @@ int ConnectionPool::sendWithPasscodeToRandom(uint8_t* buffer, int passcodeOffset
     std::uniform_int_distribution<std::size_t> dist(0, idx.size() - 1);
     auto chosen = idx[dist(rng_)];
     conns_[chosen]->getPasscode((uint64_t*)(buffer+passcodeOffset));
+    if (destSummary) {
+        *destSummary = std::string(conns_[chosen]->getNodeIp()) + ":" + std::to_string(conns_[chosen]->getNodePort());
+    }
     return conns_[chosen]->enqueueWithHeader(buffer, sz, type, randomDejavu);
 }
 
@@ -222,17 +226,28 @@ int ConnectionPool::smartTickRequest(uint8_t* buffer, int sz, uint8_t type, bool
     return 1;
 }
 
-int ConnectionPool::smartLogRequest(uint8_t* buffer, int passcodeOffset, int sz, uint8_t type, bool randomDejavu) {
+int ConnectionPool::smartLogRequest(uint8_t* buffer, int passcodeOffset, int sz, uint8_t type, bool randomDejavu,
+                                    std::string* destSummary) {
     if (gLastSeenNetworkTick > gCurrentFetchingLogTick + 10) {
-        int r0 = sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BM);
-        int r1 = sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BOB);
+        std::string bmDest, bobDest;
+        int r0 = sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BM, &bmDest);
+        int r1 = sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BOB, &bobDest);
+        if (destSummary) {
+            *destSummary = (bmDest.empty() ? "-" : "BM:" + bmDest) + " + " + (bobDest.empty() ? "-" : "BOB:" + bobDest);
+        }
         return r0 + r1;
     }
     std::uniform_int_distribution<std::size_t> dist{};
     if (dist(rng_) % 2 == 0) {
-        return sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BM);
+        std::string dest;
+        int r = sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BM, &dest);
+        if (destSummary) *destSummary = "BM:" + dest;
+        return r;
     }
-    return sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BOB);
+    std::string dest;
+    int r = sendWithPasscodeToRandom(buffer, passcodeOffset, sz, type, randomDejavu, NODE_TYPE_BOB, &dest);
+    if (destSummary) *destSummary = "BOB:" + dest;
+    return r;
 }
 
 bool ConnectionPool::checkExistIp(const std::string& ip) const {
@@ -248,15 +263,41 @@ bool ConnectionPool::checkExistIp(const std::string& ip) const {
     return false;
 }
 
-void peerWatchdog(ConnectionPool& conns_)
+void peerWatchdog(ConnectionPool& conns_, bool allowDnsReplace)
 {
+    // Idle-disconnect: any connection silent longer than this is presumed
+    // dead. Calling disconnect() lets the IO loop reconnect to the same
+    // (ip, port) — see QubicConnection::reconnect(). 60s is well above
+    // normal request latency (sub-second) and short enough to catch silent
+    // half-open sockets before the user notices.
+    constexpr uint64_t IDLE_DISCONNECT_S = 60;
+    std::chrono::seconds checkPeriodIdleDisconnect = std::chrono::seconds(30);
     std::chrono::seconds checkPeriodPeerRefresh = std::chrono::seconds(180); // 3 minutes
     std::chrono::seconds checkPeriodLastTick = std::chrono::seconds(60); // 1 min
+    auto lastCheckIdleDisconnect = std::chrono::high_resolution_clock::now();
     auto lastCheckPeerRefresh = std::chrono::high_resolution_clock::now();
     auto lastCheckLastTick = std::chrono::high_resolution_clock::now();
     while (!gStopFlag.load(std::memory_order_relaxed)) {
         auto now = std::chrono::high_resolution_clock::now();
-        if (now - lastCheckPeerRefresh >= checkPeriodPeerRefresh) {
+        if (now - lastCheckIdleDisconnect >= checkPeriodIdleDisconnect) {
+            lastCheckIdleDisconnect = now;
+            uint64_t nowTimestamp = std::time(nullptr);
+            int N = conns_.size();
+            for (int i = 0; i < N; i++) {
+                QCPtr qc;
+                if (!conns_.get(i, qc) || !qc) continue;
+                if (!qc->isSocketValid()) continue; // already invalid; IO loop will reconnect
+                uint64_t lastAct = qc->getLastActivityTimestamp();
+                if (lastAct == 0 || lastAct >= nowTimestamp) continue;
+                uint64_t idleSec = nowTimestamp - lastAct;
+                if (idleSec >= IDLE_DISCONNECT_S) {
+                    Logger::get()->warn("Peer {}:{} idle for {}s; forcing reconnect.",
+                                        qc->getNodeIp(), qc->getNodePort(), idleSec);
+                    qc->disconnect();
+                }
+            }
+        }
+        if (allowDnsReplace && now - lastCheckPeerRefresh >= checkPeriodPeerRefresh) {
             lastCheckPeerRefresh = now;
             uint64_t nowTimestamp = std::time(nullptr);
             uint64_t oldest = std::numeric_limits<uint64_t>::max();

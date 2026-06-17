@@ -103,6 +103,10 @@ QubicConnection::QubicConnection(const char* nodeIp, int nodePort)
     mSocket = -1;
     mSocket = do_connect(mNodeIp, mNodePort);
     mReconnectable = true;
+    // Seed the activity stamp so the watchdog can detect peers that never
+    // produce any traffic (default-zero would otherwise be excluded from
+    // idle-disconnect by the `lastAct == 0` guard).
+    lastActivityTimestamp.store(std::time(nullptr), std::memory_order_relaxed);
     initSendThread();
     nodeType = "null";
     mLatestTick = 0;
@@ -126,9 +130,11 @@ int QubicConnection::receiveData(uint8_t* buffer, int sz)
         {
             if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
             {
-                // Timeout or interrupted — not a real error, just retry
+                // SO_RCVTIMEO expired or interrupted by signal — treat as
+                // failure so caller can reconnect. Caller distinguishes
+                // timeout from hard error via errno (preserved by recv).
                 if (shouldStop) return -1;
-                return -1; // timeout is large enough to consider this as failure
+                return -1;
             }
             return ret;
         }
@@ -147,7 +153,12 @@ void QubicConnection::receiveAFullPacket(RequestResponseHeader& header, std::vec
     int recvByte = receiveData((uint8_t*)&header, sizeof(RequestResponseHeader));
     if (recvByte < 0)
     {
-        throw std::logic_error("Socket Error");
+        // errno was preserved by the failing recv(). Most common cause is
+        // SO_RCVTIMEO firing (no bytes for 30s) — that's EAGAIN/EWOULDBLOCK.
+        // Anything else is a real socket error (ECONNRESET, EPIPE, etc.).
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            throw std::logic_error("recv timeout (no data for SO_RCVTIMEO seconds)");
+        throw std::logic_error(std::string("recv error: ") + strerror(errno));
     }
     if (recvByte != sizeof(RequestResponseHeader)) throw std::logic_error("Failed to get header.");
     int packet_size = header.size();
@@ -388,12 +399,16 @@ bool QubicConnection::reconnect()
     // Attempt to re-establish connection
     int newSocket = do_connect(mNodeIp, mNodePort);
     if (newSocket < 0) {
-        Logger::get()->trace("Failed to reconnect {}:{}", mNodeIp, mNodePort);
+        Logger::get()->warn("reconnect() failed for {}:{} (errno {} = {})",
+                            mNodeIp, mNodePort, errno, strerror(errno));
         mSocket = -1;
         return false;
     }
 
     mSocket = newSocket;
+    // Reset activity stamp so the watchdog doesn't immediately re-fire on the
+    // freshly-opened socket before any data has had a chance to flow.
+    lastActivityTimestamp.store(std::time(nullptr), std::memory_order_relaxed);
     return true;
 }
 
@@ -405,9 +420,9 @@ QubicConnection::QubicConnection(int existingSocket)
     mSocket = existingSocket;
     mReconnectable = false;
     if (mSocket >= 0) {
-        // Configure timeouts (best-effort)
+        // Configure timeouts (best-effort) — kept in sync with do_connect.
         struct timeval tv;
-        tv.tv_sec = 10;
+        tv.tv_sec = 30;
         tv.tv_usec = 0;
         if (setsockopt(mSocket, SOL_SOCKET, SO_RCVTIMEO, (const void*)&tv, sizeof tv) < 0) {
             Logger::get()->warn("setsockopt(SO_RCVTIMEO) failed: {} ({})", errno, strerror(errno));
@@ -616,6 +631,11 @@ void doHandshakeAndGetBootstrapInfo(ConnectionPool& cp, bool isTrusted, uint32_t
                     {
                         uint32_t initTick = 0;
                         uint16_t initEpoch = 0;
+                        // EXCHANGE_PUBLIC_PEERS handshake intentionally skipped:
+                        // the BM accepts subsequent requests without it, and
+                        // skipping saves a round-trip + payload exchange of
+                        // peer IPs we don't use (bob's peer list comes from
+                        // its own configuration / qubic.global discovery).
                         conn->getBootstrapTickInfo(initTick, initEpoch);
                         localMaxTick = std::max(localMaxTick, initTick);
                         localMaxEpoch = std::max(localMaxEpoch, initEpoch);

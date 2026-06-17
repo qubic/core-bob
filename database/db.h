@@ -435,6 +435,14 @@ bool db_get_computors(uint16_t epoch, Computors& comps);
 bool db_log_exists(uint16_t epoch, uint64_t logId);
 
 bool db_try_get_log(uint16_t epoch, uint64_t logId, LogEvent &log);
+
+// Diagnostic: record/look up which peer delivered a given log id. Stored
+// only in keydb under key "log_src:<epoch>:<id>" using SET NX, so this
+// reflects the FIRST peer that delivered the log. Used to attribute bad
+// data (e.g. wrong-tick logs) back to the responsible BM.
+bool db_set_log_source(uint16_t epoch, uint64_t logId, const std::string& source);
+std::string db_get_log_source(uint16_t epoch, uint64_t logId);
+
 std::vector<LogEvent> db_try_get_logs(uint16_t epoch, long long logIdStart, long long logIdEnd);
 
 long long db_get_last_indexed_tick();

@@ -182,6 +182,7 @@ void IORequestThread(ConnectionPool& conn_pool, std::chrono::milliseconds reques
                 if (count < 676)
                 {
                     conn_pool.smartTickRequest((uint8_t *) &rqt, sizeof(rqt), RequestedQuorumTick::type, true);
+                    gReqTickVotes.fetch_add(1, std::memory_order_relaxed);
                 }
                 refetchTickVotes = -1;
             }
@@ -212,6 +213,7 @@ void IORequestThread(ConnectionPool& conn_pool, std::chrono::milliseconds reques
                             RequestTickData rtd;
                             rtd.tick = gCurrentFetchingTick + offset;
                             conn_pool.smartTickRequest((uint8_t *) &rtd, sizeof(rtd), RequestTickData::type, true);
+                            gReqTickData.fetch_add(1, std::memory_order_relaxed);
                         } else {
                             have_next_td = true;
                         }
@@ -233,6 +235,7 @@ void IORequestThread(ConnectionPool& conn_pool, std::chrono::milliseconds reques
                         if (count < 676)
                         {
                             conn_pool.smartTickRequest((uint8_t *) &rqt, sizeof(rqt), RequestedQuorumTick::type, true);
+                            gReqTickVotes.fetch_add(1, std::memory_order_relaxed);
                         }
                     }
 
@@ -257,7 +260,10 @@ void IORequestThread(ConnectionPool& conn_pool, std::chrono::milliseconds reques
                                     count++;
                                 }
                             }
-                            if (count) conn_pool.smartTickRequest((uint8_t *) &rtt, sizeof(rtt), RequestedTickTransactions::type, true);
+                            if (count) {
+                                conn_pool.smartTickRequest((uint8_t *) &rtt, sizeof(rtt), RequestedTickTransactions::type, true);
+                                gReqTickTxs.fetch_add(1, std::memory_order_relaxed);
+                            }
                         }
                     }
                 }
@@ -395,10 +401,14 @@ void connReceiver(QCPtr conn, const bool isTrustedNode)
             if (packet.empty()) {
                 // Defensive check; shouldn't happen if receiveAFullPacket succeeds.
                 if (!conn->isReconnectable()) return;
-                Logger::get()->trace("connReceiver error on : {}. Disconnecting", conn->getNodeIp());
+                Logger::get()->trace("connReceiver: empty packet from {}:{}. Reconnecting.",
+                                     conn->getNodeIp(), conn->getNodePort());
                 conn->disconnect();
                 SLEEP(errorBackoff);
-                conn->reconnect();
+                bool ok = conn->reconnect();
+                Logger::get()->trace("connReceiver: reconnect to {}:{} {}",
+                                     conn->getNodeIp(), conn->getNodePort(),
+                                     ok ? "succeeded" : "FAILED");
                 continue;
             }
             if (!isTrustedNode)
@@ -420,6 +430,12 @@ void connReceiver(QCPtr conn, const bool isTrustedNode)
                     memcpy(&currentTickInfo, packet.data() + 8, sizeof(currentTickInfo));
                     conn->updateLatestTick(currentTickInfo.tick);
                 } else {
+                    // Record which peer delivered this response so downstream
+                    // processors (e.g. processLogEvent) can attribute the
+                    // bytes. requestMapperFrom was seeded with this dejavu
+                    // when we sent the request out with conn=nullptr; we
+                    // patch it in here now that we know.
+                    requestMapperFrom.updateConn(hdr.getDejavu(), conn);
                     // Enqueue the packet into the global MutexRoundBuffer.
                     bool ok = MRB_Data.EnqueuePacket(packet.data());
                     if (!ok) {
@@ -457,17 +473,25 @@ void connReceiver(QCPtr conn, const bool isTrustedNode)
         } catch (const std::logic_error& ex) {
             if (gStopFlag.load(std::memory_order_relaxed)) return;
             if (!conn->isReconnectable()) return;
-            Logger::get()->trace("connReceiver error on : {}. Disconnecting", conn->getNodeIp());
+            Logger::get()->debug("connReceiver: {}:{} read error ({}). Reconnecting.",
+                                 conn->getNodeIp(), conn->getNodePort(), ex.what());
             conn->disconnect();
             SLEEP(errorBackoff);
-            conn->reconnect();
+            bool ok = conn->reconnect();
+            Logger::get()->debug("connReceiver: reconnect to {}:{} {}",
+                                 conn->getNodeIp(), conn->getNodePort(),
+                                 ok ? "succeeded" : "FAILED");
         } catch (...) {
             if (gStopFlag.load(std::memory_order_relaxed)) return;
             if (!conn->isReconnectable()) return;
-            Logger::get()->trace("connReceiver unknown exception from ip {}", conn->getNodeIp());
+            Logger::get()->debug("connReceiver: {}:{} unknown exception. Reconnecting.",
+                                 conn->getNodeIp(), conn->getNodePort());
             conn->disconnect();
             SLEEP(errorBackoff);
-            conn->reconnect();
+            bool ok = conn->reconnect();
+            Logger::get()->debug("connReceiver: reconnect to {}:{} {}",
+                                 conn->getNodeIp(), conn->getNodePort(),
+                                 ok ? "succeeded" : "FAILED");
         }
     }
 }

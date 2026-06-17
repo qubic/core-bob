@@ -27,7 +27,7 @@ struct AppConfig {
     bool is_testnet = false;
     unsigned request_cycle_ms = 0;
     unsigned request_logging_cycle_ms = 0;
-    unsigned future_offset = 0;
+    unsigned future_offset = 10;
     unsigned server_port = 0;
     std::string node_seed;
 
@@ -41,6 +41,16 @@ struct AppConfig {
     unsigned max_thread = 0;
     // Spam/Junk detection threshold for QU transfers (amount <= threshold and no input)
     unsigned spam_qu_threshold = 0;
+    // How many log IDs to request per RequestLog packet. Defaults to the
+    // max-tx-per-tick ceiling so a typical tick's logs fit in one round
+    // trip. Lower it (e.g. 256 or 512) on links where 4MB responses cause
+    // queueing/stalls; raise it if your BM accepts larger requests.
+    // Per-range dedup (verifyLoggingEvent's REFIRE_GUARD_MS) is unaffected.
+    unsigned log_event_chunk_size = 4096;
+    // Master switch for expensive diagnostic instrumentation (BATCH_AUDIT
+    // hashing, per-log source attribution). Default off; turn on while
+    // debugging non-deterministic verify failures.
+    bool diagnostic_mode = false;
     // transaction storage mode configuration
     TxStorageMode tx_storage_mode = TxStorageMode::LastNTick;
     // For "kvrocks" tx-storage-mode: how long transactions stay in RAM (in ticks)

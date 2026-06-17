@@ -70,7 +70,16 @@ public:
     void getComputorList(const uint16_t epoch, Computors& compList);
     void sendEndPacket(uint32_t dejavu = 0xffffffff);
     void setNodeType(std::string _nodeType) { nodeType = std::move(_nodeType); }
+
+    // Diagnostic: count of RespondLog packets this peer has delivered since
+    // process start. Read by the periodic state line so traffic distribution
+    // across BMs is visible at a glance — useful for spotting a peer that
+    // delivers a lot of "wrong tick" logs.
+    void incLogsDelivered() { mLogsDelivered.fetch_add(1, std::memory_order_relaxed); }
+    uint64_t getLogsDelivered() const { return mLogsDelivered.load(std::memory_order_relaxed); }
+
 private:
+    std::atomic<uint64_t> mLogsDelivered{0};
     std::atomic<uint64_t> lastActivityTimestamp;
     char mNodeIp[32];
     int mNodePort;
@@ -131,10 +140,14 @@ public:
     // depends on node status, bob will decide which and how many ticks request packets need to be sent out
     int smartTickRequest(uint8_t* buffer, int sz, uint8_t type, bool randomDejavu);
 
-    // depends on node status, bob will decide which and how many ticks request packets need to be sent out
-    int smartLogRequest(uint8_t* buffer, int passcodeOffset, int sz, uint8_t type, bool randomDejavu);
+    // depends on node status, bob will decide which and how many ticks request packets need to be sent out.
+    // If destSummary is non-null, it's filled with a short human-readable
+    // description of the chosen peer(s) for logging/diagnostic purposes.
+    int smartLogRequest(uint8_t* buffer, int passcodeOffset, int sz, uint8_t type, bool randomDejavu,
+                        std::string* destSummary = nullptr);
 
-    int sendWithPasscodeToRandom(uint8_t* buffer, int passcodeOffset, int sz, uint8_t type, bool randomDejavu, int nodeType);
+    int sendWithPasscodeToRandom(uint8_t* buffer, int passcodeOffset, int sz, uint8_t type, bool randomDejavu, int nodeType,
+                                 std::string* destSummary = nullptr);
 
     bool checkExistIp(const std::string& ip) const;
 private:
@@ -151,4 +164,13 @@ std::vector<std::string> GetPeerFromDNS(const int nLite, const int nBob, const s
 bool DownloadStateFiles(uint16_t epoch);
 void GetLatestTickFromExternalSources(uint32_t& tick, uint16_t& epoch);
 void CheckInQubicGlobal();
-void peerWatchdog(ConnectionPool& conns_);
+// peerWatchdog runs two independent checks:
+//   - idle-disconnect (every 30s, ALWAYS on): for each connection idle longer
+//     than IDLE_DISCONNECT_S, call disconnect(). The IO loop reconnects to the
+//     same IP/port via QubicConnection::reconnect(). This survives silent
+//     half-open sockets caused by NAT/firewall idle drop or peer-side hangs.
+//   - DNS-replace (every 180s, allowDnsReplace==true): for the worst-idle
+//     connection, swap it out for a fresh peer obtained from the DNS-style
+//     discovery service. Used when bob auto-discovered peers at startup; for
+//     user-configured P2P_NODES we keep their chosen IPs and only reconnect.
+void peerWatchdog(ConnectionPool& conns_, bool allowDnsReplace);

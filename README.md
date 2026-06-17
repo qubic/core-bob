@@ -129,7 +129,7 @@ An example configuration file, `default_config_bob.json`, ships with the reposit
   "trusted-node": ["BM:157.180.10.49:21841:0-0-0-0", "BM:65.109.122.174:21841:0-0-0-0"],
   "request-cycle-ms": 100,
   "request-logging-cycle-ms": 30,
-  "future-offset": 3,
+  "future-offset": 10,
   "log-level": "info",
   "keydb-url": "tcp://127.0.0.1:6379",
   "run-server": false,

@@ -45,7 +45,7 @@ the [example compose file](../docker/examples/docker-compose.yml).
 |---|---|---|---|
 | `REQUEST_CYCLE_MS` | `request-cycle-ms` | `100` | Interval (ms) between tick-data requests to peers. Lower = more aggressive sync, higher = lighter on peers. |
 | `REQUEST_LOGGING_CYCLE_MS` | `request-logging-cycle-ms` | `100` | Interval (ms) between log-event requests. |
-| `FUTURE_OFFSET` | `future-offset` | `3` | How many ticks ahead of the current tip bob will pre-fetch. Too high overloads peers; too low slows sync recovery. |
+| `FUTURE_OFFSET` | `future-offset` | `10` | How many ticks ahead of the current tip bob will pre-fetch. Too high overloads peers; too low slows sync recovery. |
 | `MAX_THREAD` | `max-thread` | `0` (auto) | Cap on worker threads; `0` uses the number of CPU cores. |
 
 ## Storage retention & sizing
@@ -65,6 +65,8 @@ the [example compose file](../docker/examples/docker-compose.yml).
 | Env var | bob.json key | Default | Description |
 |---|---|---|---|
 | `SPAM_QU_THRESHOLD` | `spam-qu-threshold` | `0` | Minimum QU amount to index a transfer. `0` disables filtering. Historically used to suppress dust txs from the indexer; current default keeps everything so receipts/balances are always correct. |
+| `LOG_EVENT_CHUNK_SIZE` | `log-event-chunk-size` | `4096` | How many log IDs bob requests per RequestLog packet. Default fits a full tick's worth of logs in one round-trip. Lower (e.g. 512 or 1024) on links where 4 MB responses cause TCP-level queueing or BM-side stalls; raise to test BMs that accept larger requests. Must be > 0. |
+| `DIAGNOSTIC_MODE` | `diagnostic-mode` | `false` | Master switch for expensive runtime diagnostics: per-tick `BATCH_AUDIT` log-byte hashing (K12 over every accepted log) and the per-log source-attribution sidecar key (one Redis `SETNX` per log). Both run inside the verify/insert hot path, so the cost scales with log volume. Leave off for steady-state operation. Turn on (`true` or `1`) when investigating non-deterministic verify failures — the audit lines are emitted at `trace` level, so combine with `LOG_LEVEL=trace` to see them. |
 | `PERSIST_ORACLE_TX` | `persist-oracle-tx` | `true` | Persist oracle reply transactions (`destinationPublicKey=0`, `inputType ∈ {6,7,10}`). |
 
 ## API surface
