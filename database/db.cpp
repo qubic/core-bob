@@ -2029,7 +2029,8 @@ bool db_get_cLogRange_from_kvrocks(uint32_t tick, LogRangesPerTxInTick& outLogRa
 
 void db_kvrocks_connect(const std::string &connectionString) {
     if (g_kvrocks) {
-        Logger::get()->info("Kvrocks connection already open.        return;
+        Logger::get()->info("Kvrocks connection already open.");
+        return;
     }
     try {
         std::string uri_with_pool = connectionString;
