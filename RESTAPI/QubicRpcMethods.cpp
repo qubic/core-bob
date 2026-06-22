@@ -117,6 +117,10 @@ Json::Value QubicRpcMethods::syncing() {
     result["initialTick"] = status.initialTick;
     result["targetTickVoteSignature"] = status.targetTickVoteSignature;
     result["computorListSignature"] = status.computorListSignature;
+    // Alias of computorListSignature (issue #12): a uint64 that uniquely
+    // identifies the current computor-list packet, so clients can detect
+    // mid-epoch computor-list changes.
+    result["computorPacketSignature"] = status.computorListSignature;
 
     // Tick status breakdown
     result["currentFetchingTick"] = status.currentFetchingTick;

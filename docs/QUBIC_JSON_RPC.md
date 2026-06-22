@@ -214,6 +214,9 @@ Returns sync status with detailed tick progress.
     "currentFetchingLogTick": 12480000,
     "currentVerifyLoggingTick": 12450000,
     "currentIndexingTick": 12449999,
+    "targetTickVoteSignature": 613566,
+    "computorListSignature": 14237492837401234567,
+    "computorPacketSignature": 14237492837401234567,
     "progress": 0.9
   }
 }
@@ -230,7 +233,10 @@ Returns sync status with detailed tick progress.
     "currentFetchingTick": 12500000,
     "currentFetchingLogTick": 12500000,
     "currentVerifyLoggingTick": 12500000,
-    "currentIndexingTick": 12499999
+    "currentIndexingTick": 12499999,
+    "targetTickVoteSignature": 613566,
+    "computorListSignature": 14237492837401234567,
+    "computorPacketSignature": 14237492837401234567
   }
 }
 ```
@@ -243,6 +249,13 @@ Returns sync status with detailed tick progress.
 | `currentFetchingLogTick` | Latest tick with logs being fetched |
 | `currentVerifyLoggingTick` | Latest tick with verified logs |
 | `currentIndexingTick` | Latest tick indexed in database |
+
+**Signature Fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `targetTickVoteSignature` | uint32 | The vote signature-score difficulty threshold bob uses to filter tick votes (votes with a higher score are rejected as low-difficulty). Fixed constant. |
+| `computorListSignature` | uint64 | Identifier of the current computor-list packet — the first 8 bytes of the arbitrator signature over the `Computors` struct, as a little-endian uint64. Changes whenever the computor list changes, so clients can detect mid-epoch updates. |
+| `computorPacketSignature` | uint64 | Alias of `computorListSignature` (same value). |
 
 **Sync Determination:**
 - If `lastSeenNetworkTick` is available: synced when `lastSeenNetworkTick - 10 <= currentVerifyLoggingTick`
@@ -408,6 +421,41 @@ Returns the logs from the end-of-epoch tick. These logs contain epoch-ending pro
   ]
 }
 ```
+
+| Ethereum Equivalent |
+|---------------------|
+| N/A (Qubic-specific) |
+
+---
+
+#### qubic_getComputors
+Returns the computor list for an epoch, including the arbitrator signature that signs it.
+
+**Parameters:**
+1. `epoch` (number) — the epoch to fetch (use the current epoch for the live list).
+
+**Response:**
+```json
+{
+  "result": {
+    "epoch": 150,
+    "computors": [
+      "AAAAAAAA...AAAA",
+      "..."
+    ],
+    "signature": "1a2b3c4d5e6f...e4f5"
+  }
+}
+```
+
+**Fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `epoch` | uint16 | Epoch of the computor list. |
+| `computors` | string[] | The computor identities (60-char Qubic identity strings). |
+| `signature` | hex string | The raw 64-byte arbitrator signature over the `Computors` struct, hex-encoded (no `0x` prefix). Lets clients verify the computor list cryptographically. |
+
+Returns an object with an `error` field if no computor list is stored for the requested epoch.
 
 | Ethereum Equivalent |
 |---------------------|

@@ -564,6 +564,7 @@ std::string bobGetStatus(const std::string& challenge)
            ",\"initialTick\":" + std::to_string(status.initialTick) +
            ",\"targetTickVoteSignature\":" + std::to_string(status.targetTickVoteSignature) +
            ",\"computorListSignature\":" + std::to_string(status.computorListSignature) +
+           ",\"computorPacketSignature\":" + std::to_string(status.computorListSignature) +
            R"(,"bobVersion": ")" + BOB_VERSION + "\""
            ",\"bobVersionGitHash\": \"" + GIT_COMMIT_HASH + "\""
            ",\"bobCompiler\": \"" + COMPILER_NAME + "\""

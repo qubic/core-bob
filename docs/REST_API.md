@@ -97,10 +97,23 @@ The following data structures are used in API responses:
     "currentVerifyLoggingTick": 0,
     "currentIndexingTick": 0,
     "lastSeenNetworkTick": 0,
+    "targetTickVoteSignature": 613566,
+    "computorListSignature": 14237492837401234567,
+    "computorPacketSignature": 14237492837401234567,
     "isSyncing": false,
     "progress": 0.0
 }
 ```
+
+Signature-related fields (also returned by `GET /status` and `qubic_syncing`):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `targetTickVoteSignature` | uint32 | Vote signature-score difficulty threshold bob uses to filter tick votes (higher score = rejected as low-difficulty). Fixed constant. |
+| `computorListSignature` | uint64 | Identifier of the current computor-list packet: the first 8 bytes of the arbitrator signature over the `Computors` struct, as a little-endian uint64. Changes when the computor list changes (detect mid-epoch updates). |
+| `computorPacketSignature` | uint64 | Alias of `computorListSignature` (same value). |
+
+> The full 64-byte arbitrator signature is available via the `qubic_getComputors` JSON-RPC method (`signature` field).
 
 ### BroadcastResult
 ```json
@@ -190,13 +203,13 @@ GET /log/{epoch}/{from_id}/{to_id}
 ----------------------------------------------------------------
 
 GET /tick/{tick_number}
-- Description: Returns information for a specific tick.
+- Description: Returns information for a specific tick, including tick data, transactions, and the computor `votes[]` for the tick.
 - Path parameters:
   - tick_number: unsigned 32-bit integer range (0..4294967295)
 - Validation:
   - tick_number must be an integer and within uint32 range
 - Responses:
-  - 200: JSON body (format depends on backend)
+  - 200: JSON body with tick data. The `votes[]` array contains each computor vote with: `computorIndex`, `epoch`, `tick`, timestamp fields, `prevResourceTestingDigest`, `saltedResourceTestingDigest`, `prevTransactionBodyDigest`, `saltedTransactionBodyDigest`, the prev/salted spectrum/universe/computer digests, `transactionDigest`, `expectedNextTickTransactionDigest`, and the raw `signature` (hex). A vote's signature score is filtered against `targetTickVoteSignature` (see `/status`).
   - 400: error JSON for invalid input or ranges
   - 500: error JSON on internal error
 
