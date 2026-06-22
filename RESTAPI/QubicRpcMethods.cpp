@@ -1334,7 +1334,9 @@ Json::Value QubicRpcMethods::getComputors(uint16_t epoch) {
     }
     result["computors"] = computorsArray;
     {
-        char hex[66] = {0};
+        // SIGNATURE_SIZE (64) bytes -> 128 hex chars + NUL. hex[66] was sized
+        // for a 32-byte value and overflowed (buffer-overflow abort).
+        char hex[2 * SIGNATURE_SIZE + 1] = {0};
         byteToHex(comps.signature, hex, SIGNATURE_SIZE);
         result["signature"] = std::string(hex);
     }
