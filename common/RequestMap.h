@@ -55,6 +55,19 @@ public:
         return true;
     }
 
+    // Attach a connection to an existing entry. Used at response-receive
+    // time to record which peer delivered the response for a given dejavu —
+    // the request was added at send time with conn=nullptr because we
+    // didn't know yet which peer (smartLogRequest picks randomly).
+    void updateConn(uint32_t dejavu, QCPtr conn)
+    {
+        std::lock_guard<std::mutex> lock(mtx_);
+        auto it = mem.find(dejavu);
+        if (it != mem.end()) {
+            it->second.conn = std::move(conn);
+        }
+    }
+
     // Remove entries older than 60 seconds.
     void clean(uint32_t period = 60)
     {

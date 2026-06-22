@@ -91,6 +91,11 @@ int runBob(int argc, char *argv[])
     gTxStorageMode = cfg.tx_storage_mode;
     gTxTickToLive = cfg.tx_tick_to_live;
     gSpamThreshold = cfg.spam_qu_threshold;
+    gLogEventChunkSize = cfg.log_event_chunk_size;
+    gDiagnosticMode.store(cfg.diagnostic_mode, std::memory_order_relaxed);
+    if (cfg.diagnostic_mode) {
+        Logger::get()->info("Diagnostic mode ENABLED — BATCH_AUDIT + per-log source attribution active (extra CPU + Redis cost).");
+    }
     gMaxThreads = cfg.max_thread;
     gKvrocksTTL = cfg.kvrocks_ttl;
     gTimeToWaitEpochEnd = cfg.wait_at_epoch_end;
@@ -197,7 +202,7 @@ int runBob(int argc, char *argv[])
     {
         doHandshakeAndGetBootstrapInfo(connPool, true, initTick, initEpoch);
         if (isThisEpochAlreadyEnd) Logger::get()->info("Waiting for new epoch info from peers | PeerInitTick: {} PeerInitEpoch {}...", initTick, initEpoch);
-        else Logger::get()->info("Doing handshakes and ask for bootstrap info | PeerInitTick: {} PeerInitEpoch {}...", initTick, initEpoch);
+        else Logger::get()->info("Asking peers for bootstrap info | PeerInitTick: {} PeerInitEpoch {}...", initTick, initEpoch);
         if (initTick == 0 || initEpoch <= gCurrentProcessingEpoch) SLEEP(1000);
         if (retryCount++ > 300)
         {
@@ -321,9 +326,14 @@ int runBob(int argc, char *argv[])
     {
         garbage_thread = std::thread(garbageCleaner);
     }
+    // The watchdog is always started on mainnet. Its idle-disconnect path
+    // catches silent half-open sockets regardless of how peers were chosen;
+    // the DNS-replace path only runs when bob auto-discovered peers (i.e.
+    // P2P_NODES was empty), so user-supplied BMs aren't swapped behind their
+    // back.
     std::thread peerWatchdogThread;
-    if (!gIsTestnet && needPeerWatchdog) {
-        peerWatchdogThread = std::thread(peerWatchdog, std::ref(connPool));
+    if (!gIsTestnet) {
+        peerWatchdogThread = std::thread(peerWatchdog, std::ref(connPool), needPeerWatchdog);
     }
     {
         // update last seen network tick
@@ -371,6 +381,94 @@ int runBob(int argc, char *argv[])
                 gCurrentVerifyLoggingTick.load(), verify_le_speed,
                 gLastCleanTickData, gLastCleanTransactionTick
                 );
+
+        // Per-cycle request/response counter deltas. Pattern reading:
+        //  - reqTickData high, respTickData=0 → BMs not answering tick data
+        //  - reqLog high,      respLog=0      → BMs not answering log queries
+        //  - reqs ≈ resps                    → traffic is healthy; if the pipeline
+        //    still doesn't advance the bottleneck is downstream (DB/verifier).
+        //  - reqs=0                          → bob isn't even asking; something
+        //    earlier in the pipeline is gating the request thread.
+        static uint64_t prevReqTickData = 0, prevReqTickVotes = 0, prevReqTickTxs = 0, prevReqLog = 0, prevReqLogRanges = 0;
+        static uint64_t prevRespTickData = 0, prevRespTickVotes = 0, prevRespTickTxs = 0, prevRespLog = 0, prevRespLogRanges = 0;
+        uint64_t curReqTickData    = gReqTickData.load(std::memory_order_relaxed);
+        uint64_t curReqTickVotes   = gReqTickVotes.load(std::memory_order_relaxed);
+        uint64_t curReqTickTxs     = gReqTickTxs.load(std::memory_order_relaxed);
+        uint64_t curReqLog         = gReqLog.load(std::memory_order_relaxed);
+        uint64_t curReqLogRanges   = gReqLogRanges.load(std::memory_order_relaxed);
+        uint64_t curRespTickData   = gRespTickData.load(std::memory_order_relaxed);
+        uint64_t curRespTickVotes  = gRespTickVotes.load(std::memory_order_relaxed);
+        uint64_t curRespTickTxs    = gRespTickTxs.load(std::memory_order_relaxed);
+        uint64_t curRespLog        = gRespLog.load(std::memory_order_relaxed);
+        uint64_t curRespLogRanges  = gRespLogRanges.load(std::memory_order_relaxed);
+        Logger::get()->debug(
+                "Traffic since last state: req[td={} votes={} txs={} log={} logRanges={}] resp[td={} votes={} txs={} log={} logRanges={}]",
+                curReqTickData - prevReqTickData,
+                curReqTickVotes - prevReqTickVotes,
+                curReqTickTxs - prevReqTickTxs,
+                curReqLog - prevReqLog,
+                curReqLogRanges - prevReqLogRanges,
+                curRespTickData - prevRespTickData,
+                curRespTickVotes - prevRespTickVotes,
+                curRespTickTxs - prevRespTickTxs,
+                curRespLog - prevRespLog,
+                curRespLogRanges - prevRespLogRanges);
+        prevReqTickData   = curReqTickData;
+        prevReqTickVotes  = curReqTickVotes;
+        prevReqTickTxs    = curReqTickTxs;
+        prevReqLog        = curReqLog;
+        prevReqLogRanges  = curReqLogRanges;
+        prevRespTickData  = curRespTickData;
+        prevRespTickVotes = curRespTickVotes;
+        prevRespTickTxs   = curRespTickTxs;
+        prevRespLog       = curRespLog;
+        prevRespLogRanges = curRespLogRanges;
+
+        // Per-peer log delivery distribution. A peer responsible for "wrong
+        // tick" criticals will usually stand out as either the dominant
+        // source or one consistently delivering odd counts.
+        {
+            std::string peerDist;
+            int N = connPool.size();
+            for (int i = 0; i < N; i++) {
+                QCPtr qc;
+                if (!connPool.get(i, qc) || !qc) continue;
+                if (!qc->isBM()) continue;
+                if (!peerDist.empty()) peerDist += " ";
+                peerDist += std::string(qc->getNodeIp()) + ":" + std::to_string(qc->getNodePort())
+                          + "=" + std::to_string(qc->getLogsDelivered());
+            }
+            if (!peerDist.empty()) {
+                Logger::get()->trace("Logs delivered per peer (cumulative): {}", peerDist);
+            }
+        }
+
+        // What's actually blocking? Drill into the next tick we're trying to
+        // fetch / verify and report which artifacts are missing.
+        if (Logger::get()->should_log(spdlog::level::debug))
+        {
+            uint32_t nextTick = gCurrentFetchingTick.load();
+            bool hasTd = db_has_tick_data(nextTick);
+            std::vector<TickVote> tvs;
+            db_get_tick_votes(nextTick, tvs);
+            uint32_t logTick = gCurrentFetchingLogTick.load();
+            bool hasLogRange = db_check_log_range(logTick);
+            long long lrFrom = -1, lrLen = -1;
+            db_try_get_log_range_for_tick(logTick, lrFrom, lrLen);
+            long long missingLogs = -1;
+            if (hasLogRange && lrFrom >= 0 && lrLen > 0) {
+                missingLogs = 0;
+                long long end = lrFrom + lrLen - 1;
+                for (long long id = lrFrom; id <= end; id++) {
+                    if (!db_log_exists(gCurrentProcessingEpoch.load(), id)) missingLogs++;
+                }
+            }
+            Logger::get()->debug(
+                    "Blocked-on: nextTick={} td={} votes={}/676 | logTick={} logRange={} fromId={} len={} missingLogs={}",
+                    nextTick, hasTd ? "yes" : "NO", (int)tvs.size(),
+                    logTick, hasLogRange ? "yes" : "NO",
+                    lrFrom, lrLen, missingLogs);
+        }
 
         // KeyDB memory check — every iteration we test the threshold (so a
         // sudden spike is reported even between scheduled log lines), but
@@ -535,7 +633,7 @@ int runBob(int argc, char *argv[])
         Logger::get()->info("Exiting garbage cleaner");
         garbage_thread.join();
     }
-    if (!gIsTestnet && needPeerWatchdog) {
+    if (!gIsTestnet) {
         if (peerWatchdogThread.joinable()) peerWatchdogThread.join();
     }
     stopRESTServer();

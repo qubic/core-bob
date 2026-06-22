@@ -166,6 +166,14 @@ TxExecutionDetails computeTxExecutionDetails(const std::string& txHash,
     out.resolved = true;
     out.timestamp = tickDataToUnixMillis(td) / 1000; // seconds, to match db_get_indexed_tx
 
+    // Execution status is only final once the tick has been INDEXED. Before
+    // that, logs may be absent/incomplete and we'd wrongly report executed=false.
+    // Report pending instead. (gCurrentIndexingTick = last fully-indexed tick.)
+    if (tx.tick > gCurrentIndexingTick.load()) {
+        out.pending = true;
+        return out;
+    }
+
     // If log ranges aren't available, the tick hasn't been log-verified yet.
     // Report as pending rather than silently returning executed=false.
     LogRangesPerTxInTick logrange{};

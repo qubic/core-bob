@@ -231,6 +231,19 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
     // Spam/Junk QU transfer detection threshold (default 0)
     if (!validate_uint("spam_qu_threshold", out.spam_qu_threshold)) return false;
 
+    // Log event chunk size (default = NUMBER_OF_TRANSACTIONS_PER_TICK).
+    // 0 is rejected (would cause an infinite loop in the chunk walker).
+    if (!validate_uint("log_event_chunk_size", out.log_event_chunk_size)) return false;
+    if (out.log_event_chunk_size == 0) out.log_event_chunk_size = 4096;
+
+    if (root.isMember("diagnostic_mode")) {
+        if (!root["diagnostic_mode"].isBool()) {
+            error = "Invalid type: boolean required for key 'diagnostic_mode'";
+            return false;
+        }
+        out.diagnostic_mode = root["diagnostic_mode"].asBool();
+    }
+
     if (root.isMember("node_seed")) {
         if (!root["node_seed"].isString()) {
             error = "Invalid type: string required for key 'node_seed'";

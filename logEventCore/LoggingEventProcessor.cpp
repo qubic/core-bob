@@ -3,6 +3,8 @@
 #include <thread>
 #include <vector>
 #include <map>
+#include <set>
+#include <array>
 #include <cstring>
 #include "m256i.h"
 #include "connection/connection.h"
@@ -324,6 +326,9 @@ gatherAllLoggingEvents:
                 refetchLogFromTick = processFromTick;
                 refetchLogToTick = processToTick;
                 bool received_full = false;
+                const auto outerWaitStart = std::chrono::steady_clock::now();
+                constexpr auto OUTER_WAIT_BUDGET = std::chrono::seconds(30);
+                bool outerWaitTimedOut = false;
                 while (!received_full)
                 {
                     received_full = true;
@@ -335,35 +340,63 @@ gatherAllLoggingEvents:
                             break;
                         }
                     }
-                    if (!received_full) SLEEP(100);
+                    if (received_full) break;
+                    if (std::chrono::steady_clock::now() - outerWaitStart > OUTER_WAIT_BUDGET) {
+                        Logger::get()->warn("rescue: not all log_ranges for batch {}->{} arrived within {}s; proceeding with what we have",
+                                            processFromTick, processToTick,
+                                            std::chrono::duration_cast<std::chrono::seconds>(OUTER_WAIT_BUDGET).count());
+                        outerWaitTimedOut = true;
+                        break;
+                    }
+                    SLEEP(100);
                     if (gStopFlag.load(std::memory_order_relaxed)) return;
                 }
                 refetchLogFromTick = -1;
                 refetchLogToTick = -1;
+                (void)outerWaitTimedOut; // downstream loop handles missing ranges via per-tick guards
                 Logger::get()->info("Successfully refetched all log ranges");
                 db_get_combined_log_range_for_ticks(processFromTick, processToTick, fromId, length);
                 Logger::get()->info("New log range for tick {}->{} : logID {}->{}", processFromTick, processToTick, fromId, fromId+length-1);
 
                 auto endId = fromId + length - 1;
+                int dataRefetchAttempts = 0;
+                int metadataWipeRounds = 0;
+                const auto rescueStart = std::chrono::steady_clock::now();
+                constexpr auto MAX_RESCUE_BUDGET = std::chrono::seconds(120);
                 while (!gStopFlag.load())
                 {
                     db_delete_logs_from_redis(gCurrentProcessingEpoch, fromId, endId);
                     refetchFromId = fromId;
                     refetchToId = endId;
                     Logger::get()->info("Deleted malformed log, waiting for new data");
+                    // Bound the wait. 10s per attempt × 3 attempts = 30s
+                    // before the first metadata wipe; with up to 3 wipe
+                    // rounds the total ceiling before bob self-restarts is
+                    // ~90s — well below any reasonable "is bob alive" timeout.
                     bool received_full = false;
+                    const auto waitStart = std::chrono::steady_clock::now();
+                    constexpr auto WAIT_BUDGET = std::chrono::seconds(10);
                     while (!received_full)
                     {
+                        if (gStopFlag.load(std::memory_order_relaxed)) return;
                         received_full = true;
+                        long long missing = 0;
                         for (auto lid = fromId; lid <= endId; lid++)
                         {
                             if (!checkLogExistAndVerify(gCurrentProcessingEpoch, lid))
                             {
                                 received_full = false;
-                                break;
+                                missing++;
                             }
                         }
-                        if (!received_full) SLEEP(100);
+                        if (received_full) break;
+                        if (std::chrono::steady_clock::now() - waitStart > WAIT_BUDGET) {
+                            Logger::get()->warn("rescue: log range {}=>{} for batch {}->{} still has {} missing ids after {}s; falling through to retry/escalation",
+                                                fromId, endId, processFromTick, processToTick, missing,
+                                                std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - waitStart).count());
+                            break;
+                        }
+                        SLEEP(100);
                     }
                     vle = db_get_logs_by_tick_range(gCurrentProcessingEpoch, processFromTick, processToTick, success);
                     if (vle.size() == length)
@@ -371,15 +404,143 @@ gatherAllLoggingEvents:
                         Logger::get()->info("Successfully refetch data log {} => {}", refetchFromId, refetchToId);
                         break;
                     }
-                    else
+                    Logger::get()->info("Failed to get data log for tick {}->{}: {} => {}", processFromTick, processToTick, refetchFromId, refetchToId);
+                    Logger::get()->info("Expected {} but get {}", length, vle.size());
+                    dataRefetchAttempts++;
+                    // After a few rounds of refetching logs against the same
+                    // metadata, the bad data is almost certainly the metadata
+                    // itself (BM's tick_log_range maps an id to a tick that
+                    // disagrees with the log content's packed-header tick).
+                    // The atomic SETNX in db_insert_log_range makes that
+                    // metadata permanent unless we wipe it explicitly. Wipe
+                    // log_ranges + tick_log_range for the batch's ticks and
+                    // re-run the outer refetch so a fresh BM response can
+                    // produce a consistent mapping.
+                    // Hard ceiling: if rescue churns for >120s without producing
+                    // a clean batch, the data really isn't recoverable here.
+                    // Bail to misalignment recovery (exit(1) → container
+                    // restart), same as the digest-mismatch path. On reboot
+                    // refetchFromId/refetchToId reset to -1, the main fetch
+                    // resumes, and bob will reach this batch fresh.
+                    if (std::chrono::steady_clock::now() - rescueStart > MAX_RESCUE_BUDGET) {
+                        Logger::get()->critical("rescue: batch {}->{} has been stuck for >{}s and {} wipe rounds; triggering self-restart",
+                                                processFromTick, processToTick,
+                                                std::chrono::duration_cast<std::chrono::seconds>(MAX_RESCUE_BUDGET).count(),
+                                                metadataWipeRounds);
+                        Logger::get()->info("Forcing bob to exit (rescue ceiling)");
+                        // Rewind one tick so the restarted bob doesn't get
+                        // stuck on the same stale spectrum→bad-batch pairing.
+                        if (processFromTick > 0) {
+                            db_update_latest_event_tick_and_epoch(processFromTick - 1, gCurrentProcessingEpoch);
+                        }
+                        refetchFromId = -1;
+                        refetchToId = -1;
+                        exit(1);
+                    }
+                    if (dataRefetchAttempts >= 3)
                     {
-                        Logger::get()->info("Failed to get data log for tick {}->{}: {} => {}", processFromTick, processToTick, refetchFromId, refetchToId);
-                        Logger::get()->info("Expected {} but get {}", length, vle.size());
+                        metadataWipeRounds++;
+                        Logger::get()->warn("rescue: log refetch keeps failing for batch {}->{} (wipe round {}); wiping per-tick log_ranges metadata and re-requesting from peers",
+                                            processFromTick, processToTick, metadataWipeRounds);
+                        for (uint32_t t = processFromTick; t <= processToTick; t++) {
+                            db_delete_log_ranges(t);
+                        }
+                        // Re-prime the fetcher to re-request log_ranges, then
+                        // wait until every tick has its range back (bounded).
+                        refetchLogFromTick = processFromTick;
+                        refetchLogToTick = processToTick;
+                        const auto rangeWaitStart = std::chrono::steady_clock::now();
+                        constexpr auto RANGE_WAIT_BUDGET = std::chrono::seconds(20);
+                        bool received_full_ranges = false;
+                        while (!received_full_ranges) {
+                            received_full_ranges = true;
+                            for (uint32_t t = processFromTick; t <= processToTick; t++) {
+                                if (!db_check_log_range(t)) { received_full_ranges = false; break; }
+                            }
+                            if (received_full_ranges) break;
+                            if (std::chrono::steady_clock::now() - rangeWaitStart > RANGE_WAIT_BUDGET) {
+                                Logger::get()->warn("rescue: not all log_ranges for batch {}->{} returned within {}s of wipe round {}; proceeding anyway",
+                                                    processFromTick, processToTick,
+                                                    std::chrono::duration_cast<std::chrono::seconds>(RANGE_WAIT_BUDGET).count(),
+                                                    metadataWipeRounds);
+                                break;
+                            }
+                            SLEEP(100);
+                            if (gStopFlag.load(std::memory_order_relaxed)) return;
+                        }
+                        refetchLogFromTick = -1;
+                        refetchLogToTick = -1;
+                        // Recompute fromId / length / endId from the fresh
+                        // per-tick metadata; the new span may differ.
+                        db_get_combined_log_range_for_ticks(processFromTick, processToTick, fromId, length);
+                        endId = (fromId >= 0 && length > 0) ? fromId + length - 1 : -1;
+                        if (fromId < 0 || length <= 0) {
+                            Logger::get()->warn("rescue: no usable log range for batch {}->{} after metadata refetch; will retry",
+                                                processFromTick, processToTick);
+                            SLEEP(1000);
+                        }
+                        dataRefetchAttempts = 0;
                     }
                 }
                 if (gStopFlag.load()) return;
                 refetchFromId = -1;
                 refetchToId = -1;
+            }
+        }
+
+        // Per-tick audit: emit one BATCH_AUDIT line PER TICK in the batch, not
+        // one for the whole batch. Batch boundaries vary between runs (verify
+        // runs as soon as the fetcher has data), so a batch-level fingerprint
+        // can't be compared across restarts when the splits don't align. A
+        // per-tick fingerprint is always alignable on `tick=N`: grep for it
+        // across two runs and any divergence proves the per-tick log content
+        // differs between fetches.
+        //
+        // K12-hashing every log byte is the heavy diagnostic; gated behind
+        // gDiagnosticMode so it's a single branch when off.
+        if (gDiagnosticMode.load(std::memory_order_relaxed))
+        {
+            uint32_t curTick = 0;
+            uint8_t acc[32] = {0};
+            int countInTick = 0;
+            auto emit = [&]() {
+                if (countInTick == 0) return;
+                char hex[17] = {0};
+                for (int b = 0; b < 8; ++b) std::snprintf(hex + b*2, 3, "%02x", acc[b]);
+                Logger::get()->trace("BATCH_AUDIT input: tick={} count={} hash={}",
+                                    curTick, countInTick, hex);
+                memset(acc, 0, 32);
+                countInTick = 0;
+            };
+            for (auto& le : vle) {
+                uint32_t t = le.getTick();
+                if (t != curTick && countInTick > 0) emit();
+                curTick = t;
+                LogEvent& mut = const_cast<LogEvent&>(le);
+                const uint8_t* p = mut.getRawPtr();
+                size_t sz = LogEvent::PackedHeaderSize + le.getLogSize();
+                if (!p || sz == 0) continue;
+                // Fold this log into this tick's accumulator: acc = K12(acc || log_bytes)
+                std::vector<uint8_t> buf;
+                buf.reserve(32 + sz);
+                buf.insert(buf.end(), acc, acc + 32);
+                buf.insert(buf.end(), p, p + sz);
+                KangarooTwelve(buf.data(), buf.size(), acc, 32);
+                countInTick++;
+            }
+            emit();
+            // Also include ticks in the batch that have NO logs at all (the
+            // simulator processes nothing for them, but they still count as
+            // verified). Each gets a sentinel audit line so comparison knows
+            // they were considered.
+            {
+                std::set<uint32_t> seen;
+                for (auto& le : vle) seen.insert(le.getTick());
+                for (uint32_t t = processFromTick; t <= processToTick; t++) {
+                    if (seen.find(t) == seen.end()) {
+                        Logger::get()->trace("BATCH_AUDIT input: tick={} count=0 hash=0000000000000000", t);
+                    }
+                }
             }
         }
 
@@ -637,6 +798,24 @@ verifyNodeStateDigest:
             }
         }
 
+        // Output audit: emit bob's resulting digest pair regardless of match
+        // outcome. Compare across crashes: same input_hash + same output
+        // digests but different verify outcome = something downstream
+        // (quorum vote arrival, vote validation) is racey. Same input_hash
+        // + different output digests = simulation is non-deterministic.
+        if (gDiagnosticMode.load(std::memory_order_relaxed))
+        {
+            char sdHex[17] = {0}, udHex[17] = {0};
+            for (int b = 0; b < 8; ++b) {
+                std::snprintf(sdHex + b*2, 3, "%02x", spectrumDigest.m256i_u8[b]);
+                std::snprintf(udHex + b*2, 3, "%02x", universeDigest.m256i_u8[b]);
+            }
+            Logger::get()->trace("BATCH_AUDIT output: from={} to={} spectrum={} universe={} voteCount={} hasTickData={} matched={}",
+                                processFromTick, processToTick,
+                                sdHex, udHex, voteCount, hasTickData ? "yes" : "no",
+                                matchedQuorum ? "yes" : "no");
+        }
+
         if (!matchedQuorum)
         {
             Logger::get()->warn("Failed to verify digests at tick {} -> {}, please check!", processFromTick, processToTick);
@@ -748,12 +927,67 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
                                  uint64_t request_logging_cycle_ms,
                                  uint32_t future_offset)
 {
-    auto idleBackoff = 1;
+    // 10ms is plenty for our 100ms+ request cycle and stops the loop from
+    // burning CPU + flooding the log when nothing is happening.
+    auto idleBackoff = 10;
     uint64_t lastRequestMs = 0;
     int64_t lastRequestLogid = -1;
     uint32_t stallTick = 0;
     uint64_t stallStartMs = 0;
     uint64_t lastStallLogMs = 0;
+
+    // Per-range in-flight tracking. With gLogEventChunkSize pegged
+    // to NUMBER_OF_TRANSACTIONS_PER_TICK (4096) each response is ~4 MB
+    // and takes longer than `request_logging_cycle_ms` to arrive. A
+    // naive "fire every cycle" loop would re-issue the same range many
+    // times before the first response lands, wasting BM bandwidth.
+    //
+    // The ring tracks recently-fired (fromId, toId) pairs with their
+    // fire-time. Before each smartLogRequest we check the ring: if the
+    // exact range was fired within REFIRE_GUARD_MS we skip; otherwise
+    // we fire and record. Different ranges fire independently, so
+    // prefetch for tick N+1, N+2, … can run in parallel with tick N's
+    // response still arriving.
+    //
+    // Broken-connection recovery: the chunk loop's existing
+    // db_log_exists shrinking trims received ids out of the next
+    // request, and after REFIRE_GUARD_MS the original (s, e) becomes
+    // re-eligible — smartLogRequest's random BM pick will then route
+    // to a different connection most of the time.
+    // Sizing: with a 128-id chunk, a single tick fans out into 32 chunks,
+    // and bob also fires for `future_offset` prefetch ticks per cycle. To
+    // dedup *all* in-flight ranges (not just the most recent 16), the ring
+    // has to hold the full burst — otherwise rotated-out slots cause
+    // duplicate fires that flood the BM.
+    struct InflightSlot { uint64_t fromId; uint64_t toId; uint64_t firedAtMs; };
+    constexpr size_t INFLIGHT_SLOTS = 1024;
+    constexpr uint64_t REFIRE_GUARD_MS = 400;
+    std::array<InflightSlot, INFLIGHT_SLOTS> inflight{};
+
+    auto tryFireLogRequest = [&](uint64_t s, uint64_t e, uint64_t nowMs) -> bool {
+        // GC expired entries
+        for (auto& sl : inflight) {
+            if (sl.firedAtMs && nowMs - sl.firedAtMs >= REFIRE_GUARD_MS) sl.firedAtMs = 0;
+        }
+        // Dedup: skip if the same (s,e) is still within its guard window
+        for (const auto& sl : inflight) {
+            if (sl.firedAtMs && sl.fromId == s && sl.toId == e) return false;
+        }
+        // Insert into first empty slot, otherwise overwrite oldest
+        size_t victim = 0; uint64_t oldest = UINT64_MAX;
+        for (size_t i = 0; i < inflight.size(); ++i) {
+            if (!inflight[i].firedAtMs) { victim = i; break; }
+            if (inflight[i].firedAtMs < oldest) { oldest = inflight[i].firedAtMs; victim = i; }
+        }
+        inflight[victim] = { s, e, nowMs };
+        RequestLog rl{{0,0,0,0}, s, e};
+        std::string dest;
+        connPoolWithPwd.smartLogRequest((uint8_t*)&rl, 0, sizeof(RequestLog),
+                                        RequestLog::type(), true, &dest);
+        gReqLog.fetch_add(1, std::memory_order_relaxed);
+        Logger::get()->debug("Requested log {}=>{} to {}", s, e, dest.empty() ? "-" : dest);
+        return true;
+    };
 
     while (!gStopFlag.load(std::memory_order_relaxed)) {
         try {
@@ -775,16 +1009,18 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
                     {
                         RequestAllLogIdRangesFromTick ralr{{0,0,0,0},t};
                         connPoolWithPwd.smartLogRequest((uint8_t*)&ralr, 0, sizeof(RequestAllLogIdRangesFromTick), RequestAllLogIdRangesFromTick::type(), true);
+                        gReqLogRanges.fetch_add(1, std::memory_order_relaxed);
                     }
                 }
                 SLEEP(1000);
             }
             while (refetchFromId != -1 && refetchToId != -1 && !gStopFlag.load(std::memory_order_relaxed))
             {
-                for (long long s = refetchFromId; s <= refetchToId; s += BOB_LOG_EVENT_CHUNK_SIZE) {
-                    long long e = std::min(refetchToId, s + BOB_LOG_EVENT_CHUNK_SIZE - 1);
-                    RequestLog rl{{0,0,0,0},(unsigned long long)(s),(unsigned long long)(e)};
-                    connPoolWithPwd.smartLogRequest((uint8_t *) &rl, 0, sizeof(RequestLog), RequestLog::type(), true);
+                const uint64_t nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::system_clock::now().time_since_epoch()).count();
+                for (long long s = refetchFromId; s <= refetchToId; s += gLogEventChunkSize) {
+                    long long e = std::min(refetchToId, s + gLogEventChunkSize - 1);
+                    tryFireLogRequest((uint64_t)s, (uint64_t)e, nowMs);
                 }
                 SLEEP(1000);
             }
@@ -802,25 +1038,45 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
                 {
                     RequestAllLogIdRangesFromTick ralr{{0,0,0,0},gCurrentFetchingLogTick};
                     connPoolWithPwd.smartLogRequest((uint8_t*)&ralr, 0, sizeof(RequestAllLogIdRangesFromTick), RequestAllLogIdRangesFromTick::type(), true);
-                    Logger::get()->debug("Requested logRange {}", gCurrentFetchingLogTick);
+                        gReqLogRanges.fetch_add(1, std::memory_order_relaxed);
+                    Logger::get()->debug("logFetch[{}]: requesting logRange (no summary yet)", gCurrentFetchingLogTick.load());
                 }
+                // else: cycle hasn't elapsed yet, nothing to do — silent, no log
             } else {
                 long long fromId, length;
                 if (!db_try_get_log_range_for_tick(gCurrentFetchingLogTick, fromId, length))
                 {
-                    // unexpected exit may lead here: have logRange struct but the metadata for tick.
-                    // => regenerate the tick_log_range:tick
+                    // Two cases land here: (1) the per-tick summary hash was
+                    // never written but the log_ranges blob exists, or (2)
+                    // the summary was rejected as corrupt by the validator
+                    // in db_try_get_log_range_for_tick. Try to regenerate
+                    // from the source blob — but if the blob ALSO produces
+                    // an out-of-range pair, both keys are bad: wipe them and
+                    // let the next cycle re-request from peers.
+                    Logger::get()->debug("logFetch[{}]: branch=missing-summary, regenerating tick_log_range", gCurrentFetchingLogTick.load());
                     LogRangesPerTxInTick logRange{};
                     db_try_get_log_ranges(gCurrentFetchingLogTick, logRange);
-                    db_insert_log_range(gCurrentFetchingLogTick, logRange);
+                    long long checkMin, checkMax;
+                    logRange.getMinMax(checkMin, checkMax);
+                    constexpr long long MAX_PLAUSIBLE_LEN = NUMBER_OF_TRANSACTIONS_PER_TICK * 1024LL;
+                    bool blobIsBad = (checkMin < -1 || checkMax < -1)
+                                   || (checkMin >= 0 && (checkMax < checkMin || (checkMax - checkMin) > MAX_PLAUSIBLE_LEN));
+                    if (blobIsBad) {
+                        Logger::get()->warn("logFetch[{}]: source log_ranges blob is also corrupt (min={} max={}); deleting and re-requesting from peers",
+                                            gCurrentFetchingLogTick.load(), checkMin, checkMax);
+                        db_delete_log_ranges(gCurrentFetchingLogTick);
+                    } else {
+                        db_insert_log_range(gCurrentFetchingLogTick, logRange);
+                    }
                     continue;
                 }
                 if (fromId == -1 || length == -1)
                 {
-                    Logger::get()->trace("Tick {} doesn't generate any log. Advancing logEvent tick", gCurrentFetchingLogTick);
+                    Logger::get()->debug("logFetch[{}]: branch=no-logs-this-tick, advancing", gCurrentFetchingLogTick.load());
                     gCurrentFetchingLogTick++;
                     continue;
                 }
+                long long origFromId = fromId;
                 long long endId = fromId + length - 1; // inclusive
                 while (db_log_exists(gCurrentProcessingEpoch, fromId) && fromId <= endId) fromId++;
                 if (lastRequestLogid < fromId)
@@ -830,18 +1086,23 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
                 }
                 if (shouldRequestLogEvent)
                 {
-                    for (long long s = fromId; s <= endId; s += BOB_LOG_EVENT_CHUNK_SIZE) {
-                        long long e = std::min(endId, s + BOB_LOG_EVENT_CHUNK_SIZE - 1);
+                    long long received = fromId - origFromId;
+                    if (received < length) {
+                        // Only log when there's actually something missing —
+                        // i.e. when this cycle's request will fire chunks.
+                        Logger::get()->debug("logFetch[{}]: have-range fromId={} len={} received={}/{} still missing={}",
+                                             gCurrentFetchingLogTick.load(), origFromId, length, received, length, length - received);
+                    }
+                    for (long long s = fromId; s <= endId; s += gLogEventChunkSize) {
+                        long long e = std::min(endId, s + gLogEventChunkSize - 1);
                         while (db_log_exists(gCurrentProcessingEpoch, e) && e >= fromId) e--;
-                        if (e < s) continue;
-                        RequestLog rl{{0,0,0,0},(unsigned long long)(s),(unsigned long long)(e)};
-                        connPoolWithPwd.smartLogRequest((uint8_t *) &rl, 0, sizeof(RequestLog), RequestLog::type(), true);
-                        Logger::get()->debug("Requested log {}=>{}", s, e);
+                        if (e < s) continue; // e826c58 fix: skip fully-fetched chunk (was e < fromId)
+                        tryFireLogRequest((uint64_t)s, (uint64_t)e, currentMs);
                     }
                 }
                 if (fromId > endId)
                 {
-                    Logger::get()->trace("Advancing logEvent tick {}", gCurrentFetchingLogTick);
+                    Logger::get()->debug("logFetch[{}]: advancing (all {} ids received)", gCurrentFetchingLogTick.load(), length);
                     gCurrentFetchingLogTick++;
                     db_update_latest_event_tick_and_epoch(gCurrentFetchingLogTick, gCurrentProcessingEpoch);
                 }
@@ -854,6 +1115,7 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
                     {
                         RequestAllLogIdRangesFromTick ralr{{0,0,0,0},gCurrentFetchingLogTick + i};
                         connPoolWithPwd.smartLogRequest((uint8_t*)&ralr, 0, sizeof(RequestAllLogIdRangesFromTick), RequestAllLogIdRangesFromTick::type(), true);
+                        gReqLogRanges.fetch_add(1, std::memory_order_relaxed);
                         Logger::get()->debug("Requested logRange {}", gCurrentFetchingLogTick + i);
                     } else {
                         long long fromId, length;
@@ -861,13 +1123,11 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
                         if (fromId == -1 || length == -1) continue;
                         long long endId = fromId + length - 1; // inclusive
                         while (db_log_exists(gCurrentProcessingEpoch, fromId) && fromId <= endId) fromId++;
-                        for (long long s = fromId; s <= endId; s += BOB_LOG_EVENT_CHUNK_SIZE) {
-                            long long e = std::min(endId, s + BOB_LOG_EVENT_CHUNK_SIZE - 1);
+                        for (long long s = fromId; s <= endId; s += gLogEventChunkSize) {
+                            long long e = std::min(endId, s + gLogEventChunkSize - 1);
                             while (db_log_exists(gCurrentProcessingEpoch, e) && e >= fromId) e--;
                             if (e < s) continue;
-                            RequestLog rl{{0,0,0,0},(unsigned long long)(s),(unsigned long long)(e)};
-                            connPoolWithPwd.smartLogRequest((uint8_t *) &rl, 0, sizeof(RequestLog), RequestLog::type(), true);
-                            Logger::get()->debug("Requested log {}=>{}", s, e);
+                            tryFireLogRequest((uint64_t)s, (uint64_t)e, currentMs);
                         }
                     }
                 }

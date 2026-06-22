@@ -246,10 +246,16 @@ Json::Value tickDataToQubicTick(uint32_t tick, const TickData& td,
     std::vector<LogEvent> tickLogs;
     bool logsAvailable = false;
     if (includeTransactions) {
+        // Execution status is only final once the tick has been INDEXED.
+        // Before that the logs may be absent or incomplete, and isTxExecuted
+        // would false-negative to executed=false / status="failed". Report
+        // "pending" (executed=null) until then.
+        // (gCurrentIndexingTick = last fully-indexed tick.)
+        bool tickIndexed = (tick <= gCurrentIndexingTick.load());
         bool rangesOk = db_try_get_log_ranges(tick, tickLogRanges);
         bool logsOk = false;
         tickLogs = db_get_logs_by_tick_range(epoch, tick, tick, logsOk);
-        logsAvailable = rangesOk && logsOk;
+        logsAvailable = tickIndexed && rangesOk && logsOk;
     }
 
     Json::Value transactions(Json::arrayValue);

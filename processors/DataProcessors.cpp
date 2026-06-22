@@ -179,8 +179,29 @@ void processTransaction(const uint8_t* ptr)
 
 }
 
-void processLogEvent(const uint8_t* _ptr, uint32_t chunkSize)
+void processLogEvent(const uint8_t* _ptr, uint32_t chunkSize, const RequestResponseHeader& hdr)
 {
+    // Per-peer log-delivery counter is cheap (one atomic inc) and always
+    // tracked. Looking up the source string is also cheap (map lookup), but
+    // we only need it when diagnostic mode is on (it feeds db_set_log_source
+    // below which is the expensive part).
+    std::string source;
+    const bool diag = gDiagnosticMode.load(std::memory_order_relaxed);
+    {
+        std::vector<uint8_t> ignore;
+        QCPtr conn;
+        // requestMapperFrom holds our outgoing requests; connReceiver patches
+        // in the responding peer's conn via updateConn() before enqueueing
+        // the response. This is the correct map for "who answered our log
+        // request". (requestMapperTo is for *incoming* requests from peers.)
+        if (requestMapperFrom.get(hdr.getDejavu(), ignore, conn) && conn) {
+            conn->incLogsDelivered();
+            if (diag) {
+                source = std::string(conn->getNodeIp()) + ":" + std::to_string(conn->getNodePort());
+            }
+        }
+    }
+
     uint32_t offset = 0;
     uint64_t maxLogId = 0;
     while (offset < chunkSize)
@@ -202,6 +223,10 @@ void processLogEvent(const uint8_t* _ptr, uint32_t chunkSize)
             if (!db_insert_log(epoch, tick, logId, messageSize + LogEvent::PackedHeaderSize, ptr))
             {
                 Logger::get()->warn("Failed to add log {}", logId);
+            }
+            else if (!source.empty())
+            {
+                db_set_log_source(epoch, logId, source);
             }
         }
         else
@@ -277,19 +302,24 @@ void DataProcessorThread()
         switch (type)
         {
             case BROADCAST_TICK_VOTE: // TickVote
+                gRespTickVotes.fetch_add(1, std::memory_order_relaxed);
                 processTickVote(const_cast<uint8_t*>(payload));
                 break;
             case TickData::type(): // TickData
+                gRespTickData.fetch_add(1, std::memory_order_relaxed);
                 // packet_size includes the 8-byte header; payload is the rest.
                 processTickData(const_cast<uint8_t*>(payload), packet_size - 8);
                 break;
             case BROADCAST_TRANSACTION: // Transaction
+                gRespTickTxs.fetch_add(1, std::memory_order_relaxed);
                 processTransaction(payload);
                 break;
             case RespondLog::type(): // log event
-                processLogEvent(payload, packet_size - 8);
+                gRespLog.fetch_add(1, std::memory_order_relaxed);
+                processLogEvent(payload, packet_size - 8, header);
                 break;
             case LogRangesPerTxInTick::type(): // logID ranges
+                gRespLogRanges.fetch_add(1, std::memory_order_relaxed);
                 processLogRanges(header, payload);
                 break;
             case RespondContractFunction::type:

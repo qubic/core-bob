@@ -78,6 +78,32 @@ struct GlobalState {
 
     int gNumBMConnection = 0;
 
+    // Diagnostic counters: how many packets bob has sent/received per type
+    // since process start. The periodic state line prints deltas so a stall
+    // ("we keep requesting tick data but no responses arrive") is visible at
+    // a glance without per-packet debug logs.
+    std::atomic<uint64_t> gReqTickData{0};
+    std::atomic<uint64_t> gReqTickVotes{0};
+    std::atomic<uint64_t> gReqTickTxs{0};
+    std::atomic<uint64_t> gReqLog{0};
+    std::atomic<uint64_t> gReqLogRanges{0};
+    std::atomic<uint64_t> gRespTickData{0};
+    std::atomic<uint64_t> gRespTickVotes{0};
+    std::atomic<uint64_t> gRespTickTxs{0};   // BROADCAST_TRANSACTION arrivals
+    std::atomic<uint64_t> gRespLog{0};
+    std::atomic<uint64_t> gRespLogRanges{0};
+
+    // How many log IDs to request per RequestLog packet. Configurable
+    // via bob.json "log_event_chunk_size" / env var LOG_EVENT_CHUNK_SIZE.
+    unsigned gLogEventChunkSize = 1000;
+
+    // Master switch for expensive diagnostics that have measurable runtime
+    // cost: BATCH_AUDIT per-tick hashing of log bytes and the per-log source
+    // attribution sidecar key (one Redis SETNX per log). Read-mostly bool;
+    // the branch check is negligible when off. Configurable via bob.json
+    // "diagnostic-mode" / env var DIAGNOSTIC_MODE. Default OFF.
+    std::atomic<bool> gDiagnosticMode{false};
+
     long long gKvrocksTTL = 1209600;
     long long gTimeToWaitEpochEnd = 1800;
     uint64_t gMaxActivitiesPerIndexKey = 100000;
@@ -134,6 +160,10 @@ GlobalState& GS();
 
 #define QUTIL_STMB_LOG_TYPE 100001
 
-// the chunk size that has signature from trusted entity in bob
-static constexpr long long BOB_LOG_EVENT_CHUNK_SIZE = 128; // do not edit
+// Default chunk size for RequestLog packets. Runtime value lives in
+// gLogEventChunkSize, configurable via bob.json "log_event_chunk_size"
+// or env var LOG_EVENT_CHUNK_SIZE. Used to initialize the global.
+// Duplicate-fire protection lives in verifyLoggingEvent's per-range
+// in-flight ring (REFIRE_GUARD_MS).
+static constexpr long long BOB_LOG_EVENT_CHUNK_SIZE_DEFAULT = NUMBER_OF_TRANSACTIONS_PER_TICK;
 

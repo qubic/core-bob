@@ -168,6 +168,31 @@ bool db_delete_logs_from_redis(uint16_t epoch, long long start, long long end)
     return true;
 }
 
+bool db_set_log_source(uint16_t epoch, uint64_t logId, const std::string& source) {
+    if (!g_redis) return false;
+    try {
+        std::string key = "log_src:" + std::to_string(epoch) + ":" + std::to_string(logId);
+        sw::redis::StringView val(source.data(), source.size());
+        // Same NX semantics as the log itself — only the first peer that
+        // delivered this id is recorded.
+        g_redis->set(key, val, std::chrono::milliseconds(0), sw::redis::UpdateType::NOT_EXIST);
+    } catch (const sw::redis::Error&) {
+        return false;
+    }
+    return true;
+}
+
+std::string db_get_log_source(uint16_t epoch, uint64_t logId) {
+    if (!g_redis) return {};
+    try {
+        std::string key = "log_src:" + std::to_string(epoch) + ":" + std::to_string(logId);
+        auto val = g_redis->get(key);
+        return val ? *val : std::string{};
+    } catch (const sw::redis::Error&) {
+        return {};
+    }
+}
+
 bool db_insert_log(uint16_t epoch, uint32_t tick, uint64_t logId, int logSize, const uint8_t* content) {
     if (!g_redis) return false;
     try {
@@ -237,6 +262,7 @@ bool db_insert_log_range(uint32_t tick, const LogRangesPerTxInTick& logRange) {
             return false;
         }
 
+        // Garbage guard: reject ticks whose log span is absurd.
         if (max_log_id > min_log_id) {
             if (max_log_id - min_log_id > MAXIMUM_NUMBER_OF_LOG_PER_TICK) { // too many log for a tick
                 Logger::get()->warn("db_insert_log_range: Discarding tick {} - log range {} exceeds maximum {}", tick, max_log_id - min_log_id, MAXIMUM_NUMBER_OF_LOG_PER_TICK);
@@ -244,15 +270,28 @@ bool db_insert_log_range(uint32_t tick, const LogRangesPerTxInTick& logRange) {
             }
         }
 
-        // Store the whole struct for the tick
-        sw::redis::StringView val(reinterpret_cast<const char*>(&logRange), sizeof(LogRangesPerTxInTick));
-        g_redis->set(key_struct, val, std::chrono::milliseconds(0), sw::redis::UpdateType::NOT_EXIST);
-
+        // Write blob + summary atomically. The blob uses SETNX semantics
+        // (first BM's response wins). The summary MUST agree with the blob,
+        // so we only HSET the summary when the SETNX succeeded — otherwise
+        // later BMs would overwrite the summary with values that don't
+        // match the blob's actual per-tx ranges, producing inconsistent
+        // (start, length) reads downstream. That inconsistency causes
+        // non-deterministic batch composition across restarts and was the
+        // root cause of misalignment crashes.
         std::string key_summary = "tick_log_range:" + std::to_string(tick);
-        std::unordered_map<std::string, std::string> fields;
-        fields["fromLogId"] = std::to_string(min_log_id);
-        fields["length"] = (min_log_id == -1 || max_log_id < min_log_id) ? std::to_string(-1) : std::to_string(max_log_id - min_log_id);
-        g_redis->hmset(key_summary, fields.begin(), fields.end());
+        std::string fromStr = std::to_string(min_log_id);
+        // e826c58 fix: treat max < min as "no logs" (length -1) too.
+        std::string lenStr  = (min_log_id == -1 || max_log_id < min_log_id) ? std::to_string(-1) : std::to_string(max_log_id - min_log_id);
+        std::string blob_value(reinterpret_cast<const char*>(&logRange), sizeof(LogRangesPerTxInTick));
+        const char* script = R"lua(
+local ok = redis.call('SET', KEYS[1], ARGV[1], 'NX')
+if not ok then return 0 end
+redis.call('HSET', KEYS[2], 'fromLogId', ARGV[2], 'length', ARGV[3])
+return 1
+)lua";
+        std::vector<std::string> keys = {key_struct, key_summary};
+        std::vector<std::string> args = {blob_value, fromStr, lenStr};
+        g_redis->eval_ll(script, keys.begin(), keys.end(), args.begin(), args.end());
     } catch (const sw::redis::Error& e) {
         Logger::get()->error("Redis error in db_insert_log_range: {}", e.what());
         return false;
@@ -375,6 +414,20 @@ bool db_try_get_log_range_for_tick(uint32_t tick, long long& fromLogId, long lon
                     fromLogId = -1;
                     length = -1;
                     return true;
+                }
+                // Sanity-check the summary. A corrupted entry (e.g. negative
+                // length, or absurdly large) can drive the fetch loop into
+                // unbounded RequestLog spam. Reject and let the caller treat
+                // as "no summary", forcing a fresh RequestAllLogIdRangesFromTick.
+                // Cap: a single tick can't legitimately produce more than
+                // NUMBER_OF_TRANSACTIONS_PER_TICK * a generous per-tx slack.
+                constexpr long long MAX_PLAUSIBLE_LEN = NUMBER_OF_TRANSACTIONS_PER_TICK * 1024LL;
+                if (min_id < 0 || len < 0 || len > MAX_PLAUSIBLE_LEN) {
+                    Logger::get()->warn("db_try_get_log_range_for_tick: rejecting corrupt summary for tick {} (fromLogId={} length={})",
+                                        tick, min_id, len);
+                    fromLogId = -1;
+                    length = -1;
+                    return false;
                 }
                 fromLogId = min_id;
                 length = len;
@@ -744,7 +797,28 @@ std::vector<LogEvent> db_get_logs_by_tick_range(uint16_t epoch, uint32_t start_t
                 const auto t = le.getTick();
                 if (t < start_tick || t > end_tick)
                 {
-                    Logger::get()->critical("Log event {} has wrong tick {}", startId + i, le.getTick());
+                    // Look up the peer that delivered this id so we can
+                    // attribute the bad data. Also dump a small hex preview
+                    // of the packed header (epoch, tick, size, logId) to
+                    // distinguish "BM lied about tick" from "we read the
+                    // wrong bytes from keydb".
+                    std::string src = db_get_log_source(epoch, startId + i);
+                    // Access the raw packed header (first 16 bytes) for the
+                    // hex dump so we can confirm we're not reading garbage
+                    // from keydb vs the BM really sent these bytes.
+                    LogEvent& mutle = const_cast<LogEvent&>(le);
+                    const uint8_t* p = mutle.getRawPtr();
+                    char hex[33] = {0};
+                    if (p) {
+                        for (int b = 0; b < 16; ++b) {
+                            std::snprintf(hex + b*2, 3, "%02x", p[b]);
+                        }
+                    }
+                    Logger::get()->critical(
+                        "Log event {} has wrong tick {} (batch=[{},{}]) source={} header16={}",
+                        startId + i, le.getTick(), start_tick, end_tick,
+                        src.empty() ? "<unknown>" : src,
+                        hex[0] ? hex : "<no-data>");
                     out.clear();
                     return out;
                 }

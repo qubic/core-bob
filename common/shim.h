@@ -50,6 +50,19 @@
 
 #define gNumBMConnection (GS().gNumBMConnection)
 
+#define gDiagnosticMode   (GS().gDiagnosticMode)
+
+#define gReqTickData      (GS().gReqTickData)
+#define gReqTickVotes     (GS().gReqTickVotes)
+#define gReqTickTxs       (GS().gReqTickTxs)
+#define gReqLog           (GS().gReqLog)
+#define gReqLogRanges     (GS().gReqLogRanges)
+#define gRespTickData     (GS().gRespTickData)
+#define gRespTickVotes    (GS().gRespTickVotes)
+#define gRespTickTxs      (GS().gRespTickTxs)
+#define gRespLog          (GS().gRespLog)
+#define gRespLogRanges    (GS().gRespLogRanges)
+
 #define gKvrocksTTL (GS().gKvrocksTTL)
 #define gTimeToWaitEpochEnd (GS().gTimeToWaitEpochEnd)
 
@@ -67,6 +80,7 @@
 #define gCheckinUrl           (GS().checkinUrl)
 #define gTCM (GS().TCM)
 #define gMaxActivitiesPerIndexKey (GS().gMaxActivitiesPerIndexKey)
+#define gLogEventChunkSize (GS().gLogEventChunkSize)
 
 #define gLastCleanTickData   (GS().lastCleanTickData)
 #define gLastCleanTransactionTick   (GS().lastCleanTransactionTick)

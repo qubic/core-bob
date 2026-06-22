@@ -68,6 +68,19 @@ if [ -n "$SPAM_QU_THRESHOLD" ]; then
     jq --argjson v "$SPAM_QU_THRESHOLD" '.["spam-qu-threshold"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
+if [ -n "$LOG_EVENT_CHUNK_SIZE" ]; then
+    jq --argjson v "$LOG_EVENT_CHUNK_SIZE" '.["log-event-chunk-size"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+fi
+
+if [ -n "$DIAGNOSTIC_MODE" ]; then
+    # Accept true/false/1/0 — anything other than true/1 is treated as false.
+    case "$DIAGNOSTIC_MODE" in
+        true|TRUE|1|yes|YES) dm_v=true ;;
+        *) dm_v=false ;;
+    esac
+    jq --argjson v "$dm_v" '.["diagnostic-mode"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+fi
+
 if [ -n "$TX_TICK_TO_LIVE" ]; then
     jq --argjson v "$TX_TICK_TO_LIVE" '.["tx_tick_to_live"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
