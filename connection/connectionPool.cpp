@@ -334,7 +334,7 @@ void peerWatchdog(ConnectionPool& conns_, bool allowDnsReplace)
             }
             if (worst) {
                 std::vector<std::string> newPeer;
-                std::string mode = dist(gen) % 2 == 0 ? "closest" : "random";
+                std::string mode = "random";
                 if (worst->isBM()) {
                     newPeer = GetPeerFromDNS(1, 0, mode);
                 } else {
