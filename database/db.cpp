@@ -1154,7 +1154,7 @@ uint64_t db_get_quorum_unixtime_from_votes(uint32_t tick) {
         time_t t = timegm(&timeinfo);
         return (t != -1) ? static_cast<uint64_t>(t) : 0;
     };
-
+    int voteForEmptyTick = 0;
     // Count votes for each unique datetime
     for (const auto& vote : votes) {
         uint64_t timestamp = toUnixTimestamp(vote.year, vote.month, vote.day,
@@ -1162,12 +1162,18 @@ uint64_t db_get_quorum_unixtime_from_votes(uint32_t tick) {
         if (timestamp > 0) {
             datetimeCount[timestamp]++;
         }
+        if (vote.transactionDigest == m256i::zero()) {
+            voteForEmptyTick++;
+        }
     }
-
+    bool isEmptyTick = voteForEmptyTick > 225;
     // Find datetime with at least 451 votes
     for (const auto& pair : datetimeCount) {
         if (pair.second >= 451) {
             return pair.first;  // Return the unix timestamp
+        }
+        if (isEmptyTick && pair.second > 225) {
+            return pair.first;
         }
     }
 
