@@ -60,7 +60,7 @@ struct GlobalState {
     m256i nodePrivatekey;
     std::string nodeIdentity;
 
-    bool gIsEndEpoch = false;
+    std::atomic<bool> gIsEndEpoch{false};
     bool gAllowReceiveLogFromIncomingConnection = false;
 
     std::map<m256i, bool> gTrustedEntities;

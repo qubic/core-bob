@@ -150,6 +150,7 @@ static void indexTick(uint32_t tick, const TickData &td) {
         // no index for oracle message
         auto& le  = vle[i];
         int txId = logrange.scanTxId(txOrder, lastTxId, le.getLogId());
+        if (txId < 0) continue;
         lastTxId = txId;
         if (indexerIgnoreList[txOrder[txId]]) continue;
         auto type = le.getType();

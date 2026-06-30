@@ -29,7 +29,7 @@ bool QubicRpcMethods::isValidIdentityFormat(const std::string& identity) {
             return false;
         }
     }
-    return true;
+    return checkSumIdentity(identity.c_str());
 }
 
 bool QubicRpcMethods::isValidIdentityInput(const std::string& input) {

@@ -147,6 +147,7 @@ bool db_delete_many_from_redis(const std::vector<std::string>& keys)
 bool db_delete_logs_from_redis(uint16_t epoch, long long start, long long end)
 {
     if (!g_redis) return false;
+    if (end < start) return true;
     try {
         std::vector<std::string> keys;
         keys.reserve(end - start + 1);

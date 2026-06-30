@@ -87,7 +87,7 @@ AssetBalanceInfo getAssetBalanceInfo(const std::string& identity,
         return info;
     }
 
-    m256i pk, issuer;
+    m256i pk{}, issuer{};
     uint64_t asset_name = 0;
 
     getPublicKeyFromIdentity(identity.c_str(), pk.m256i_u8);
@@ -497,6 +497,10 @@ BroadcastResult broadcastTransaction(const std::string& signedTxHex) {
     }
 
     // Validate transaction structure
+    if (txData.size() < sizeof(RequestResponseHeader) + sizeof(Transaction) + SIGNATURE_SIZE) {
+        result.error = "Invalid transaction size";
+        return result;
+    }
     auto tx = reinterpret_cast<Transaction*>(txData.data() + sizeof(RequestResponseHeader));
     size_t expectedSize = sizeof(RequestResponseHeader) + sizeof(Transaction) + tx->inputSize + SIGNATURE_SIZE;
 

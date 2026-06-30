@@ -766,6 +766,7 @@ verifyNodeStateDigest:
             {
                 if (vote.transactionDigest == m256i::zero()) emptyTick++;
                 else nonEmptyTick++;
+                if (vote.computorIndex >= NUMBER_OF_COMPUTORS) continue;
                 saltedDataSpectrum[0] = computorsList.publicKeys[vote.computorIndex];
                 saltedDataUniverse[0] = computorsList.publicKeys[vote.computorIndex];
                 m256i salted;
