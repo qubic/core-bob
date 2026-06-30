@@ -35,6 +35,9 @@ void processTickVote(uint8_t* ptr)
     if (vote->tick > gCurrentVerifyLoggingTick + 2000) {
         return; // too far in the future, this may cause bob crashing because out of memory
     }
+    if (vote->computorIndex >= NUMBER_OF_COMPUTORS) {
+        return; // untrusted index; publicKeys[] has only NUMBER_OF_COMPUTORS entries
+    }
     uint8_t* compPubkey = computorsList.publicKeys[vote->computorIndex].m256i_u8;
     vote->computorIndex ^= 3;
     bool ok = verifySignature((void *) vote, compPubkey, sizeof(TickVote));
@@ -87,6 +90,9 @@ void processTickData(uint8_t* ptr, uint32_t payloadSize)
     }
     if (data->tick > gCurrentVerifyLoggingTick + 2000) {
         return; // too far in the future, this may cause bob crashing because out of memory
+    }
+    if (data->computorIndex >= NUMBER_OF_COMPUTORS) {
+        return; // untrusted index; publicKeys[] has only NUMBER_OF_COMPUTORS entries
     }
     uint8_t* compPubkey = computorsList.publicKeys[data->computorIndex].m256i_u8;
     data->computorIndex ^= 8;
@@ -207,6 +213,15 @@ void processLogEvent(const uint8_t* _ptr, uint32_t chunkSize, const RequestRespo
     while (offset < chunkSize)
     {
         auto ptr = _ptr + offset;
+        // Bound every read against the bytes actually present in this chunk.
+        // messageSize comes straight off the wire (peer-controlled, up to ~16MB)
+        // and is used unbounded below, so without these guards the header reads
+        // and updateContent() memcpy can run far past the packet buffer.
+        uint32_t remaining = chunkSize - offset;
+        if (remaining < LogEvent::PackedHeaderSize)
+        {
+            break; // not enough bytes left for even a record header
+        }
         uint16_t epoch;
         uint32_t tick;
         uint32_t tmp;
@@ -216,6 +231,10 @@ void processLogEvent(const uint8_t* _ptr, uint32_t chunkSize, const RequestRespo
         memcpy((void*)&tmp, ptr + 6, sizeof(tmp));
         memcpy((void*)&logId, ptr + 10, sizeof(logId));
         uint32_t messageSize = tmp & 0x00FFFFFF;
+        if ((uint64_t)messageSize + LogEvent::PackedHeaderSize > remaining)
+        {
+            break; // record claims more bytes than the chunk holds
+        }
         LogEvent le;
         le.updateContent(ptr, messageSize + LogEvent::PackedHeaderSize);
         if (le.selfCheck(gCurrentProcessingEpoch, false /*don't need to show log*/))

@@ -166,6 +166,13 @@ void QubicConnection::receiveAFullPacket(RequestResponseHeader& header, std::vec
     {
         throw std::logic_error("Malformed header data.");
     }
+    // Lower bound: a packet must be at least the header itself. A peer can put
+    // any 24-bit value in the size field; values 1..7 would make buffer smaller
+    // than the header and the memcpy below would overflow the heap allocation.
+    if (packet_size < (int)sizeof(RequestResponseHeader))
+    {
+        throw std::logic_error("Malformed header data (size < header).");
+    }
     buffer.resize(header.size());
     memcpy(buffer.data(), &header, sizeof(RequestResponseHeader));
     // receive the rest

@@ -426,9 +426,15 @@ void connReceiver(QCPtr conn, const bool isTrustedNode)
             {
                 conn->trackLastActivity(); // track it when this peer sends something meaningful
                 if (hdr.type() == RESPOND_CURRENT_TICK_INFO) { // peer reports for their latest tick, just need to update here
-                    CurrentTickInfo currentTickInfo;
-                    memcpy(&currentTickInfo, packet.data() + 8, sizeof(currentTickInfo));
-                    conn->updateLatestTick(currentTickInfo.tick);
+                    // packet is sized to the peer-supplied header size; a short
+                    // packet would make this memcpy read past the buffer end.
+                    if (packet.size() < 8 + sizeof(CurrentTickInfo)) {
+                        Logger::get()->warn("Short RESPOND_CURRENT_TICK_INFO packet: {} bytes", packet.size());
+                    } else {
+                        CurrentTickInfo currentTickInfo;
+                        memcpy(&currentTickInfo, packet.data() + 8, sizeof(currentTickInfo));
+                        conn->updateLatestTick(currentTickInfo.tick);
+                    }
                 } else {
                     // Record which peer delivered this response so downstream
                     // processors (e.g. processLogEvent) can attribute the

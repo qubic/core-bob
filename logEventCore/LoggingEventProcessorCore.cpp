@@ -219,6 +219,15 @@ bool processSendToManyBenchmark(LogEvent& le)
         int64_t dstCount;
         int64_t numTransfersEach;
     };
+    // The dispatcher only guarantees getLogSize() >= 8 (contractId+logType).
+    // selfCheck() enforces no minimum body size for CONTRACT_*_MESSAGE types,
+    // so a crafted event can be smaller than this struct. Reject before deref.
+    if (le.getLogSize() < sizeof(QUTILSendToManyBenchmarkLog))
+    {
+        Logger::get()->warn("processSendToManyBenchmark: log body too small ({}), need {}",
+                            le.getLogSize(), sizeof(QUTILSendToManyBenchmarkLog));
+        return false;
+    }
     auto s = (QUTILSendToManyBenchmarkLog*)le.getLogBodyPtr();
     struct
     {
