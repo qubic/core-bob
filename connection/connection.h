@@ -57,7 +57,9 @@ public:
     uint64_t getLastActivityTimestamp();
     void replacePeer(const std::string& ip, const uint16_t port) {
         memset(mNodeIp, 0, 32);
-        memcpy(mNodeIp, ip.c_str(), ip.size());
+        size_t n = ip.size();
+        if (n > sizeof(mNodeIp) - 1) n = sizeof(mNodeIp) - 1;
+        memcpy(mNodeIp, ip.c_str(), n);
         mNodePort = port;
     }
     void askForLatestTick();

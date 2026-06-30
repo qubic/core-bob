@@ -181,7 +181,7 @@ Json::Value QubicRpcWebSocket::processRequest(
     }
 
     // Check jsonrpc version
-    if (!request.isMember("jsonrpc") || request["jsonrpc"].asString() != "2.0") {
+    if (!request.isMember("jsonrpc") || !request["jsonrpc"].isString() || request["jsonrpc"].asString() != "2.0") {
         return QubicRpcHandler::makeError(request.get("id", Json::Value::null),
                         QubicRpcError::INVALID_REQUEST, "Invalid JSON-RPC version");
     }

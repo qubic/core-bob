@@ -530,7 +530,7 @@ int runBob(int argc, char *argv[])
             Logger::get()->info("-----[PEER INFO]-----");
             for (int i = 0; i < connPool.size(); i++) {
                 QCPtr qc;
-                connPool.get(i,qc);
+                if (!connPool.get(i,qc) || !qc) continue;
                 Logger::get()->info("Peer {}:{} => Last Activity: {} seconds ago",
                     qc->getNodeIp(), qc->getNodePort(), (uint32_t)(time(nullptr) - qc->getLastActivityTimestamp()));
             }

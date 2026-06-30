@@ -660,6 +660,7 @@ gatherAllLoggingEvents:
                                     else
                                     {
                                         Logger::get()->error("Expecting OP_END_DISTRIBUTE_DIVIDENDS, but received {}", msg);
+                                        break;
                                     }
                                 }
                             }

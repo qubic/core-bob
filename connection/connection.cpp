@@ -468,6 +468,10 @@ bool parseEndpoint(const std::string endpoint, ParsedEndpoint& parsed) {
     }
     auto p2 = rest.find(':', p1 + 1);
     std::string ip = rest.substr(0, p1);
+    if (ip.empty() || ip.size() > 15) {
+        Logger::get()->warn("Skipping endpoint '{}': invalid ip '{}'", endpoint, ip);
+        return false;
+    }
     std::string port_str;
     std::string passcode_str;
 
