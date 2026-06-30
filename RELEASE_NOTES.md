@@ -7,6 +7,12 @@ behavior.
 
 For exact commit boundaries, see `git log v<a>..v<b>`.
 ---
+## 1.5.12
+
+- Fix several memory bugs
+- Update fourq verify
+
+---
 ## 1.5.11
 
 - **Faster catch-up**: `future-offset` default raised to **10**. The docker image previously shipped `3`, which throttled sync to ~3 ticks of look-ahead pipelining; it is now consistent across the code default, [docker/bob.json](docker/bob.json), [default_config_bob.json](default_config_bob.json), and docs. Raise via `FUTURE_OFFSET` to accelerate large initial syncs.
