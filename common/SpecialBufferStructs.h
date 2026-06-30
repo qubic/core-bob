@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <mutex>
 #include <condition_variable>
+#include <atomic>
 #include <thread>
 #include <climits>
 #include <cstring> // For memcpy
@@ -66,8 +67,11 @@ public:
         // Wait until there is enough space for the entire packet.
         // A loop is necessary to handle spurious wakeups.
         cv_not_full_.wait(lock, [this, packet_size] {
-            return capacity_ - size_ >= packet_size;
+            return stop_ || (capacity_ - size_ >= packet_size);
         });
+        if (stop_) {
+            return false;
+        }
         // Write the packet data into the buffer, handling wraparound if necessary.
         if (tail_ + packet_size <= capacity_) {
             // The packet fits without wrapping around.
@@ -141,6 +145,15 @@ public:
      * @brief Returns a string containing the current buffer usage information.
      * @return String with buffer size, capacity, and usage percentage.
      */
+    void notifyStop() {
+        {
+            std::unique_lock<std::mutex> lock(mtx_);
+            stop_ = true;
+        }
+        cv_not_full_.notify_all();
+        cv_not_empty_.notify_all();
+    }
+
     std::string GetBufferUsageString() {
         std::lock_guard<std::mutex> lock(mtx_);
         double usage_percent = (static_cast<double>(size_) / capacity_) * 100.0;
@@ -175,6 +188,7 @@ private:
     std::mutex mtx_;
     std::condition_variable cv_not_full_;
     std::condition_variable cv_not_empty_;
+    std::atomic<bool> stop_{false};
 };
 
 struct dataWithTime

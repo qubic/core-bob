@@ -445,12 +445,14 @@ std::string getCustomLog(uint32_t scIndex, uint32_t logType,
             }
         }
 
+        if (logTxOrderIndex < 0 || logTxOrderIndex >= (int)logTxOrder.size()) break;
         int txIndex = logTxOrder[logTxOrderIndex];
         auto s = lr.fromLogId[txIndex];
         auto e = s + lr.length[txIndex] - 1;
         if (id > e) // processed all, move the cursor to next tx
         {
             logTxOrderIndex++; // continous log, don't need to scan
+            if (logTxOrderIndex >= (int)logTxOrder.size()) break;
             txIndex = logTxOrder[logTxOrderIndex];
         }
 

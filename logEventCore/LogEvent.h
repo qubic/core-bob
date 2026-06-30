@@ -168,6 +168,7 @@ private:
             case 11:  /* ASSET_OWNERSHIP_MANAGING_CONTRACT_CHANGE */ return sizeof(AssetOwnershipManagingContractChange);
             case 12:  /* ASSET_POSSESSION_MANAGING_CONTRACT_CHANGE */ return sizeof(AssetPossessionManagingContractChange);
             case 10:  /* SPECTRUM_STATS (not decoded here) */    return 0;
+            case 13:  /* CONTRACT_RESERVE_DEDUCTION */           return sizeof(ContractReserveDeduction);
             case 4:   /* CONTRACT_ERROR_MESSAGE */               return 0;
             case 5:   /* CONTRACT_WARNING_MESSAGE */             return 0;
             case 6:   /* CONTRACT_INFORMATION_MESSAGE */         return 0;

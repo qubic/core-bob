@@ -255,7 +255,18 @@ bool processSendToManyBenchmark(LogEvent& le)
     locals.currentId = s->startId;
     locals.useNext = 1;
 
-    while (output.dstCount < input.dstCount)
+    // dstCount/numTransfersEach are read from an untrusted log body. A valid
+    // SendToMany cannot move more QU than the source contract holds; its energy
+    // is reconstructed from signature- and quorum-verified state, so it is the
+    // legitimate upper bound. Bounding total transfers by it stops a forged
+    // value from spinning the verifier forever (legit data never reaches it).
+    if (input.dstCount <= 0 || input.numTransfersEach <= 0)
+        return true; // no transfers => no spectrum change
+    int benchSrcIdx = spectrumIndex(m256i(4, 0, 0, 0));
+    int64_t maxTotal = (benchSrcIdx < 0) ? 0 : energy(benchSrcIdx);
+    int noProgress = 0;
+
+    while (output.dstCount < input.dstCount && output.total < maxTotal)
     {
         if (locals.useNext == 1)
             locals.currentId = qpi_next_id(locals.currentId);
@@ -265,11 +276,13 @@ bool processSendToManyBenchmark(LogEvent& le)
         {
             locals.currentId = s->startId;
             locals.useNext = 1 - locals.useNext;
+            if (++noProgress >= 2) break; // no reachable ids in either direction
             continue;
         }
+        noProgress = 0;
 
         output.dstCount++;
-        for (locals.t = 0; locals.t < input.numTransfersEach; locals.t++)
+        for (locals.t = 0; locals.t < input.numTransfersEach && output.total < maxTotal; locals.t++)
         {
             //qpi.transfer(locals.currentId, 1);
             // simulate this with QU_TRANSFER qt

@@ -467,7 +467,7 @@ void replyLogEvent(QCPtr& conn, uint32_t dejavu, uint8_t* ptr)
         conn->sendEndPacket();
         return;
     }
-    if (request->toid - request->fromid + 1 >= 1000)
+    if (request->toid < request->fromid || request->toid - request->fromid + 1 >= 1000)
     {
         conn->sendEndPacket();
         return;

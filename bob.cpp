@@ -228,7 +228,7 @@ int runBob(int argc, char *argv[])
 
     if (computorsList.epoch != gCurrentProcessingEpoch.load())
     {
-        while (computorsList.epoch != gCurrentProcessingEpoch.load())
+        while (computorsList.epoch != gCurrentProcessingEpoch.load() && !gStopFlag.load())
         {
             getComputorList(connPool, cfg.arbitrator_identity);
             SLEEP(1000);
@@ -253,7 +253,7 @@ int runBob(int argc, char *argv[])
         verifyLoggingEvent();
     });
 
-    while (gCurrentIndexingTick == 0 || gCurrentVerifyLoggingTick == 0) SLEEP(100);
+    while ((gCurrentIndexingTick == 0 || gCurrentVerifyLoggingTick == 0) && !gStopFlag.load()) SLEEP(100);
     if (gCurrentFetchingTick < gCurrentVerifyLoggingTick)
     {
         Logger::get()->critical("Illegal DB status: gCurrentFetchingTick < gCurrentVerifyLoggingTick");
@@ -585,6 +585,9 @@ int runBob(int argc, char *argv[])
         Logger::get()->info("Closed Qubic server at port 21842");
     }
 
+    // Wake any recv thread parked in MRB EnqueuePacket so join() cannot deadlock.
+    MRB_Data.notifyStop();
+    MRB_Request.notifyStop();
     // Now the receivers can drain and exit.
     for (auto& thr : v_recv_thread) thr.join();
     Logger::get()->info("Exited recv threads");
