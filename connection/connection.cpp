@@ -2,6 +2,7 @@
 #include <memory>
 #include <stdexcept>
 #include <algorithm> // For std::min
+#include <chrono>
 #include <thread>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -122,6 +123,8 @@ QubicConnection::~QubicConnection()
 
 int QubicConnection::receiveData(uint8_t* buffer, int sz)
 {
+    // Total per-packet deadline; SO_RCVTIMEO alone allows endless dribble.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
     int count = 0;
     while (sz > 0)
     {
@@ -144,6 +147,11 @@ int QubicConnection::receiveData(uint8_t* buffer, int sz)
         }
         count += ret;
         sz -= ret;
+        if (sz > 0 && std::chrono::steady_clock::now() >= deadline)
+        {
+            errno = ETIMEDOUT; // caller reports strerror -> "Connection timed out"
+            return -1;
+        }
     }
 	return count;
 }

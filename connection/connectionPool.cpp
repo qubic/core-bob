@@ -265,12 +265,8 @@ bool ConnectionPool::checkExistIp(const std::string& ip) const {
 
 void peerWatchdog(ConnectionPool& conns_, bool allowDnsReplace)
 {
-    // Idle-disconnect: any connection silent longer than this is presumed
-    // dead. Calling disconnect() lets the IO loop reconnect to the same
-    // (ip, port) — see QubicConnection::reconnect(). 60s is well above
-    // normal request latency (sub-second) and short enough to catch silent
-    // half-open sockets before the user notices.
-    constexpr uint64_t IDLE_DISCONNECT_S = 60;
+    // No useful incoming data for 300s -> force reconnect.
+    constexpr uint64_t IDLE_DISCONNECT_S = 300;
     std::chrono::seconds checkPeriodIdleDisconnect = std::chrono::seconds(30);
     std::chrono::seconds checkPeriodPeerRefresh = std::chrono::seconds(180); // 3 minutes
     std::chrono::seconds checkPeriodLastTick = std::chrono::seconds(60); // 1 min
@@ -366,7 +362,8 @@ void peerWatchdog(ConnectionPool& conns_, bool allowDnsReplace)
                 QCPtr qc;
                 if (conns_.get(i,qc)) {
                     if (qc) {
-                        if (!qc->isSocketValid()) {
+                        // Keep-alive so healthy idle peers avoid idle-disconnect.
+                        if (qc->isSocketValid()) {
                             qc->askForLatestTick();
                         }
                     }
