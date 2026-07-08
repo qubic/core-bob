@@ -180,59 +180,12 @@ std::string bobGetLog(uint16_t epoch, int64_t start, int64_t end)
     bool first = true;
     TickData td{0};
     LogRangesPerTxInTick lr{-1};
-    int logTxOrderIndex = 0;
-    std::vector<int> logTxOrder;
-    uint32_t prevTick = 0;
     for (int64_t id = start; id <= end; ++id) {
         LogEvent log;
         if (db_try_get_log(epoch, static_cast<uint64_t>(id), log)) {
-            if (log.getTick() != prevTick) {
-                prevTick = log.getTick();
-                logTxOrderIndex = 0; // reset this back to 0 everytime it process a new tick
-            }
-
-            bool gotRanges = db_try_get_log_ranges(log.getTick(), lr);
-            if (!gotRanges)
-            {
-                uint32_t endEpochTick = 0;
-                if (db_get_u32("end_epoch_tick:" + std::to_string(epoch), endEpochTick)
-                    && endEpochTick == log.getTick())
-                {
-                    gotRanges = db_try_get_log_ranges_with_key(
-                        "end_epoch:log_ranges:" + std::to_string(epoch), lr);
-                }
-            }
-
-            if (!gotRanges)
-            {
-                Json::Value err(Json::objectValue);
-                err["ok"] = false;
-                err["error"] = "Missing log range " + std::to_string(log.getTick())
-                               + ". Cannot process logging events";
-                err["epoch"] = epoch;
-                err["logId"] = Json::UInt64(static_cast<uint64_t>(id));
-                Json::StreamWriterBuilder wb;
-                wb["indentation"] = "";
-                std::string js = Json::writeString(wb, err);
-                if (!first) result.push_back(',');
-                result += js;
-                result.push_back(']');
-                return result;
-            }
-
-            logTxOrder = lr.sort();
-            // scan to find the first cursor
-            logTxOrderIndex = lr.scanTxId(logTxOrder, logTxOrderIndex, log.getLogId());
-            int txIndex;
-            if (logTxOrderIndex == -1)
-            {
-                // bob should return the log if it exists, just don't map to a tx
-                logTxOrderIndex = 0; // reset the cursor back to 0
-                txIndex = -1;
-            }
-            else {
-                txIndex = logTxOrder[logTxOrderIndex];
-            }
+            // Resolves SC_END_EPOCH_TX via the epoch's migrated ranges too.
+            int txIndex = ApiHelpers::resolveTxIndexForLog(
+                epoch, log.getTick(), log.getLogId(), lr);
 
             if (log.getTick() != gInitialTick && txIndex < NUMBER_OF_TRANSACTIONS_PER_TICK && txIndex >= 0)
             {

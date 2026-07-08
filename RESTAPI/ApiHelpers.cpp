@@ -210,6 +210,27 @@ uint16_t resolveEpochForTick(uint32_t tick) {
     return gCurrentProcessingEpoch.load();
 }
 
+int resolveTxIndexForLog(uint16_t epoch, uint32_t tick, uint64_t logId,
+                         LogRangesPerTxInTick& lrOut) {
+    auto scan = [&]() -> int {
+        auto order = lrOut.sort();
+        int pos = lrOut.scanTxId(order, 0, static_cast<long long>(logId));
+        return pos == -1 ? -1 : order[pos];
+    };
+    if (db_try_get_log_ranges(tick, lrOut)) {
+        int idx = scan();
+        if (idx != -1) return idx;
+    }
+    // Fall back to the epoch's migrated END_EPOCH ranges.
+    for (const char* prefix : {"end_epoch:log_ranges:", "backup_end_epoch:log_ranges:"}) {
+        if (db_try_get_log_ranges_with_key(prefix + std::to_string(epoch), lrOut)) {
+            int idx = scan();
+            if (idx != -1) return idx;
+        }
+    }
+    return -1;
+}
+
 Json::Value tickVoteToJson(const TickVote& vote) {
     Json::Value voteObj(Json::objectValue);
 
