@@ -410,6 +410,14 @@ namespace {
                             topics[i-1] = normalized;
                         }
 
+                        // Clamp the tick window to bound work per request (parity
+                        // with the JSON-RPC getLogs path, which caps at +1000).
+                        if (endTick < startTick) endTick = startTick;
+                        const uint32_t MAX_RANGE = 1000;
+                        if (endTick - startTick > MAX_RANGE) {
+                            endTick = startTick + MAX_RANGE;
+                        }
+
                         // Reuse the existing find API with a single-tick window
                         std::string result = getCustomLog(scIndex, logType, topics[0], topics[1], topics[2], epoch, startTick, endTick);
                         callback(makeJsonResponse(result));

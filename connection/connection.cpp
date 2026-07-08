@@ -121,14 +121,17 @@ QubicConnection::~QubicConnection()
     }
 }
 
-int QubicConnection::receiveData(uint8_t* buffer, int sz)
+int QubicConnection::receiveData(uint8_t* buffer, int sz, int fd)
 {
     // Total per-packet deadline; SO_RCVTIMEO alone allows endless dribble.
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
     int count = 0;
     while (sz > 0)
     {
-        auto ret = recv(mSocket, (char*)buffer + count, std::min(1024, sz), 0);
+        // fd is snapshotted by the caller; a concurrent reconnect() cannot
+        // swap it mid-packet (which would splice two streams). If disconnect()
+        // closes it, recv() returns EBADF -> error -> caller reconnects.
+        auto ret = recv(fd, (char*)buffer + count, std::min(1024, sz), 0);
         if (ret < 0)
         {
             if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
@@ -157,8 +160,11 @@ int QubicConnection::receiveData(uint8_t* buffer, int sz)
 }
 void QubicConnection::receiveAFullPacket(RequestResponseHeader& header, std::vector<uint8_t>& buffer)
 {
+    // Snapshot the fd once for the whole packet so header and body come from
+    // the same socket even if another thread reconnects mid-read.
+    int fd = mSocket.load(std::memory_order_relaxed);
     // first receive the header
-    int recvByte = receiveData((uint8_t*)&header, sizeof(RequestResponseHeader));
+    int recvByte = receiveData((uint8_t*)&header, sizeof(RequestResponseHeader), fd);
     if (recvByte < 0)
     {
         // errno was preserved by the failing recv(). Most common cause is
@@ -185,7 +191,7 @@ void QubicConnection::receiveAFullPacket(RequestResponseHeader& header, std::vec
     memcpy(buffer.data(), &header, sizeof(RequestResponseHeader));
     // receive the rest
     int remaining_size = packet_size - sizeof(RequestResponseHeader);
-    recvByte = receiveData(buffer.data() + sizeof(RequestResponseHeader), remaining_size);
+    recvByte = receiveData(buffer.data() + sizeof(RequestResponseHeader), remaining_size, fd);
     if (recvByte != remaining_size) throw std::logic_error("Not received enough data.");
 }
 
@@ -205,24 +211,30 @@ void QubicConnection::sendThread()
     uint32_t size;
     while (!shouldStop)
     {
-        if (mSocket != -1 && mBuffer->TryGetPacket(local_buf.data(), size))
+        int fd = mSocket.load(std::memory_order_relaxed);
+        if (fd != -1 && mBuffer->TryGetPacket(local_buf.data(), size))
         {
+            // Snapshot fd for the whole packet: sending one packet across two
+            // different sockets (if reconnect() swaps mid-loop) would corrupt
+            // both streams. If disconnect() closes fd, send() errors -> break.
             auto buffer = local_buf.data();
-            while (size > 0 && mSocket != -1) {
-                int numberOfBytes = send(mSocket, buffer, size, MSG_NOSIGNAL);
+            while (size > 0) {
+                int numberOfBytes = send(fd, buffer, size, MSG_NOSIGNAL);
                 if (numberOfBytes < 0) {
                     if (errno == EINTR) {
                         // Interrupted by a signal, retry the send
                         continue;
                     }
                     // Peer likely closed (EPIPE) or connection reset, mark socket invalid
-                    Logger::get()->debug("send() failed on socket {} with errno {}. Disconnecting.", mSocket, errno);
+                    Logger::get()->debug("send() failed on socket {} with errno {}. Disconnecting.", fd, errno);
                     disconnect();
+                    break;
                 }
                 if (numberOfBytes == 0) {
                     // Treat as closed
-                    Logger::get()->debug("send() returned 0 on socket {}. Disconnecting.", mSocket);
+                    Logger::get()->debug("send() returned 0 on socket {}. Disconnecting.", fd);
                     disconnect();
+                    break;
                 }
                 buffer += numberOfBytes;
                 size   -= numberOfBytes;
@@ -383,10 +395,15 @@ void QubicConnection::getBootstrapTickInfo(uint32_t& tick, uint16_t& epoch)
 
 void QubicConnection::disconnect()
 {
-    if (mSocket >= 0) {
-        shutdown(mSocket, SHUT_RDWR);
-        close(mSocket);
-        mSocket = -1;
+    // Grab the fd atomically so only one thread ever closes it. Without this,
+    // disconnect() (watchdog/sendThread) racing reconnect() (receiver) could
+    // both close the same fd; a third thread reopening that fd number in the
+    // gap would then have its live socket closed by the second close().
+    std::lock_guard<std::mutex> lk(mSocketMutex);
+    int fd = mSocket.exchange(-1);
+    if (fd >= 0) {
+        shutdown(fd, SHUT_RDWR);
+        close(fd);
     }
 }
 
@@ -406,9 +423,11 @@ bool QubicConnection::reconnect()
         Logger::get()->debug("reconnect() called on a non-reconnectable connection.");
         return false;
     }
-    if (mSocket >= 0) {
-        close(mSocket);
-        mSocket = -1;
+    // Serialize with disconnect()/replacePeer(); single-close via exchange.
+    std::lock_guard<std::mutex> lk(mSocketMutex);
+    int old = mSocket.exchange(-1);
+    if (old >= 0) {
+        close(old);
     }
 
     // Attempt to re-establish connection
@@ -416,11 +435,10 @@ bool QubicConnection::reconnect()
     if (newSocket < 0) {
         Logger::get()->warn("reconnect() failed for {}:{} (errno {} = {})",
                             mNodeIp, mNodePort, errno, strerror(errno));
-        mSocket = -1;
         return false;
     }
 
-    mSocket = newSocket;
+    mSocket.store(newSocket);
     // Reset activity stamp so the watchdog doesn't immediately re-fire on the
     // freshly-opened socket before any data has had a chance to flow.
     lastActivityTimestamp.store(std::time(nullptr), std::memory_order_relaxed);
