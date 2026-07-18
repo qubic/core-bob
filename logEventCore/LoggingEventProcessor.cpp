@@ -23,6 +23,7 @@
 #include <future>
 #include "LoggingEventProcessorCore.h"
 #include "RESTAPI/QubicSubscriptionManager.h"
+#include "RESTAPI/ApiHelpers.h"
 
 using namespace std::chrono_literals;
 
@@ -692,6 +693,16 @@ verifyNodeStateDigest:
             auto broadcastVerifiedLogs = [&]() {
                 if (QubicSubscriptionManager::instance().getClientCount() == 0) return;
                 try {
+                    // Tick data may be missing (empty ticks, virtual end-epoch tick); still deliver logs.
+                    auto notifyTick = [](uint32_t tick, const std::vector<LogEvent>& tickLogs) {
+                        TickData td{0};
+                        if (db_try_get_tick_data(tick, td)) {
+                            QubicSubscriptionManager::instance().onNewTick(tick, td);
+                        } else {
+                            ApiHelpers::backfillTickTimeFromPrev(tick, td);
+                        }
+                        QubicSubscriptionManager::instance().onNewLogs(tick, tickLogs, td);
+                    };
                     if (!vle.empty()) {
                         // Group logs by tick for proper ordering
                         uint32_t currentTick = 0;
@@ -699,22 +710,14 @@ verifyNodeStateDigest:
                         for (const auto& log : vle) {
                             uint32_t logTick = log.getTick();
                             if (logTick != currentTick && !tickLogs.empty()) {
-                                TickData td{0};
-                                if (db_try_get_tick_data(currentTick, td)) {
-                                    QubicSubscriptionManager::instance().onNewTick(currentTick, td);
-                                    QubicSubscriptionManager::instance().onNewLogs(currentTick, tickLogs, td);
-                                }
+                                notifyTick(currentTick, tickLogs);
                                 tickLogs.clear();
                             }
                             currentTick = logTick;
                             tickLogs.push_back(log);
                         }
                         if (!tickLogs.empty()) {
-                            TickData td{0};
-                            if (db_try_get_tick_data(currentTick, td)) {
-                                QubicSubscriptionManager::instance().onNewTick(currentTick, td);
-                                QubicSubscriptionManager::instance().onNewLogs(currentTick, tickLogs, td);
-                            }
+                            notifyTick(currentTick, tickLogs);
                         }
                     } else {
                         // No logs but we still need to notify newTicks subscribers

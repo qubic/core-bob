@@ -11,6 +11,7 @@
 #include <sstream>
 #include <iomanip>
 #include <cstring>
+#include <ctime>
 
 namespace ApiHelpers {
 
@@ -208,6 +209,32 @@ uint16_t resolveEpochForTick(uint32_t tick) {
         return td.epoch;
     }
     return gCurrentProcessingEpoch.load();
+}
+
+void backfillTickTimeFromPrev(uint32_t tick, TickData& td) {
+    TickData prev{};
+    if (db_try_get_tick_data(tick - 1, prev) && prev.epoch != 0) {
+        td.millisecond = prev.millisecond;
+        td.second = prev.second;
+        td.minute = prev.minute;
+        td.hour = prev.hour;
+        td.day = prev.day;
+        td.month = prev.month;
+        td.year = prev.year;
+    } else {
+        uint64_t ts = db_get_quorum_unixtime_from_votes(tick - 1);
+        if (ts == 0) return;
+        time_t t = static_cast<time_t>(ts);
+        std::tm tmv{};
+        gmtime_r(&t, &tmv);
+        td.year = static_cast<unsigned char>(tmv.tm_year + 1900 - 2000);
+        td.month = static_cast<unsigned char>(tmv.tm_mon + 1);
+        td.day = static_cast<unsigned char>(tmv.tm_mday);
+        td.hour = static_cast<unsigned char>(tmv.tm_hour);
+        td.minute = static_cast<unsigned char>(tmv.tm_min);
+        td.second = static_cast<unsigned char>(tmv.tm_sec);
+    }
+    td.tick = tick;
 }
 
 int resolveTxIndexForLog(uint16_t epoch, uint32_t tick, uint64_t logId,

@@ -7,6 +7,21 @@ behavior.
 
 For exact commit boundaries, see `git log v<a>..v<b>`.
 ---
+## 1.5.14
+
+**END_EPOCH events now reach WebSocket subscribers automatically.** The end-epoch log batch lives on a virtual tick (`lastQuorumTick+1`) that never gets quorum tick data or votes; previously it was silently dropped on every live path.
+
+- **Live `logs`/`transfers` subscriptions**: verified logs on ticks without tick data (the END_EPOCH virtual tick, quorum-empty ticks with logs) are now delivered instead of dropped. Their `timestamp` is backfilled from the previous tick (matching the REST `/epochLogs` convention) instead of `0`.
+- **Live `tickStream` subscriptions**: the indexer now pushes the virtual end-epoch tick's log batch (zeroed tick data, `hasNoTickData: true`, real `timestamp`) before exiting at epoch end. The batch carries the ending epoch's number; the same tick number later re-appears as the next epoch's init tick with the new epoch's number — clients deduplicating across the boundary should key on `(epoch, tick)`, not `tick` alone.
+- **`tickStream` catch-up**: recovered end-epoch logs (backup keys) are now actually merged into the boundary tick's message (previously collected but never emitted), deduplicated against live keys, with `timestamp` backfilled. Catch-up during the 30-minute end-epoch serving window no longer hangs waiting on the exited indexer and now covers the virtual end-epoch tick.
+- **`logs`/`transfers` catch-up**: END_EPOCH events crossing an epoch boundary now resolve `txHash` to `SC_END_EPOCH_TX_<tick>` via the backed-up end-epoch log ranges instead of misattributing them to an unrelated transaction of the reused tick number.
+
+## 1.5.13
+
+**Improve log accessing.**
+- **Fix bug** when accessing END_EPOCH events from previous epoch.
+
+---
 ## 1.5.12
 
 - Fix several memory bugs

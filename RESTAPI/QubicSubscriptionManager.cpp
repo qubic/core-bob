@@ -13,6 +13,7 @@
 #include <cstring>
 #include <thread>
 #include <chrono>
+#include <algorithm>
 
 QubicSubscriptionManager& QubicSubscriptionManager::instance() {
     static QubicSubscriptionManager instance;
@@ -998,7 +999,9 @@ void QubicSubscriptionManager::performCatchUp(
             // SC_INITIALIZE_TX / SC_BEGIN_EPOCH_TX log events are indexed and
             // miss them entirely. The wait is a no-op when catch-up is far
             // behind the cursor (gCurrentIndexingTick is already past tick).
-            while (gCurrentIndexingTick.load() <= tick) {
+            while (gCurrentIndexingTick.load() < tick) {
+                // Virtual end-epoch tick is never indexed; don't wait for it.
+                if (gIsEndEpoch.load() && tick == gCurrentVerifyLoggingTick.load()) break;
                 if (stopFlag_.load() || !conn->connected()) break;
                 SLEEP(100);
             }
@@ -1090,6 +1093,8 @@ void QubicSubscriptionManager::performCatchUp(
             // the source epoch for the SC_END_EPOCH log batch.
             std::vector<LogEvent> endEpochLogs;
             LogRangesPerTxInTick endLr{-1};
+            bool isEndEpochTick = false;
+            uint16_t matchedCandidate = 0;
             {
                 std::vector<uint16_t> candidates;
                 if (epoch > 0) candidates.push_back(static_cast<uint16_t>(epoch - 1));
@@ -1099,6 +1104,8 @@ void QubicSubscriptionManager::performCatchUp(
                     if (!db_get_u32("end_epoch_tick:" + std::to_string(candidate), candidateEndTick))
                         continue;
                     if (candidateEndTick != tick) continue;
+                    isEndEpochTick = true;
+                    matchedCandidate = candidate;
                     long long endStart = -1, endLength = -1;
                     if (db_get_endepoch_log_range_info(candidate, endStart, endLength, endLr)
                         && endStart >= 0 && endLength > 0)
@@ -1107,6 +1114,22 @@ void QubicSubscriptionManager::performCatchUp(
                     }
                     if (!endEpochLogs.empty()) break;
                 }
+            }
+            // Live serving window: end_epoch_tick key lands only after the reorg.
+            if (!isEndEpochTick && gIsEndEpoch.load() && tick == gCurrentVerifyLoggingTick.load()) {
+                isEndEpochTick = true;
+            }
+            // Same-epoch only: logIds are per-epoch, cross-epoch equality means distinct events.
+            if (!endEpochLogs.empty() && !logs.empty() && matchedCandidate == epoch) {
+                // Drop backup logs already present live (keys coexist until the rename runs).
+                std::unordered_set<uint64_t> liveIds;
+                for (const auto& l : logs) liveIds.insert(l.getLogId());
+                endEpochLogs.erase(std::remove_if(endEpochLogs.begin(), endEpochLogs.end(),
+                    [&](const LogEvent& l) { return liveIds.count(l.getLogId()) != 0; }),
+                    endEpochLogs.end());
+            }
+            if (isEndEpochTick && !hasTickData) {
+                ApiHelpers::backfillTickTimeFromPrev(tick, td);
             }
 
             // Build and filter transactions
@@ -1180,6 +1203,24 @@ void QubicSubscriptionManager::performCatchUp(
                 }
             }
 
+            // Merge recovered end-epoch logs; txIndex resolved via backed-up end-epoch log ranges.
+            for (const auto& log : endEpochLogs) {
+                if (matchesAnyLogFilter(log, filter)) {
+                    int txIndex = SC_END_EPOCH_TX;
+                    uint64_t logId = log.getLogId();
+                    for (int i = 0; i < LOG_TX_PER_TICK; ++i) {
+                        if (endLr.fromLogId[i] >= 0 && endLr.length[i] > 0) {
+                            if (static_cast<int64_t>(logId) >= endLr.fromLogId[i] &&
+                                static_cast<int64_t>(logId) < endLr.fromLogId[i] + endLr.length[i]) {
+                                txIndex = i;
+                                break;
+                            }
+                        }
+                    }
+                    matchedLogs.emplace_back(log, txIndex);
+                }
+            }
+
             // Check if we should skip this tick
             bool hasMatches = !matchedTxs.empty() || !matchedLogs.empty();
             bool isHeartbeatTick = (tick % 120 == 0);
@@ -1200,7 +1241,7 @@ void QubicSubscriptionManager::performCatchUp(
             std::string tickJsonStr = buildTickStreamJsonString(
                 tick, epoch, true, td,
                 matchedTxs, matchedLogs,
-                totalTxs, logs.size(),
+                totalTxs, logs.size() + endEpochLogs.size(),
                 filter.includeInputData);
 
             std::string msg = "{\"jsonrpc\":\"2.0\",\"method\":\"qubic_subscription\",\"params\":{\"subscription\":\"" +
@@ -1358,10 +1399,7 @@ void QubicSubscriptionManager::performCatchUp(
                 }
             }
 
-            // (The queued-pending-tick path receives end-epoch logs via the
-            // live broadcastVerifiedLogs queue, so no backup-key recovery
-            // is needed here — only the from-history catch-up loop above
-            // needs it.)
+            // (Pending-tick path gets end-epoch logs via indexer's onVerifiedTick push; no backup-key recovery needed.)
 
             // Check if we should skip this tick
             bool hasMatches = !matchedTxs.empty() || !matchedLogs.empty();
@@ -1467,6 +1505,13 @@ void QubicSubscriptionManager::performLogsCatchUp(
         LogRangesPerTxInTick lr{-1};
         std::vector<int> logTxOrder;
 
+        // End-epoch fallback ranges, loaded once (per-log refetch of 64KB blobs too heavy).
+        uint32_t endEpochTick = 0;
+        db_get_u32("end_epoch_tick:" + std::to_string(epoch), endEpochTick);
+        LogRangesPerTxInTick endLr{-1};
+        std::vector<int> endLrOrder;
+        bool endLrLoaded = false;
+
         while (true) {
             // Check if shutdown is requested
             if (stopFlag_.load()) {
@@ -1548,7 +1593,7 @@ void QubicSubscriptionManager::performLogsCatchUp(
                 }
 
                 // Find transaction index for this log
-                int txIndex = 0;
+                int txIndex = -1;
                 for (int i = 0; i < LOG_TX_PER_TICK; ++i) {
                     if (lr.fromLogId[i] >= 0 && lr.length[i] > 0) {
                         if (static_cast<int64_t>(logId) >= lr.fromLogId[i] &&
@@ -1558,6 +1603,24 @@ void QubicSubscriptionManager::performLogsCatchUp(
                         }
                     }
                 }
+                if (txIndex == -1 && endEpochTick != 0 && log.getTick() == endEpochTick) {
+                    // Per-tick ranges miss END_EPOCH logs after key migration; use cached fallback.
+                    if (!endLrLoaded) {
+                        for (const char* prefix : {"end_epoch:log_ranges:", "backup_end_epoch:log_ranges:"}) {
+                            if (db_try_get_log_ranges_with_key(prefix + std::to_string(epoch), endLr)) {
+                                endLrLoaded = true;
+                                endLrOrder = endLr.sort();
+                                break;
+                            }
+                        }
+                        if (!endLrLoaded) endEpochTick = 0;
+                    }
+                    if (endLrLoaded) {
+                        int pos = endLr.scanTxId(endLrOrder, 0, logId);
+                        if (pos != -1) txIndex = endLrOrder[pos];
+                    }
+                }
+                if (txIndex == -1) txIndex = 0;
 
                 // Convert to log format
                 Json::Value qubicLog = log.parseToJsonValueWithExtraData(td, txIndex);

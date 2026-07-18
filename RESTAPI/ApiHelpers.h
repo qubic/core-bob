@@ -170,6 +170,9 @@ std::string normalizeTopicIdentity(const std::string& input);
 int resolveTxIndexForLog(uint16_t epoch, uint32_t tick, uint64_t logId,
                          LogRangesPerTxInTick& lrOut);
 
+// Fills td's tick and date fields from tick-1, for ticks lacking tick data.
+void backfillTickTimeFromPrev(uint32_t tick, TickData& td);
+
 // Convert a TickVote to its canonical JSON representation. Shared between
 // REST `/tick/{n}` and RPC `qubic_getTickByNumber` so the wire shape stays
 // identical and new fields surface on both surfaces automatically.

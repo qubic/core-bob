@@ -994,6 +994,8 @@ std::string QubicRpcMethods::subscribe(
         // If startTick specified, trigger catch-up
         if (!subId.empty() && startTick > 0) {
             uint32_t currentTick = gCurrentVerifyLoggingTick.load();
+            // During end-epoch serving, include the virtual end-epoch tick.
+            if (gIsEndEpoch.load()) currentTick += 1;
             if (startTick < currentTick) {
                 manager.performCatchUp(conn, subId, startTick, currentTick - 1);
             } else {

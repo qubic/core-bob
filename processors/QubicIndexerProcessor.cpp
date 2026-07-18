@@ -9,6 +9,7 @@
 #include "GlobalVar.h"
 #include "shim.h"
 #include "RESTAPI/QubicSubscriptionManager.h"
+#include "RESTAPI/ApiHelpers.h"
 static bool matchesTransaction(const QuTransfer &transfer, const Transaction &tx) {
     return transfer.sourcePublicKey == tx.sourcePublicKey &&
             transfer.destinationPublicKey == tx.destinationPublicKey &&
@@ -361,6 +362,46 @@ void indexVerifiedTicks()
         uint32_t nextTick = static_cast<uint32_t>(lastIndexed + 1);
         if (nextTick == gCurrentVerifyLoggingTick && gIsEndEpoch)
         {
+            // Virtual end-epoch tick is never indexed; push its END_EPOCH logs to tickStream directly.
+            // Slot check guards against pushing a real tick if the truncation scan misfired.
+            LogRangesPerTxInTick vlr{-1};
+            bool haveRanges = false;
+            for (int attempt = 0; attempt < 5 && !haveRanges; ++attempt) {
+                haveRanges = db_try_get_log_ranges(nextTick, vlr);
+                if (haveRanges) break;
+                if (gStopFlag.load(std::memory_order_relaxed)) break;
+                SLEEP(200);
+            }
+            bool isVirtualEndTick = haveRanges
+                && vlr.fromLogId[SC_END_EPOCH_TX] != -1 && vlr.length[SC_END_EPOCH_TX] > 0;
+            if (!isVirtualEndTick) {
+                Logger::get()->warn("QubicIndexer: tick {} lacks SC_END_EPOCH_TX ranges; skipping end-epoch push", nextTick);
+            }
+            if (isVirtualEndTick && QubicSubscriptionManager::instance().getClientCount() > 0) {
+                try {
+                    uint16_t epoch = gCurrentProcessingEpoch;
+                    bool success = false;
+                    std::vector<LogEvent> logs;
+                    // One-shot push; retry transient read failures (empty + !success).
+                    for (int attempt = 0; attempt < 5; ++attempt) {
+                        logs = db_get_logs_by_tick_range(epoch, nextTick, nextTick, success);
+                        if (success && !logs.empty()) break;
+                        if (gStopFlag.load(std::memory_order_relaxed)) break;
+                        SLEEP(200);
+                    }
+                    if (!logs.empty()) {
+                        TickData td{};
+                        ApiHelpers::backfillTickTimeFromPrev(nextTick, td);
+                        QubicSubscriptionManager::instance().onVerifiedTick(nextTick, epoch, logs, td);
+                    } else {
+                        Logger::get()->warn("QubicIndexer: could not read END_EPOCH logs for virtual tick {}", nextTick);
+                    }
+                } catch (const std::exception& e) {
+                    Logger::get()->warn("QubicIndexer: end-epoch tickStream notification failed for tick {}: {}", nextTick, e.what());
+                } catch (...) {
+                    Logger::get()->warn("QubicIndexer: end-epoch tickStream notification failed for tick {}: unknown error", nextTick);
+                }
+            }
             // the final thread in bob 4-processors model
             Logger::get()->info("Finish indexing last tick. Exiting...");
             break;
