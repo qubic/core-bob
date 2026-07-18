@@ -6,6 +6,7 @@
 #include <random>
 #include <algorithm>
 #include <atomic>
+#include <mutex>
 #include "structs.h"
 #include "SpecialBufferStructs.h"
 #define NODE_TYPE_ANY 0
@@ -26,7 +27,7 @@ class QubicConnection
 public:
     QubicConnection(const char* nodeIp, int nodePort);
     ~QubicConnection();
-    int receiveData(uint8_t* buffer, int sz);
+    int receiveData(uint8_t* buffer, int sz, int fd);
     int enqueueSend(uint8_t* buffer, int sz);
     int enqueueWithHeader(uint8_t* buffer, int sz, uint8_t type, bool randomDejavu);
     void receiveAFullPacket(RequestResponseHeader& header, std::vector<uint8_t>& buffer);
@@ -34,7 +35,7 @@ public:
     void disconnect();
     bool isSocketValid()
     {
-        return mSocket>=0;
+        return mSocket.load(std::memory_order_relaxed) >= 0;
     }
     char* getNodeIp() { return mNodeIp;}
     uint16_t getNodePort() { return mNodePort;}
@@ -56,6 +57,8 @@ public:
     void trackLastActivity();
     uint64_t getLastActivityTimestamp();
     void replacePeer(const std::string& ip, const uint16_t port) {
+        // Serialize against reconnect()'s do_connect(mNodeIp,...) read.
+        std::lock_guard<std::mutex> lk(mSocketMutex);
         memset(mNodeIp, 0, 32);
         size_t n = ip.size();
         if (n > sizeof(mNodeIp) - 1) n = sizeof(mNodeIp) - 1;
@@ -85,7 +88,11 @@ private:
     std::atomic<uint64_t> lastActivityTimestamp;
     char mNodeIp[32];
     int mNodePort;
-    int mSocket;
+    std::atomic<int> mSocket;
+    // Serializes fd open/close across receiver, sendThread and watchdog
+    // threads so a concurrent disconnect()/reconnect() can never double-close
+    // an fd (fd-reuse would otherwise close an unrelated live socket).
+    std::mutex mSocketMutex;
     uint32_t mLatestTick;
     std::unique_ptr<MutexRoundBuffer> mBuffer;
     uint64_t mPasscode[4]; // for loggingEvent

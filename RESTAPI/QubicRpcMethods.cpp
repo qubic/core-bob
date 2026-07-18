@@ -758,7 +758,6 @@ Json::Value QubicRpcMethods::getLogs(const Json::Value& filterParams) {
         // Load tick data if changed
         if (logTick != currentTick) {
             db_try_get_tick_data(logTick, td);
-            db_try_get_log_ranges(logTick, lr);
             currentTick = logTick;
             logIndexInTick = 0;
         }
@@ -775,18 +774,8 @@ Json::Value QubicRpcMethods::getLogs(const Json::Value& filterParams) {
             if (!match) continue;
         }
 
-        // Find transaction index
-        int txIndex = 0;
-        uint64_t logId = log.getLogId();
-        for (int i = 0; i < LOG_TX_PER_TICK; ++i) {
-            if (lr.fromLogId[i] >= 0 && lr.length[i] > 0) {
-                if (static_cast<int64_t>(logId) >= lr.fromLogId[i] &&
-                    static_cast<int64_t>(logId) < lr.fromLogId[i] + lr.length[i]) {
-                    txIndex = i;
-                    break;
-                }
-            }
-        }
+        // Resolves SC_END_EPOCH_TX via the epoch's migrated ranges too.
+        int txIndex = ApiHelpers::resolveTxIndexForLog(epoch, logTick, log.getLogId(), lr);
 
         // Convert to Qubic log format
         Json::Value qubicLog = QubicRpc::logEventToQubicLog(log, td, txIndex, logIndexInTick++);

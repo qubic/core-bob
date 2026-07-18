@@ -460,9 +460,11 @@ db_get_combined_log_range_for_ticks(uint32_t startTick, uint32_t endTick, long l
     long long minId = LLONG_MAX;
     long long maxId = -1;
 
-    for (uint32_t tick = startTick; tick <= endTick; tick++) {
+    // 64-bit counter: a uint32_t loop var wraps to 0 forever when
+    // endTick == UINT32_MAX (the `continue` path never breaks out).
+    for (uint64_t tick = startTick; tick <= endTick; tick++) {
         long long tickFromId, tickLength;
-        if (!db_try_get_log_range_for_tick(tick, tickFromId, tickLength)) {
+        if (!db_try_get_log_range_for_tick(static_cast<uint32_t>(tick), tickFromId, tickLength)) {
             continue;
         }
         if (tickFromId != -1 && tickLength != -1) {

@@ -39,6 +39,24 @@ static inline void set_this_thread_name(const char* name_in) {
     pthread_setname_np(pthread_self(), buf);
 }
 
+// Runs a long-lived worker and converts any escaping exception into a clean
+// process exit. Without this, an uncaught std::bad_alloc/std::exception (e.g.
+// a huge vector resize, an async .get() rethrow) escaping a bare thread body
+// calls std::terminate -> abort; funnelling through exit(1) lets the parent
+// watchdog restart the child normally instead.
+template <typename F>
+static void runGuardedThread(const char* name, F&& fn) {
+    try {
+        fn();
+    } catch (const std::exception& e) {
+        Logger::get()->critical("Worker thread '{}' terminated by exception: {}. Exiting for watchdog restart.", name, e.what());
+        exit(1);
+    } catch (...) {
+        Logger::get()->critical("Worker thread '{}' terminated by unknown exception. Exiting for watchdog restart.", name);
+        exit(1);
+    }
+}
+
 void requestToExitBob()
 {
     gExitDataThreadCounter = 0;
@@ -237,20 +255,22 @@ int runBob(int argc, char *argv[])
 
     auto log_request_trusted_nodes_thread = std::thread([&](){
         set_this_thread_name("trusted-log-req");
-        EventRequestFromTrustedNode(std::ref(connPool),
-                                    request_logging_cycle_ms,
-                                    future_offset);
+        runGuardedThread("trusted-log-req", [&](){
+            EventRequestFromTrustedNode(std::ref(connPool),
+                                        request_logging_cycle_ms,
+                                        future_offset);
+        });
     });
 
     auto indexer_thread = std::thread([&](){
         set_this_thread_name("indexer");
-        indexVerifiedTicks();
+        runGuardedThread("indexer", [](){ indexVerifiedTicks(); });
     });
 
     std::thread log_event_verifier_thread;
     log_event_verifier_thread = std::thread([&](){
         set_this_thread_name("log-ver");
-        verifyLoggingEvent();
+        runGuardedThread("log-ver", [](){ verifyLoggingEvent(); });
     });
 
     while ((gCurrentIndexingTick == 0 || gCurrentVerifyLoggingTick == 0) && !gStopFlag.load()) SLEEP(100);
@@ -264,23 +284,25 @@ int runBob(int argc, char *argv[])
     auto request_thread = std::thread(
             [&](){
                 set_this_thread_name("io-req");
-                IORequestThread(
-                        std::ref(connPool),
-                        std::chrono::milliseconds(request_cycle_ms),
-                        static_cast<uint32_t>(future_offset)
-                );
+                runGuardedThread("io-req", [&](){
+                    IORequestThread(
+                            std::ref(connPool),
+                            std::chrono::milliseconds(request_cycle_ms),
+                            static_cast<uint32_t>(future_offset)
+                    );
+                });
             }
     );
 
     auto verify_thread = std::thread([&](){
         set_this_thread_name("verify");
-        IOVerifyThread();
+        runGuardedThread("verify", [](){ IOVerifyThread(); });
     });
 
     gTCM = new TimedCacheMap<>();
     auto sc_thread = std::thread([&](){
         set_this_thread_name("sc");
-        querySmartContractThread(connPool);
+        runGuardedThread("sc", [&](){ querySmartContractThread(connPool); });
     });
     int pool_size = connPool.size();
     std::vector<std::thread> v_recv_thread;
@@ -311,20 +333,23 @@ int runBob(int argc, char *argv[])
     {
         v_data_thread.emplace_back([&](){
             set_this_thread_name("data");
-            DataProcessorThread();
+            runGuardedThread("data", [](){ DataProcessorThread(); });
         });
         v_data_thread.emplace_back([&, i](){
             char nm[16];
             std::snprintf(nm, sizeof(nm), "reqp-%d", i);
             set_this_thread_name(nm);
-            RequestProcessorThread();
+            runGuardedThread("reqp", [](){ RequestProcessorThread(); });
         });
     }
 
     std::thread garbage_thread;
     if (cfg.tick_storage_mode != TickStorageMode::Free || cfg.tx_storage_mode != TxStorageMode::Free)
     {
-        garbage_thread = std::thread(garbageCleaner);
+        garbage_thread = std::thread([](){
+            set_this_thread_name("garbage");
+            runGuardedThread("garbage", [](){ garbageCleaner(); });
+        });
     }
     // The watchdog is always started on mainnet. Its idle-disconnect path
     // catches silent half-open sockets regardless of how peers were chosen;

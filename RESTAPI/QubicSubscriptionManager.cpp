@@ -516,7 +516,8 @@ bool QubicSubscriptionManager::matchesLogFilter(
     }
 
     // Check transfer minimum amount (for QU_TRANSFER logs, type 0)
-    if (filter.transferMinAmount > 0 && actualLogType == QU_TRANSFER && scIndex == 0) {
+    if (filter.transferMinAmount > 0 && actualLogType == QU_TRANSFER && scIndex == 0
+        && log.getLogSize() >= sizeof(QuTransfer)) {
         const QuTransfer* t = const_cast<LogEvent&>(log).getStruct<QuTransfer>();
         if (t && t->amount < filter.transferMinAmount) {
             return false;
@@ -955,6 +956,9 @@ void QubicSubscriptionManager::performCatchUp(
             ~ThreadGuard() { counter.fetch_sub(1); }
         } guard{activeCatchUpThreads_};
 
+        // Detached thread: drogon does not catch here, so an uncaught exception
+        // would terminate the whole process. Guard the entire body.
+        try {
         Logger::get()->info("Starting TickStream catch-up {} from {} to {}", subId, fromTick, toTick);
 
         int64_t totalTicks = static_cast<int64_t>(toTick) - fromTick + 1;
@@ -1423,6 +1427,11 @@ void QubicSubscriptionManager::performCatchUp(
                 sendCatchUpComplete(conn, subId, processedTicks, matchedTicks, lastEpoch, lastTick);
             }
         }
+        } catch (const std::exception& e) {
+            Logger::get()->critical("TickStream catch-up {} aborted by exception: {}", subId, e.what());
+        } catch (...) {
+            Logger::get()->critical("TickStream catch-up {} aborted by unknown exception", subId);
+        }
     }).detach();
 }
 
@@ -1440,6 +1449,9 @@ void QubicSubscriptionManager::performLogsCatchUp(
             ~ThreadGuard() { counter.fetch_sub(1); }
         } guard{activeCatchUpThreads_};
 
+        // Detached thread: drogon does not catch here, so an uncaught exception
+        // would terminate the whole process. Guard the entire body.
+        try {
         Logger::get()->info("Starting Logs catch-up {} from epoch {} logId {}", subId, epoch, fromLogId);
 
         int64_t totalProcessed = 0;
@@ -1710,6 +1722,11 @@ void QubicSubscriptionManager::performLogsCatchUp(
             if (wasCatchingUp) {
                 sendCatchUpComplete(conn, subId, totalProcessed, totalMatched, epoch, currentLogId - 1);
             }
+        }
+        } catch (const std::exception& e) {
+            Logger::get()->critical("Logs catch-up {} aborted by exception: {}", subId, e.what());
+        } catch (...) {
+            Logger::get()->critical("Logs catch-up {} aborted by unknown exception", subId);
         }
     }).detach();
 }

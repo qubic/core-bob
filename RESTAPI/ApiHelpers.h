@@ -163,6 +163,13 @@ uint16_t resolveEpochForTick(uint32_t tick);
 // key) should `std::tolower` the result themselves.
 std::string normalizeTopicIdentity(const std::string& input);
 
+// Resolve the txIndex owning a log, falling back to the epoch's END_EPOCH
+// range when the tick's normal ranges don't cover it (the virtual END_EPOCH
+// tick number is reused by the next epoch, so per-tick lookup misses old
+// END_EPOCH logs). Returns the index (e.g. SC_END_EPOCH_TX) or -1.
+int resolveTxIndexForLog(uint16_t epoch, uint32_t tick, uint64_t logId,
+                         LogRangesPerTxInTick& lrOut);
+
 // Convert a TickVote to its canonical JSON representation. Shared between
 // REST `/tick/{n}` and RPC `qubic_getTickByNumber` so the wire shape stays
 // identical and new fields surface on both surfaces automatically.

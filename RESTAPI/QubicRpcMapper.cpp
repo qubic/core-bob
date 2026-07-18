@@ -490,6 +490,18 @@ Json::Value logEventToQubicLog(const LogEvent& log, const TickData& td,
     // Transaction hash
     if (txIndex >= 0 && txIndex < NUMBER_OF_TRANSACTIONS_PER_TICK) {
         result["transactionHash"] = td.transactionDigests[txIndex].toQubicHash();
+    } else if (txIndex == SC_INITIALIZE_TX) {
+        result["transactionHash"] = "SC_INITIALIZE_TX_" + std::to_string(tick);
+    } else if (txIndex == SC_BEGIN_EPOCH_TX) {
+        result["transactionHash"] = "SC_BEGIN_EPOCH_TX_" + std::to_string(tick);
+    } else if (txIndex == SC_BEGIN_TICK_TX) {
+        result["transactionHash"] = "SC_BEGIN_TICK_TX_" + std::to_string(tick);
+    } else if (txIndex == SC_NOTIFICATION_TX) {
+        result["transactionHash"] = "SC_NOTIFICATION_TX_" + std::to_string(tick);
+    } else if (txIndex == SC_END_TICK_TX) {
+        result["transactionHash"] = "SC_END_TICK_TX_" + std::to_string(tick);
+    } else if (txIndex == SC_END_EPOCH_TX) {
+        result["transactionHash"] = "SC_END_EPOCH_TX_" + std::to_string(tick);
     } else {
         result["transactionHash"] = Json::Value::null;
     }
