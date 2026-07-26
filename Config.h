@@ -46,7 +46,7 @@ struct AppConfig {
     // trip. Lower it (e.g. 256 or 512) on links where 4MB responses cause
     // queueing/stalls; raise it if your BM accepts larger requests.
     // Per-range dedup (verifyLoggingEvent's REFIRE_GUARD_MS) is unaffected.
-    unsigned log_event_chunk_size = 4096;
+    unsigned log_event_chunk_size = 999;
     // Master switch for expensive diagnostic instrumentation (BATCH_AUDIT
     // hashing, per-log source attribution). Default off; turn on while
     // debugging non-deterministic verify failures.
