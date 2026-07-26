@@ -464,19 +464,25 @@ void replyLogEvent(QCPtr& conn, uint32_t dejavu, uint8_t* ptr)
             request->passcode[2] != 0 ||
             request->passcode[3] != 0)
     {
-        conn->sendEndPacket();
+        conn->sendEndPacket(dejavu);
         return;
     }
-    if (request->toid < request->fromid || request->toid - request->fromid + 1 >= 1000)
+    if (request->toid < request->fromid)
     {
-        conn->sendEndPacket();
+        conn->sendEndPacket(dejavu);
         return;
+    }
+    // Serve one chunk at most; requester re-asks for the remainder
+    uint64_t toid = request->toid;
+    if (toid - request->fromid + 1 > BOB_LOG_EVENT_CHUNK_SIZE)
+    {
+        toid = request->fromid + BOB_LOG_EVENT_CHUNK_SIZE - 1;
     }
     RequestResponseHeader header{};
     header.setDejavu(dejavu);
     header.setType(RespondLog::type());
     std::vector<uint8_t> resp;
-    for (uint64_t i = request->fromid; i <= request->toid; i++)
+    for (uint64_t i = request->fromid; i <= toid; i++)
     {
         LogEvent le;
         if (db_try_get_log(gCurrentProcessingEpoch, i, le))
@@ -501,7 +507,7 @@ void replyLogRange(QCPtr& conn, uint32_t dejavu, uint8_t* ptr)
     RequestAllLogIdRangesFromTick* request = (RequestAllLogIdRangesFromTick*)ptr;
     if (request->tick >= gCurrentVerifyLoggingTick)
     {
-        conn->sendEndPacket();
+        conn->sendEndPacket(dejavu);
         return;
     }
     if (request->passcode[0] != 0 ||
@@ -509,7 +515,7 @@ void replyLogRange(QCPtr& conn, uint32_t dejavu, uint8_t* ptr)
         request->passcode[2] != 0 ||
         request->passcode[3] != 0)
     {
-        conn->sendEndPacket();
+        conn->sendEndPacket(dejavu);
         return;
     }
     uint32_t tick = request->tick;

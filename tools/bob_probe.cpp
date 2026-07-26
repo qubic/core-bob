@@ -683,7 +683,7 @@ static double fetchLogsForTick(Conn& c, uint32_t tick, long hexBytes, bool verbo
     if (!gotRange) return nowMs() - t0; // only END_RESPONSE → rejected (bad passcode / tick not verified yet)
     ok = true; // node served the range (tick may legitimately have no logs)
 
-    // 2) log content, chunked by 128 logIds (bob's BOB_LOG_EVENT_CHUNK_SIZE; node rejects >= 1000)
+    // 2) log content, chunked by 128 logIds (BOB_LOG_EVENT_CHUNK_SIZE is the ceiling)
     if (minId >= 0 && maxId > minId) {
         const long long CHUNK = 128;
         for (long long s = minId; s < maxId; s += CHUNK) {

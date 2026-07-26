@@ -12,6 +12,10 @@
 #include <chrono>
 #include <thread>
 
+// Max log ids one RequestLog may span. Servers clamp wider spans, older
+// peers refuse them outright. Runtime value lives in gLogEventChunkSize.
+static constexpr unsigned BOB_LOG_EVENT_CHUNK_SIZE = 999;
+
 struct GlobalState {
     MutexRoundBuffer MRB_Data{128 * 1024u * 1024u};
     MutexRoundBuffer MRB_Request{64u * 1024u * 1024u};
@@ -95,7 +99,7 @@ struct GlobalState {
 
     // How many log IDs to request per RequestLog packet. Configurable
     // via bob.json "log_event_chunk_size" / env var LOG_EVENT_CHUNK_SIZE.
-    unsigned gLogEventChunkSize = 1000;
+    unsigned gLogEventChunkSize = BOB_LOG_EVENT_CHUNK_SIZE;
 
     // Master switch for expensive diagnostics that have measurable runtime
     // cost: BATCH_AUDIT per-tick hashing of log bytes and the per-log source
@@ -160,10 +164,6 @@ GlobalState& GS();
 
 #define QUTIL_STMB_LOG_TYPE 100001
 
-// Default chunk size for RequestLog packets. Runtime value lives in
-// gLogEventChunkSize, configurable via bob.json "log_event_chunk_size"
-// or env var LOG_EVENT_CHUNK_SIZE. Used to initialize the global.
 // Duplicate-fire protection lives in verifyLoggingEvent's per-range
 // in-flight ring (REFIRE_GUARD_MS).
-static constexpr long long BOB_LOG_EVENT_CHUNK_SIZE_DEFAULT = NUMBER_OF_TRANSACTIONS_PER_TICK;
 
