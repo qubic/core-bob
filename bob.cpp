@@ -110,6 +110,7 @@ int runBob(int argc, char *argv[])
     gTxTickToLive = cfg.tx_tick_to_live;
     gSpamThreshold = cfg.spam_qu_threshold;
     gLogEventChunkSize = cfg.log_event_chunk_size;
+    if (gLogEventChunkSize > BOB_LOG_EVENT_CHUNK_SIZE) gLogEventChunkSize = BOB_LOG_EVENT_CHUNK_SIZE;
     gDiagnosticMode.store(cfg.diagnostic_mode, std::memory_order_relaxed);
     if (cfg.diagnostic_mode) {
         Logger::get()->info("Diagnostic mode ENABLED — BATCH_AUDIT + per-log source attribution active (extra CPU + Redis cost).");
