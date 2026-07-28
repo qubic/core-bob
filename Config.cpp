@@ -234,7 +234,7 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
     // Log event chunk size (default = NUMBER_OF_TRANSACTIONS_PER_TICK).
     // 0 is rejected (would cause an infinite loop in the chunk walker).
     if (!validate_uint("log_event_chunk_size", out.log_event_chunk_size)) return false;
-    if (out.log_event_chunk_size == 0) out.log_event_chunk_size = 999;
+    if (out.log_event_chunk_size == 0) out.log_event_chunk_size = BOB_LOG_EVENT_CHUNK_SIZE;
 
     if (root.isMember("diagnostic_mode")) {
         if (!root["diagnostic_mode"].isBool()) {

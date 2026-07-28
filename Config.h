@@ -5,6 +5,10 @@
 #include <map>
 #include "m256i.h"
 
+// Max log ids one RequestLog may span. Servers clamp wider spans, older
+// peers refuse them outright. Runtime value lives in gLogEventChunkSize.
+static constexpr unsigned BOB_LOG_EVENT_CHUNK_SIZE = 999;
+
 // Add tick storage mode enum
 enum class TickStorageMode {
     LastNTick,
@@ -41,12 +45,11 @@ struct AppConfig {
     unsigned max_thread = 0;
     // Spam/Junk detection threshold for QU transfers (amount <= threshold and no input)
     unsigned spam_qu_threshold = 0;
-    // How many log IDs to request per RequestLog packet. Defaults to the
-    // max-tx-per-tick ceiling so a typical tick's logs fit in one round
-    // trip. Lower it (e.g. 256 or 512) on links where 4MB responses cause
-    // queueing/stalls; raise it if your BM accepts larger requests.
+    // How many log IDs to request per RequestLog packet. Larger values are
+    // clamped to BOB_LOG_EVENT_CHUNK_SIZE at startup. Lower it (e.g. 256 or
+    // 512) on links where big responses cause queueing/stalls.
     // Per-range dedup (verifyLoggingEvent's REFIRE_GUARD_MS) is unaffected.
-    unsigned log_event_chunk_size = 999;
+    unsigned log_event_chunk_size = BOB_LOG_EVENT_CHUNK_SIZE;
     // Master switch for expensive diagnostic instrumentation (BATCH_AUDIT
     // hashing, per-log source attribution). Default off; turn on while
     // debugging non-deterministic verify failures.

@@ -12,10 +12,6 @@
 #include <chrono>
 #include <thread>
 
-// Max log ids one RequestLog may span. Servers clamp wider spans, older
-// peers refuse them outright. Runtime value lives in gLogEventChunkSize.
-static constexpr unsigned BOB_LOG_EVENT_CHUNK_SIZE = 999;
-
 struct GlobalState {
     MutexRoundBuffer MRB_Data{128 * 1024u * 1024u};
     MutexRoundBuffer MRB_Request{64u * 1024u * 1024u};
