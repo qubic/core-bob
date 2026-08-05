@@ -263,6 +263,12 @@ bool db_insert_log_range(uint32_t tick, const LogRangesPerTxInTick& logRange) {
             return false;
         }
 
+        // Epoch logIds restart at 0: initial tick starting higher is stale old-epoch data.
+        if (tick == gInitialTick && min_log_id > 0) {
+            Logger::get()->warn("db_insert_log_range: Discarding tick {} - initial tick fromLogId {} != 0, stale old-epoch ranges?", tick, min_log_id);
+            return false;
+        }
+
         // Garbage guard: reject ticks whose log span is absurd.
         if (max_log_id > min_log_id) {
             if (max_log_id - min_log_id > MAXIMUM_NUMBER_OF_LOG_PER_TICK) { // too many log for a tick

@@ -229,6 +229,13 @@ int runBob(int argc, char *argv[])
             gStopFlag.store(true);
         }
     }
+    // Old epoch's virtual end tick reuses this tick number; stale keys block SETNX inserts.
+    if (isThisEpochAlreadyEnd && initTick == endEpochTick &&
+        initEpoch > gCurrentProcessingEpoch.load())
+    {
+        Logger::get()->info("Seamless transition: deleting stale log ranges of old-epoch virtual end tick {}", initTick);
+        db_delete_log_ranges(initTick);
+    }
     db_insert_u32("init_tick:"+std::to_string(initEpoch), initTick);
     gInitialTick = initTick;
     if (initTick > gCurrentFetchingTick.load())

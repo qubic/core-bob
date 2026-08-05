@@ -7,6 +7,7 @@
 
 #include "K12AndKeyUtil.h"
 #include "logEventCore/LogEvent.h"
+#include "shim.h"
 using ::testing::_;
 using ::testing::Return;
 using ::testing::DoAll;
@@ -1083,6 +1084,30 @@ TEST_F(DbTest, InsertLogRange_RedisThrows_ReturnsFalse) {
     EXPECT_CALL(mockRedis, set(_, _, std::chrono::milliseconds(0), sw::redis::UpdateType::NOT_EXIST))
         .WillOnce(testing::Throw(sw::redis::Error("fail")));
     EXPECT_FALSE(db_insert_log_range(10, lr));
+}
+
+TEST_F(DbTest, InsertLogRange_InitialTickStaleFromId_ReturnsFalse) {
+    LogRangesPerTxInTick lr{};
+    memset(&lr, -1, sizeof(lr));
+    lr.fromLogId[0] = 500000; // old-epoch END_EPOCH range echoed at new epoch's init tick
+    lr.length[0]    = 3;
+
+    uint32_t saved = gInitialTick.load();
+    gInitialTick = 10;
+    EXPECT_FALSE(db_insert_log_range(10, lr));
+    gInitialTick = saved;
+}
+
+TEST_F(DbTest, InsertLogRange_InitialTickZeroFromId_Accepted) {
+    LogRangesPerTxInTick lr{};
+    memset(&lr, -1, sizeof(lr));
+    lr.fromLogId[0] = 0;
+    lr.length[0]    = 3;
+
+    uint32_t saved = gInitialTick.load();
+    gInitialTick = 10;
+    EXPECT_TRUE(db_insert_log_range(10, lr));
+    gInitialTick = saved;
 }
 
 // ---------------------------------------------------------------------------
