@@ -230,11 +230,22 @@ int runBob(int argc, char *argv[])
         }
     }
     // Old epoch's virtual end tick reuses this tick number; stale keys block SETNX inserts.
-    if (isThisEpochAlreadyEnd && initTick == endEpochTick &&
-        initEpoch > gCurrentProcessingEpoch.load())
+    uint32_t prevEpochEndTick = 0;
+    if (initEpoch > 0 &&
+        db_get_u32("end_epoch_tick:" + std::to_string(initEpoch - 1), prevEpochEndTick) &&
+        prevEpochEndTick == initTick)
     {
-        Logger::get()->info("Seamless transition: deleting stale log ranges of old-epoch virtual end tick {}", initTick);
-        db_delete_log_ranges(initTick);
+        LogRangesPerTxInTick staleCheck{};
+        if (db_try_get_log_ranges(initTick, staleCheck))
+        {
+            long long minLogId = -1, maxLogId = -1;
+            staleCheck.getMinMax(minLogId, maxLogId);
+            if (minLogId > 0)
+            {
+                Logger::get()->info("Seamless transition: deleting stale old-epoch log ranges at init tick {} (fromLogId {})", initTick, minLogId);
+                db_delete_log_ranges(initTick);
+            }
+        }
     }
     db_insert_u32("init_tick:"+std::to_string(initEpoch), initTick);
     gInitialTick = initTick;
