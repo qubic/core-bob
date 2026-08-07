@@ -7,6 +7,12 @@ behavior.
 
 For exact commit boundaries, see `git log v<a>..v<b>`.
 ---
+## 1.5.16
+- Fix stuck issue when seamless transition
+
+## 1.5.15
+- Clamping number of requested log events on bob 
+
 ## 1.5.14
 
 **END_EPOCH events now reach WebSocket subscribers automatically.** The end-epoch log batch lives on a virtual tick (`lastQuorumTick+1`) that never gets quorum tick data or votes; previously it was silently dropped on every live path.
