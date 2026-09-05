@@ -171,12 +171,18 @@ int runBob(int argc, char *argv[])
     if (cfg.allow_peer_discovery && cfg.p2p_nodes.size() > 6) {
         Logger::get()->warn("allow_peer_discovery=true with {} p2p_node entries; pool is capped at 6", cfg.p2p_nodes.size());
     }
-    if (cfg.p2p_nodes.empty())
-    {
-        Logger::get()->info("Getting peers info from qubic.global");
-        cfg.p2p_nodes = GetPeerFromDNS(3, 3, "random");
-    }
     parseConnection(connPool, cfg.p2p_nodes);
+    for (int i = 0; i < connPool.size(); i++) {
+        QCPtr qc;
+        if (connPool.get(i, qc) && qc) qc->setStatic(true);
+    }
+    if (cfg.allow_peer_discovery && connPool.size() < 6)
+    {
+        int freeSlots = 6 - connPool.size();
+        Logger::get()->info("Getting {} peers info from qubic.global", freeSlots);
+        std::vector<std::string> dnsPeers = GetPeerFromDNS(freeSlots - freeSlots / 2, freeSlots / 2, "random");
+        parseConnection(connPool, dnsPeers);
+    }
 
     Logger::get()->info("Start handshaking");
     // user randomlyRemoveBob here to avoid to kick out all BM nodes when there are too many connections

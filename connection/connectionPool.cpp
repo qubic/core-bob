@@ -298,11 +298,14 @@ void peerWatchdog(ConnectionPool& conns_, bool allowDnsReplace)
             uint64_t nowTimestamp = std::time(nullptr);
             uint64_t oldest = std::numeric_limits<uint64_t>::max();
             QCPtr worst = nullptr;
+            std::vector<QCPtr> rotatable; // non-static peers eligible for replacement
             int N = conns_.size();
             for (int i = 0; i < N; i++) {
                 QCPtr qc;
                 if (conns_.get(i,qc)) {
                     if (qc) {
+                        if (qc->isStatic()) continue;
+                        rotatable.push_back(qc);
                         if (!qc->isSocketValid()) {
                             worst = qc;
                             break;
@@ -318,15 +321,12 @@ void peerWatchdog(ConnectionPool& conns_, bool allowDnsReplace)
                     }
                 }
             }
-            std::random_device rd;
-            std::mt19937 gen(rd());
-            std::uniform_int_distribution<int> dist(0, N - 1);
-            // if there is no worst, randomly pick 1
-            if (!worst) {
-                if (N > 0) {
-                    int randomIdx = dist(gen);
-                    conns_.get(randomIdx, worst);
-                }
+            // if there is no worst, randomly pick 1 non-static peer
+            if (!worst && !rotatable.empty()) {
+                std::random_device rd;
+                std::mt19937 gen(rd());
+                std::uniform_int_distribution<size_t> dist(0, rotatable.size() - 1);
+                worst = rotatable[dist(gen)];
             }
             if (worst) {
                 std::vector<std::string> newPeer;
