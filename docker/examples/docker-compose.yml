@@ -8,13 +8,14 @@
 # Env vars take precedence: the entrypoint patches bob.json / redis.conf /
 # kvrocks.conf with them at startup.
 #
-# Full reference of all 39 supported environment variables:
+# Full reference of all 40 supported environment variables:
 #   docs/DOCKER_ENV.md  (https://github.com/qubic/core-bob/blob/master/docs/DOCKER_ENV.md)
 #
 # Most commonly tuned:
 #   NODE_SEED              - 55-char lowercase a-z seed for node identity (REQUIRED for production)
 #   NODE_ALIAS             - Display name for this node
 #   P2P_NODES              - Comma-separated peer list (e.g. "BM:1.2.3.4:21841:0-0-0-0")
+#   ALLOW_PEER_DISCOVERY   - true|false; with P2P_NODES set, true = hybrid (static + rotated slots)
 #   LOG_LEVEL              - trace | debug | info | warn | error | fatal
 #   REDIS_MAXMEMORY        - KeyDB memory cap (default: 2gb)
 #   KVROCKS_TTL            - Data retention in kvrocks, seconds (default: 1209600 = 14 days)
@@ -31,6 +32,7 @@ services:
       - NODE_SEED=your_55_character_lowercase_seed_here_aaaaaaaaaaaa
       # - LOG_LEVEL=info
       # - P2P_NODES=1:1.2.3.4:21841,2:5.6.7.8:21841
+      # - ALLOW_PEER_DISCOVERY=true
       # - RUN_SERVER=true
       # - IS_TESTNET=false
     volumes:

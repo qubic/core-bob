@@ -122,6 +122,10 @@ if [ -n "$ALLOW_RECEIVE_LOG_FROM_INCOMING" ]; then
     jq --argjson v "$ALLOW_RECEIVE_LOG_FROM_INCOMING" '.["allow-receive-log-from-incoming-connections"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
+if [ -n "$ALLOW_PEER_DISCOVERY" ]; then
+    jq --argjson v "$ALLOW_PEER_DISCOVERY" '.["allow-peer-discovery"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+fi
+
 if [ -n "$PERSIST_ORACLE_TX" ]; then
     jq --argjson v "$PERSIST_ORACLE_TX" '.["persist-oracle-tx"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
