@@ -167,12 +167,14 @@ int runBob(int argc, char *argv[])
     }
     // Collect endpoints from config
     ConnectionPool connPool; // conn pool with passcode
-    bool needPeerWatchdog = false;
+    bool needPeerWatchdog = cfg.allow_peer_discovery;
+    if (cfg.allow_peer_discovery && cfg.p2p_nodes.size() > 6) {
+        Logger::get()->warn("allow_peer_discovery=true with {} p2p_node entries; pool is capped at 6", cfg.p2p_nodes.size());
+    }
     if (cfg.p2p_nodes.empty())
     {
         Logger::get()->info("Getting peers info from qubic.global");
         cfg.p2p_nodes = GetPeerFromDNS(3, 3, "random");
-        needPeerWatchdog = true;
     }
     parseConnection(connPool, cfg.p2p_nodes);
 
@@ -372,9 +374,9 @@ int runBob(int argc, char *argv[])
     }
     // The watchdog is always started on mainnet. Its idle-disconnect path
     // catches silent half-open sockets regardless of how peers were chosen;
-    // the DNS-replace path only runs when bob auto-discovered peers (i.e.
-    // P2P_NODES was empty), so user-supplied BMs aren't swapped behind their
-    // back.
+    // the DNS-replace path only runs when allow_peer_discovery is set
+    // (default: true iff p2p_node is empty), so user-supplied BMs aren't
+    // swapped behind their back.
     std::thread peerWatchdogThread;
     if (!gIsTestnet) {
         peerWatchdogThread = std::thread(peerWatchdog, std::ref(connPool), needPeerWatchdog);

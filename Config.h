@@ -69,6 +69,8 @@ struct AppConfig {
     bool enable_admin_endpoints = false;
     // allow bob to receive log from incoming connections
     bool allow_receive_log_from_incoming_connections = false;
+    // DNS peer discovery/rotation. Default: true iff p2p_node is empty.
+    bool allow_peer_discovery = false;
 
     std::string nodeAlias = "Big fat bob";
 

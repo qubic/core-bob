@@ -178,6 +178,20 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
         out.allow_receive_log_from_incoming_connections = root["allow_receive_log_from_incoming_connections"].asBool();
     }
 
+    if (root.isMember("allow_peer_discovery")) {
+        if (!root["allow_peer_discovery"].isBool()) {
+            error = "Invalid type: boolean required for key 'allow_peer_discovery'";
+            return false;
+        }
+        out.allow_peer_discovery = root["allow_peer_discovery"].asBool();
+        if (!out.allow_peer_discovery && out.p2p_nodes.empty()) {
+            error = "allow_peer_discovery=false requires 'p2p_node'";
+            return false;
+        }
+    } else {
+        out.allow_peer_discovery = out.p2p_nodes.empty();
+    }
+
     if (root.isMember("is_testnet")) {
         if (!root["is_testnet"].isBool()) {
             error = "Invalid type: boolean required for key 'is_testnet'";
