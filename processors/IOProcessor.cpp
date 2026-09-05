@@ -442,8 +442,9 @@ void connReceiver(QCPtr conn, const bool isTrustedNode)
                     // when we sent the request out with conn=nullptr; we
                     // patch it in here now that we know.
                     if (!requestMapperFrom.updateConn(hdr.getDejavu(), conn)
-                        && hdr.type() == LogRangesPerTxInTick::type()) {
-                        Logger::get()->warn("Log range response from {}:{} (dejavu {}) has no pending request; peer answered too slowly",
+                        && (hdr.type() == LogRangesPerTxInTick::type() || hdr.type() == RespondLog::type())) {
+                        Logger::get()->warn("{} response from {}:{} (dejavu {}) has no pending request; peer answered too slowly",
+                                            hdr.type() == RespondLog::type() ? "Log event" : "Log range",
                                             conn->getNodeIp(), conn->getNodePort(), hdr.getDejavu());
                     }
                     // Enqueue the packet into the global MutexRoundBuffer.
