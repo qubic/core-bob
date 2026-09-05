@@ -441,7 +441,11 @@ void connReceiver(QCPtr conn, const bool isTrustedNode)
                     // bytes. requestMapperFrom was seeded with this dejavu
                     // when we sent the request out with conn=nullptr; we
                     // patch it in here now that we know.
-                    requestMapperFrom.updateConn(hdr.getDejavu(), conn);
+                    if (!requestMapperFrom.updateConn(hdr.getDejavu(), conn)
+                        && hdr.type() == LogRangesPerTxInTick::type()) {
+                        Logger::get()->warn("Log range response from {}:{} (dejavu {}) has no pending request; peer answered too slowly",
+                                            conn->getNodeIp(), conn->getNodePort(), hdr.getDejavu());
+                    }
                     // Enqueue the packet into the global MutexRoundBuffer.
                     bool ok = MRB_Data.EnqueuePacket(packet.data());
                     if (!ok) {

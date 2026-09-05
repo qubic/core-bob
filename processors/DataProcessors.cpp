@@ -269,7 +269,8 @@ void processLogRanges(RequestResponseHeader& header, const uint8_t* ptr)
     } packet;
 
     std::vector<uint8_t> request;
-    requestMapperFrom.get(header.getDejavu(), request);
+    QCPtr conn;
+    requestMapperFrom.get(header.getDejavu(), request, conn);
     if (request.size() == sizeof(packet))
     {
         memcpy((void*)&packet, request.data(), sizeof(packet));
@@ -287,7 +288,8 @@ void processLogRanges(RequestResponseHeader& header, const uint8_t* ptr)
     }
     else
     {
-        Logger::get()->warn("Cannot find suitable tick to map the log range. Please increase request-logging-cycle-ms. Your internet is not fast enough for tight request cycle");
+        std::string peer = conn ? std::string(conn->getNodeIp()) + ":" + std::to_string(conn->getNodePort()) : "unknown, see connReceiver warning";
+        Logger::get()->warn("Cannot find suitable tick to map the log range (peer {}). Please increase request-logging-cycle-ms. Your internet is not fast enough for tight request cycle", peer);
     }
 }
 
