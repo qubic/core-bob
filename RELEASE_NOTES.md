@@ -7,6 +7,12 @@ behavior.
 
 For exact commit boundaries, see `git log v<a>..v<b>`.
 ---
+## 1.5.17
+- New config key `allow_peer_discovery` (bool) controls DNS peer discovery/rotation.
+  Absent: `true` when `p2p_node` is empty, `false` otherwise (unchanged behavior).
+  Modes: static (`false` + `p2p_node`), dynamic (`true`, no `p2p_node`),
+  hybrid (`true` + `p2p_node`). `false` without `p2p_node` is a config error.
+
 ## 1.5.16
 - Fix stuck issue when seamless transition
 

@@ -130,7 +130,7 @@ Full reference: [JSON-RPC API Guide](https://github.com/qubic/core-bob/blob/mast
 
 Two ways to configure, in order of preference:
 
-1. **Environment variables** (recommended) — see [docs/DOCKER_ENV.md](https://github.com/qubic/core-bob/blob/master/docs/DOCKER_ENV.md) for the complete reference of all 39 supported vars.
+1. **Environment variables** (recommended) — see [docs/DOCKER_ENV.md](https://github.com/qubic/core-bob/blob/master/docs/DOCKER_ENV.md) for the complete reference of all 40 supported vars.
 2. **Mount a custom `bob.json`** — for advanced cases where env vars aren't enough.
 
 ### Most-used env vars
@@ -140,6 +140,7 @@ Two ways to configure, in order of preference:
 | `NODE_SEED` | 55-char a–z seed identifying this node | - |
 | `NODE_ALIAS` | Display name | `Big fat bob` |
 | `P2P_NODES` | Comma-separated peer list | auto-discover |
+| `ALLOW_PEER_DISCOVERY` | Rotate discovered peers; with `P2P_NODES` = hybrid mode | `true` if `P2P_NODES` empty |
 | `LOG_LEVEL` | `trace`/`debug`/`info`/`warn`/`error` | `info` |
 | `REDIS_MAXMEMORY` | KeyDB memory cap | `2gb` |
 | `KVROCKS_TTL` | Data retention in kvrocks (seconds) | `1209600` (14 days) |

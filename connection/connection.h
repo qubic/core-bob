@@ -75,6 +75,9 @@ public:
     void getComputorList(const uint16_t epoch, Computors& compList);
     void sendEndPacket(uint32_t dejavu = 0xffffffff);
     void setNodeType(std::string _nodeType) { nodeType = std::move(_nodeType); }
+    // Static peers come from config p2p_node; peerWatchdog never DNS-swaps them.
+    void setStatic(bool s) { mStatic = s; }
+    bool isStatic() { return mStatic; }
 
     // Diagnostic: count of RespondLog packets this peer has delivered since
     // process start. Read by the periodic state line so traffic distribution
@@ -97,6 +100,7 @@ private:
     std::unique_ptr<MutexRoundBuffer> mBuffer;
     uint64_t mPasscode[4]; // for loggingEvent
     bool mReconnectable;   // whether reconnect() is allowed
+    bool mStatic = false;
     std::string nodeType;
 
     void initSendThread();
@@ -180,6 +184,6 @@ void CheckInQubicGlobal();
 //     half-open sockets caused by NAT/firewall idle drop or peer-side hangs.
 //   - DNS-replace (every 180s, allowDnsReplace==true): for the worst-idle
 //     connection, swap it out for a fresh peer obtained from the DNS-style
-//     discovery service. Used when bob auto-discovered peers at startup; for
-//     user-configured P2P_NODES we keep their chosen IPs and only reconnect.
+//     discovery service. Static peers (config p2p_node) are never swapped;
+//     only DNS-discovered ones filling the free slots are rotated.
 void peerWatchdog(ConnectionPool& conns_, bool allowDnsReplace);

@@ -59,13 +59,16 @@ public:
     // time to record which peer delivered the response for a given dejavu —
     // the request was added at send time with conn=nullptr because we
     // didn't know yet which peer (smartLogRequest picks randomly).
-    void updateConn(uint32_t dejavu, QCPtr conn)
+    // Returns false if dejavu has no pending entry (expired or never sent).
+    bool updateConn(uint32_t dejavu, QCPtr conn)
     {
         std::lock_guard<std::mutex> lock(mtx_);
         auto it = mem.find(dejavu);
-        if (it != mem.end()) {
-            it->second.conn = std::move(conn);
+        if (it == mem.end()) {
+            return false;
         }
+        it->second.conn = std::move(conn);
+        return true;
     }
 
     // Remove entries older than 60 seconds.
