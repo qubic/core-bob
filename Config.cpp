@@ -192,6 +192,14 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
         out.allow_peer_discovery = out.p2p_nodes.empty();
     }
 
+    if (root.isMember("autoban")) {
+        if (!root["autoban"].isBool()) {
+            error = "Invalid type: boolean required for key 'autoban'";
+            return false;
+        }
+        out.autoban = root["autoban"].asBool();
+    }
+
     if (root.isMember("is_testnet")) {
         if (!root["is_testnet"].isBool()) {
             error = "Invalid type: boolean required for key 'is_testnet'";

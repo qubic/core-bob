@@ -27,6 +27,7 @@ the [example compose file](../docker/examples/docker-compose.yml).
 | `ARBITRATOR_IDENTITY` | `arbitrator-identity` | (built-in) | 60-char uppercase Qubic identity used to validate the computor set. |
 | `P2P_NODES` | `p2p-node` | `[]` (auto-discover) | Comma-separated peer list. Example: `BM:157.180.10.49:21841:0-0-0-0,BM:65.109.122.174:21841:0-0-0-0`. Format per entry: `BM:IP:PORT[:P0-P1-P2-P3]` for trusted peers or `IP:PORT` for plain peers. |
 | `ALLOW_PEER_DISCOVERY` | `allow-peer-discovery` | `true` if `P2P_NODES` empty, else `false` | `true` + `P2P_NODES` = hybrid: listed peers are kept, remaining slots (6 total) are filled and rotated from discovery. `false` requires `P2P_NODES`. |
+| `AUTOBAN` | `autoban` | `false` | Rotate out a discovered peer that fails most log requests (two bad windows in a row) and keep its IP out of discovery: 10 min if it answers but has no logs, 12 h if it does not answer. Static `P2P_NODES` peers are never judged. |
 | `RUN_SERVER` | `run-server` | `true` | If `true`, serve P2P data to other peers on `SERVER_PORT`. |
 | `SERVER_PORT` | `server-port` | `21842` | P2P listening port. |
 | `RPC_PORT` | `rpc-port` | `40420` | REST + JSON-RPC + WebSocket port. |

@@ -59,16 +59,24 @@ public:
     // time to record which peer delivered the response for a given dejavu —
     // the request was added at send time with conn=nullptr because we
     // didn't know yet which peer (smartLogRequest picks randomly).
-    // Returns false if dejavu has no pending entry (expired or never sent).
-    bool updateConn(uint32_t dejavu, QCPtr conn)
+    // Returns the entry age in seconds and the stored request type, or -1 if
+    // dejavu has no pending entry (expired or never sent).
+    long long updateConn(uint32_t dejavu, QCPtr conn, uint8_t& requestTypeOut)
     {
         std::lock_guard<std::mutex> lock(mtx_);
         auto it = mem.find(dejavu);
         if (it == mem.end()) {
-            return false;
+            return -1;
         }
         it->second.conn = std::move(conn);
-        return true;
+
+        // stored data starts with the request header, type is byte 3
+        requestTypeOut = (it->second.data.size() >= sizeof(RequestResponseHeader)) ? it->second.data[3] : 0;
+
+        const uint64_t now = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::seconds>(
+                        std::chrono::system_clock::now().time_since_epoch())
+                        .count());
+        return (now >= it->second.timestamp) ? static_cast<long long>(now - it->second.timestamp) : 0;
     }
 
     // Remove entries older than 60 seconds.

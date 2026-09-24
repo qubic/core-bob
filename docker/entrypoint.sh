@@ -126,6 +126,10 @@ if [ -n "$ALLOW_PEER_DISCOVERY" ]; then
     jq --argjson v "$ALLOW_PEER_DISCOVERY" '.["allow-peer-discovery"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
+if [ -n "$AUTOBAN" ]; then
+    jq --argjson v "$AUTOBAN" '.["autoban"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+fi
+
 if [ -n "$PERSIST_ORACLE_TX" ]; then
     jq --argjson v "$PERSIST_ORACLE_TX" '.["persist-oracle-tx"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi

@@ -13,6 +13,43 @@
 #define NODE_TYPE_BOB 1
 #define NODE_TYPE_BM 2
 #define SEND_ENQUEUE_TIMEOUT_MS 5000
+
+// Bad-peer detection. A log response counts as answered only if its request is younger than this.
+static constexpr long long PROMPT_RESPONSE_S = 30;
+// A verdict needs at least this many judged log requests; the window stays open (30s steps) until it has them.
+static constexpr uint64_t MIN_SENT_PER_SAMPLE = 15;
+
+// Only RequestLog is judged: 1 request = 1 response, and bob only asks for ids it got from a range.
+// Range requests are left out: healthy bobs answer END for ticks they have not verified yet.
+inline bool isLogRequestType(uint8_t type)
+{
+    return type == RequestLog::type();
+}
+
+// A real answer to RequestLog is a RespondLog with at least one event in it.
+// END or an empty RespondLog means the peer has no such logs.
+inline bool isServedLogAnswer(uint8_t responseType, size_t responsePacketSize)
+{
+    return responseType == RespondLog::type() && responsePacketSize > sizeof(RequestResponseHeader);
+}
+
+// Why a peer was flagged; decides how long its IP stays out of discovery.
+enum class BadPeerKind : uint8_t
+{
+    None = 0,
+    NoLogs,       // answers, but has no logs for us (logging off, wrong passcode, pruned)
+    Unresponsive, // does not answer at all
+};
+
+// Bad sample = under half of the log requests answered promptly.
+inline bool isBadSample(uint64_t sentInSample, uint64_t answeredInSample)
+{
+    if (sentInSample < MIN_SENT_PER_SAMPLE)
+    {
+        return false;
+    }
+    return answeredInSample * 2 < sentInSample;
+}
 struct ParsedEndpoint
 {
     std::string endpoint;
@@ -65,6 +102,8 @@ public:
         if (n > sizeof(mNodeIp) - 1) n = sizeof(mNodeIp) - 1;
         memcpy(mNodeIp, ip.c_str(), n);
         mNodePort = port;
+        clearBad(); // new address, new chance
+        mWasAheadOfUs.store(false, std::memory_order_relaxed);
     }
     void askForLatestTick();
     void updateLatestTick(uint32_t tick);
@@ -87,8 +126,32 @@ public:
     void incLogsDelivered() { mLogsDelivered.fetch_add(1, std::memory_order_relaxed); }
     uint64_t getLogsDelivered() const { return mLogsDelivered.load(std::memory_order_relaxed); }
 
+    // Bad-peer detection counters, cumulative; peerWatchdog samples the deltas.
+    // sent = answered (real logs) + refused (END/empty while ahead of us) + noData (END/empty while behind us) + silence.
+    void incLogReqSent() { mLogReqSent.fetch_add(1, std::memory_order_relaxed); }
+    void incLogReqAnswered() { mLogReqAnswered.fetch_add(1, std::memory_order_relaxed); }
+    void incLogReqRefused() { mLogReqRefused.fetch_add(1, std::memory_order_relaxed); }
+    void incLogReqNoData() { mLogReqNoData.fetch_add(1, std::memory_order_relaxed); }
+    uint64_t getLogReqSent() const { return mLogReqSent.load(std::memory_order_relaxed); }
+    uint64_t getLogReqAnswered() const { return mLogReqAnswered.load(std::memory_order_relaxed); }
+    uint64_t getLogReqRefused() const { return mLogReqRefused.load(std::memory_order_relaxed); }
+    uint64_t getLogReqNoData() const { return mLogReqNoData.load(std::memory_order_relaxed); }
+    // True if the peer's last tick report was ahead of our log fetch position; decided at report time.
+    bool wasAheadOfUs() const { return mWasAheadOfUs.load(std::memory_order_relaxed); }
+    // Set by peerWatchdog; log requests avoid this peer until it is rotated out.
+    bool isBad() const { return mBadKind.load(std::memory_order_relaxed) != BadPeerKind::None; }
+    BadPeerKind getBadKind() const { return mBadKind.load(std::memory_order_relaxed); }
+    void markBad(BadPeerKind kind) { mBadKind.store(kind, std::memory_order_relaxed); }
+    void clearBad() { mBadKind.store(BadPeerKind::None, std::memory_order_relaxed); }
+
 private:
     std::atomic<uint64_t> mLogsDelivered{0};
+    std::atomic<uint64_t> mLogReqSent{0};
+    std::atomic<uint64_t> mLogReqAnswered{0};
+    std::atomic<uint64_t> mLogReqRefused{0};
+    std::atomic<uint64_t> mLogReqNoData{0};
+    std::atomic<BadPeerKind> mBadKind{BadPeerKind::None};
+    std::atomic<bool> mWasAheadOfUs{false}; // receiver writes, watchdog resets on replace
     std::atomic<uint64_t> lastActivityTimestamp;
     char mNodeIp[32];
     int mNodePort;
@@ -174,7 +237,10 @@ void parseConnection(ConnectionPool& connPoolAll,
                      std::vector<std::string>& endpoints);
 void doHandshakeAndGetBootstrapInfo(ConnectionPool& cp, bool isTrusted, uint32_t& maxInitTick, uint16_t& maxInitEpoch);
 void getComputorList(ConnectionPool& cp, std::string arbitratorIdentity);
-std::vector<std::string> GetPeerFromDNS(const int nLite, const int nBob, const std::string mode);
+// exclude: IPs the primary discovery backend must not return (banned + already connected).
+// primaryExhausted: set true when the primary backend answered but had no peer outside exclude.
+std::vector<std::string> GetPeerFromDNS(const int nLite, const int nBob, const std::string mode, const std::vector<std::string>& exclude = {},
+                                        bool* primaryExhausted = nullptr);
 bool DownloadStateFiles(uint16_t epoch);
 void GetLatestTickFromExternalSources(uint32_t& tick, uint16_t& epoch);
 void CheckInQubicGlobal();
@@ -187,4 +253,7 @@ void CheckInQubicGlobal();
 //     connection, swap it out for a fresh peer obtained from the DNS-style
 //     discovery service. Static peers (config p2p_node) are never swapped;
 //     only DNS-discovered ones filling the free slots are rotated.
-void peerWatchdog(ConnectionPool& conns_, bool allowDnsReplace);
+//   - bad-peer sampling (every 30s, autoban==true): flag a discovered peer that
+//     fails most of its log requests, rotate it out first and keep its IP out
+//     of discovery for a while (short for "has no logs", long for "no answer").
+void peerWatchdog(ConnectionPool& conns_, bool allowDnsReplace, bool autoban);

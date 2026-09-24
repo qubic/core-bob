@@ -198,7 +198,7 @@ void QubicConnection::receiveAFullPacket(RequestResponseHeader& header, std::vec
 void QubicConnection::sendEndPacket(uint32_t dejavu)
 {
     RequestResponseHeader nop{};
-    nop.setType(35);
+    nop.setType(END_RESPONSE);
     if (dejavu != 0xffffffff) nop.setDejavu(dejavu);
     else nop.randomizeDejavu();
     nop.setSize(sizeof(RequestResponseHeader));
@@ -258,6 +258,10 @@ int QubicConnection::enqueueSend(uint8_t* buffer, int sz)
         if (dejavu)
         {
             requestMapperFrom.add(dejavu, buffer, sz, nullptr);
+            if (isLogRequestType(header.type()))
+            {
+                incLogReqSent();
+            }
         }
     }
     // Bounded wait: a peer that never drains must not block callers forever.
@@ -341,6 +345,8 @@ void QubicConnection::askForLatestTick() {
 void QubicConnection::updateLatestTick(uint32_t tick)
 {
     mLatestTick = tick;
+    // ahead = past every tick we may ask for: current log tick + prefetch window, plus 16 ticks slack
+    mWasAheadOfUs.store(tick > (gCurrentFetchingLogTick + 16 + gFutureOffset), std::memory_order_relaxed);
 }
 
 void QubicConnection::getBootstrapTickInfo(uint32_t& tick, uint16_t& epoch)

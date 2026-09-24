@@ -384,6 +384,34 @@ void replyCurrentTickInfo(QCPtr& conn, uint32_t dejavu)
     conn->enqueueSend((uint8_t *) &pl, sizeof(pl));
 }
 
+// Bad-peer detection: sort a response to one of our pending RequestLog into
+//   answered - real logs came back
+//   refused  - END/empty but the peer reported it is ahead of us, so it should have them
+//   noData   - END/empty and the peer is behind us (still syncing), no verdict from this one
+// Silence is what is left over. Returns the request age in seconds, -1 = no pending entry.
+static long long countLogAnswer(QCPtr& conn, uint32_t dejavu, uint8_t responseType, size_t responsePacketSize)
+{
+    uint8_t requestType = 0;
+    long long requestAgeSec = requestMapperFrom.updateConn(dejavu, conn, requestType);
+    if (requestAgeSec < 0 || requestAgeSec >= PROMPT_RESPONSE_S || !isLogRequestType(requestType))
+    {
+        return requestAgeSec;
+    }
+    if (isServedLogAnswer(responseType, responsePacketSize))
+    {
+        conn->incLogReqAnswered();
+    }
+    else if (conn->wasAheadOfUs())
+    {
+        conn->incLogReqRefused();
+    }
+    else
+    {
+        conn->incLogReqNoData();
+    }
+    return requestAgeSec;
+}
+
 // Receiver thread: continuously receives full packets and enqueues them into the global round buffer (MRB).
 void connReceiver(QCPtr conn, const bool isTrustedNode)
 {
@@ -422,6 +450,11 @@ void connReceiver(QCPtr conn, const bool isTrustedNode)
                 }
             }
             // trusted conn allowed all packets
+            // EndResponse = peer alive but has no such logs; nothing to enqueue, countLogAnswer decides if that is its fault
+            if (hdr.type() == END_RESPONSE)
+            {
+                countLogAnswer(conn, hdr.getDejavu(), hdr.type(), packet.size());
+            }
             if (isDataType(hdr.type()))
             {
                 conn->trackLastActivity(); // track it when this peer sends something meaningful
@@ -441,7 +474,8 @@ void connReceiver(QCPtr conn, const bool isTrustedNode)
                     // bytes. requestMapperFrom was seeded with this dejavu
                     // when we sent the request out with conn=nullptr; we
                     // patch it in here now that we know.
-                    if (!requestMapperFrom.updateConn(hdr.getDejavu(), conn)
+                    long long requestAgeSec = countLogAnswer(conn, hdr.getDejavu(), hdr.type(), packet.size());
+                    if (requestAgeSec < 0
                         && (hdr.type() == LogRangesPerTxInTick::type() || hdr.type() == RespondLog::type())) {
                         Logger::get()->warn("{} response from {}:{} (dejavu {}) has no pending request; peer answered too slowly",
                                             hdr.type() == RespondLog::type() ? "Log event" : "Log range",
