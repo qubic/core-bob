@@ -97,6 +97,9 @@ struct GlobalState {
     // via bob.json "log_event_chunk_size" / env var LOG_EVENT_CHUNK_SIZE.
     unsigned gLogEventChunkSize = BOB_LOG_EVENT_CHUNK_SIZE;
 
+    // How many ticks ahead the log fetcher prefetches (bob.json "future_offset").
+    unsigned gFutureOffset = 10;
+
     // Master switch for expensive diagnostics that have measurable runtime
     // cost: BATCH_AUDIT per-tick hashing of log bytes and the per-log source
     // attribution sidecar key (one Redis SETNX per log). Read-mostly bool;

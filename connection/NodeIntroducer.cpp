@@ -39,7 +39,9 @@ static std::pair<std::string, std::string> splitOriginAndPath(const std::string&
 // failure so the caller can move on to the next entry in the failover list.
 static std::vector<std::string> tryPeerDiscovery(const std::string& baseUrl,
                                                  const int nLite, const int nBob,
-                                                 const std::string& mode)
+                                                 const std::string& mode,
+                                                 const std::vector<std::string>& exclude,
+                                                 bool& answered)
 {
     std::vector<std::string> results;
     if (baseUrl.empty()) return results;
@@ -51,6 +53,14 @@ static std::vector<std::string> tryPeerDiscovery(const std::string& baseUrl,
         std::string path = prefix + "/random-peers?service=bobNode&litePeers="
                          + std::to_string(nLite) + "&bobPeers=" + std::to_string(nBob);
         if (mode == "closest") path += "&mode=closest";
+        if (!exclude.empty()) {
+            // comma separated IPv4 list, nothing to url-encode
+            path += "&exclude=";
+            for (size_t i = 0; i < exclude.size(); ++i) {
+                if (i > 0) path += ",";
+                path += exclude[i];
+            }
+        }
         req->setPath(path.c_str());
         Logger::get()->debug("peer-discovery: GET {}{}", origin, path);
 
@@ -59,6 +69,7 @@ static std::vector<std::string> tryPeerDiscovery(const std::string& baseUrl,
 
         auto jsonPtr = response->getJsonObject();
         if (!jsonPtr) return results;
+        answered = true; // valid reply, even if the list is empty
 
         if (jsonPtr->isMember("bobPeers") && (*jsonPtr)["bobPeers"].isArray()) {
             for (const auto& peer : (*jsonPtr)["bobPeers"]) {
@@ -80,13 +91,22 @@ static std::vector<std::string> tryPeerDiscovery(const std::string& baseUrl,
     return results;
 }
 
-std::vector<std::string> GetPeerFromDNS(const int nLite, const int nBob, const std::string mode)
+std::vector<std::string> GetPeerFromDNS(const int nLite, const int nBob, const std::string mode, const std::vector<std::string>& exclude,
+                                        bool* primaryExhausted)
 {
     // Walk the configured peer-discovery URLs in order and return the first
     // non-empty response. This is intentional failover, not aggregation —
     // we don't want to mix peer sets from multiple authorities.
+    // Only the first (primary) backend understands exclude; fallbacks get the plain request.
+    static const std::vector<std::string> noExclude;
+    bool isPrimary = true;
+    if (primaryExhausted) *primaryExhausted = false;
     for (const auto& baseUrl : gPeerDiscoveryUrls) {
-        auto peers = tryPeerDiscovery(baseUrl, nLite, nBob, mode);
+        bool answered = false;
+        auto peers = tryPeerDiscovery(baseUrl, nLite, nBob, mode, isPrimary ? exclude : noExclude, answered);
+        // primary answered but had nothing outside our exclude list = every peer it knows is banned or held
+        if (isPrimary && primaryExhausted) *primaryExhausted = answered && peers.empty() && !exclude.empty();
+        isPrimary = false;
         if (!peers.empty()) {
             Logger::get()->debug("peer-discovery: got {} peers from {}", peers.size(), baseUrl);
             return peers;

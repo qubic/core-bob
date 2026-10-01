@@ -81,6 +81,7 @@
 #define gTCM (GS().TCM)
 #define gMaxActivitiesPerIndexKey (GS().gMaxActivitiesPerIndexKey)
 #define gLogEventChunkSize (GS().gLogEventChunkSize)
+#define gFutureOffset (GS().gFutureOffset)
 
 #define gLastCleanTickData   (GS().lastCleanTickData)
 #define gLastCleanTransactionTick   (GS().lastCleanTransactionTick)

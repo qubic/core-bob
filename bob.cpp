@@ -111,6 +111,7 @@ int runBob(int argc, char *argv[])
     gSpamThreshold = cfg.spam_qu_threshold;
     gLogEventChunkSize = cfg.log_event_chunk_size;
     if (gLogEventChunkSize > BOB_LOG_EVENT_CHUNK_SIZE) gLogEventChunkSize = BOB_LOG_EVENT_CHUNK_SIZE;
+    gFutureOffset = cfg.future_offset;
     gDiagnosticMode.store(cfg.diagnostic_mode, std::memory_order_relaxed);
     if (cfg.diagnostic_mode) {
         Logger::get()->info("Diagnostic mode ENABLED — BATCH_AUDIT + per-log source attribution active (extra CPU + Redis cost).");
@@ -385,7 +386,7 @@ int runBob(int argc, char *argv[])
     // swapped behind their back.
     std::thread peerWatchdogThread;
     if (!gIsTestnet) {
-        peerWatchdogThread = std::thread(peerWatchdog, std::ref(connPool), needPeerWatchdog);
+        peerWatchdogThread = std::thread(peerWatchdog, std::ref(connPool), needPeerWatchdog, cfg.autoban);
     }
     {
         // update last seen network tick
@@ -660,7 +661,7 @@ int runBob(int argc, char *argv[])
             std::vector<RequestResponseHeader> tokens(wake_count);
             for (auto& t : tokens) {
                 t.randomizeDejavu();
-                t.setType(35); // NOP
+                t.setType(END_RESPONSE); // NOP
                 t.setSize(8);
             }
             for (size_t i = 0; i < wake_count; ++i) {

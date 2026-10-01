@@ -71,6 +71,8 @@ struct AppConfig {
     bool allow_receive_log_from_incoming_connections = false;
     // DNS peer discovery/rotation. Default: true iff p2p_node is empty.
     bool allow_peer_discovery = false;
+    // Rotate out discovered peers that fail most log requests and keep them out of discovery for a while.
+    bool autoban = false;
 
     std::string nodeAlias = "Big fat bob";
 
@@ -83,7 +85,8 @@ struct AppConfig {
     // private/sealed network) or extend the failover chain.
 
     // Peer-discovery endpoints: each is queried with /random-peers until
-    // one returns a usable list of peers.
+    // one returns a usable list of peers. Only the first entry receives the
+    // exclude= list (banned + connected peers); fallbacks may not support it.
     std::vector<std::string> peer_discovery_urls = {
         "https://api.qubic.global",
         "https://api.qubic.li/public",

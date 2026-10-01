@@ -141,6 +141,7 @@ Two ways to configure, in order of preference:
 | `NODE_ALIAS` | Display name | `Big fat bob` |
 | `P2P_NODES` | Comma-separated peer list | auto-discover |
 | `ALLOW_PEER_DISCOVERY` | Rotate discovered peers; with `P2P_NODES` = hybrid mode | `true` if `P2P_NODES` empty |
+| `AUTOBAN` | Rotate out discovered peers that fail most log requests | `false` |
 | `LOG_LEVEL` | `trace`/`debug`/`info`/`warn`/`error` | `info` |
 | `REDIS_MAXMEMORY` | KeyDB memory cap | `2gb` |
 | `KVROCKS_TTL` | Data retention in kvrocks (seconds) | `1209600` (14 days) |
