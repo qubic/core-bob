@@ -11,7 +11,7 @@ indexes blockchain state, and exposes it through:
 - 🌐 **REST API** — for tooling that prefers plain HTTP.
 - 📡 **WebSocket subscriptions** — real-time `tickStream`, `newTicks`, `logs`, `transfers`.
 
-This image ships **bob + KeyDB + Kvrocks** in a single container — no extra services to install.
+This image ships **bob + Redis + Kvrocks** in a single container — no extra services to install.
 
 ---
 
@@ -86,10 +86,10 @@ See the [release notes](https://github.com/qubic/core-bob/blob/master/RELEASE_NO
 |---|---|---|
 | CPU | 4 cores (AVX2 required) | 8+ cores |
 | RAM | 12 GB | 32 GB |
-| Storage | 300 GB SSD/NVMe | 500 GB+ NVMe |
+| Storage | 600 GB SSD/NVMe (stores 2 epochs of data, default) | 1 TB NVMe |
 | Network | 100 Mbps | 1 Gbps |
 
-Bob is memory-hungry on busy networks. KeyDB holds recent ticks in RAM
+Bob is memory-hungry on busy networks. Redis holds recent ticks in RAM
 before migrating to Kvrocks on disk; if the network throughput exceeds
 your `REDIS_MAXMEMORY`, you'll see `OOM command not allowed when used
 memory > maxmemory` errors in the log. See [Tuning under load](#-tuning-under-load) below.
@@ -130,8 +130,8 @@ Full reference: [JSON-RPC API Guide](https://github.com/qubic/core-bob/blob/mast
 
 Two ways to configure, in order of preference:
 
-1. **Environment variables** (recommended) — see [docs/DOCKER_ENV.md](https://github.com/qubic/core-bob/blob/master/docs/DOCKER_ENV.md) for the complete reference of all 40 supported vars.
-2. **Mount a custom `bob.json`** — for advanced cases where env vars aren't enough.
+1. **Environment variables** (recommended) — see [docs/DOCKER_ENV.md](https://github.com/qubic/core-bob/blob/master/docs/DOCKER_ENV.md) for the complete reference of all 47 supported vars.
+2. **Mount a custom `bob.json`** — for advanced cases where env vars aren't enough. Don't combine with the bob.json env vars.
 
 ### Most-used env vars
 
@@ -142,8 +142,8 @@ Two ways to configure, in order of preference:
 | `P2P_NODES` | Comma-separated peer list | auto-discover |
 | `ALLOW_PEER_DISCOVERY` | Rotate discovered peers; with `P2P_NODES` = hybrid mode | `true` if `P2P_NODES` empty |
 | `AUTOBAN` | Rotate out discovered peers that fail most log requests | `false` |
-| `LOG_LEVEL` | `trace`/`debug`/`info`/`warn`/`error` | `info` |
-| `REDIS_MAXMEMORY` | KeyDB memory cap | `2gb` |
+| `LOG_LEVEL` | `trace`/`debug`/`info`/`warn`/`error`/`critical`/`off` | `info` |
+| `REDIS_MAXMEMORY` | Redis memory cap | `2gb` |
 | `KVROCKS_TTL` | Data retention in kvrocks (seconds) | `1209600` (14 days) |
 
 ### Custom bob.json
@@ -151,14 +151,14 @@ Two ways to configure, in order of preference:
 ```bash
 docker run -d --name qubic-bob \
   -p 21842:21842 -p 40420:40420 \
-  -v ./bob.json:/app/bob.json \
+  -v ./bob.json:/app/bob.json:ro \
   -v qubic-bob-redis:/data/redis \
   -v qubic-bob-kvrocks:/data/kvrocks \
   -v qubic-bob-data:/data/bob \
   qubiccore/bob:latest
 ```
 
-⚠️ **Do not use `:ro`** on the bob.json mount — the entrypoint patches the file at startup.
+⚠️ Put all bob settings in the file and **do not set the bob.json env vars** — the entrypoint cannot rewrite a mounted file and the container exits. Redis/Kvrocks env vars are fine.
 
 Full bob.json reference: [docs/CONFIG_FILE.MD](https://github.com/qubic/core-bob/blob/master/docs/CONFIG_FILE.MD).
 
@@ -168,7 +168,7 @@ Full bob.json reference: [docs/CONFIG_FILE.MD](https://github.com/qubic/core-bob
 
 | Path | What's in it | Persist? |
 |---|---|---|
-| `/data/redis` | KeyDB persistence (AOF + RDB) | yes |
+| `/data/redis` | Redis persistence (AOF + RDB) | yes |
 | `/data/kvrocks` | Kvrocks (RocksDB-backed) data | yes |
 | `/data/bob` | bob's snapshot files | yes |
 | `/app/logs` | logs from supervisord-managed children | optional |
@@ -188,7 +188,7 @@ If you see `Failed to add log ... OOM command not allowed`:
 | Disk usage growing fast | Lower `KVROCKS_TTL` (default 14 days). 7 days halves disk. |
 | Cleaner falling behind | Check the `Current state:` log lines — the `GC: <a>/<b>` numbers should track the indexing cursor; if they drift, your machine can't keep up. |
 
-bob logs a `KeyDB memory: <used> / <max> (XX%)` line roughly once per minute and immediately when usage crosses 85% — this is the cleanest signal for memory pressure.
+bob logs a `KeyDB memory: <used> / <max> (XX%)` line roughly once per minute and immediately when usage reaches 90% — this is the cleanest signal for memory pressure.
 
 ---
 
@@ -219,8 +219,8 @@ docker exec qubic-bob jq . /app/bob.json
 docker exec qubic-bob cat /etc/redis/redis.conf
 docker exec qubic-bob cat /etc/kvrocks/kvrocks.conf
 
-# Talk to KeyDB / Kvrocks directly
-docker exec qubic-bob redis-cli ping            # KeyDB on 6379
+# Talk to Redis / Kvrocks directly
+docker exec qubic-bob redis-cli ping            # Redis on 6379
 docker exec qubic-bob redis-cli -p 6666 ping    # Kvrocks on 6666
 
 # Tail bob logs

@@ -81,7 +81,7 @@ docker run -d --name qubic-bob \
 
 ## Configuration
 
-Mount your own `bob.json` to `/app/bob.json`:
+Mount your own `bob.json` to `/app/bob.json`. Put all bob settings in the file and do not set the bob.json env vars (the entrypoint cannot rewrite a mounted file and the container exits); Redis/Kvrocks env vars are fine:
 
 ```bash
 docker run -d --name qubic-bob \
@@ -98,48 +98,48 @@ docker run -d --name qubic-bob \
 
 ```json
 {
-  "p2p-node": [],
-  "keydb-url": "tcp://127.0.0.1:6379",
-  "kvrocks-url": "tcp://127.0.0.1:6666",
-  "run-server": true,
-  "server-port": 21842,
-  "tick-storage-mode": "kvrocks",
-  "tx-storage-mode": "kvrocks",
-  "tx_tick_to_live": 10000,
-  "log-level": "info",
-  "spam-qu-threshold": 0
+  "p2p_node": [],
+  "keydb_url": "tcp://127.0.0.1:6379",
+  "kvrocks_url": "tcp://127.0.0.1:6666",
+  "run_server": true,
+  "server_port": 21842,
+  "tick_storage_mode": "kvrocks",
+  "tx_storage_mode": "kvrocks",
+  "tx_tick_to_live": 1000,
+  "log_level": "info",
+  "spam_qu_threshold": 0
 }
 ```
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `p2p-node` | P2P nodes to connect to | `[]` (auto-fetches) |
-| `keydb-url` | Redis/KeyDB connection URL | `tcp://127.0.0.1:6379` |
-| `kvrocks-url` | Kvrocks connection URL | `tcp://127.0.0.1:6666` |
-| `run-server` | Enable P2P server | `true` |
-| `server-port` | P2P server port | `21842` |
-| `tick-storage-mode` | `kvrocks` or `lastNTick` | `kvrocks` |
-| `tx-storage-mode` | `kvrocks` or `free` | `kvrocks` |
-| `tx_tick_to_live` | Ticks to keep transaction data | `10000` |
-| `log-level` | `debug`, `info`, `warn`, `error` | `info` |
-| `spam-qu-threshold` | Min QU to index transfers (0 disables the filter) | `0` |
+| `p2p_node` | P2P nodes to connect to | `[]` (auto-fetches) |
+| `keydb_url` | Redis/KeyDB connection URL | `tcp://127.0.0.1:6379` |
+| `kvrocks_url` | Kvrocks connection URL | `tcp://127.0.0.1:6666` |
+| `run_server` | Enable P2P server | `true` |
+| `server_port` | P2P server port | `21842` |
+| `tick_storage_mode` | `lastNTick`, `kvrocks` or `free` | `kvrocks` |
+| `tx_storage_mode` | `lastNTick`, `kvrocks` or `free` | `kvrocks` |
+| `tx_tick_to_live` | Ticks to keep transaction data | `1000` |
+| `log_level` | `trace`, `debug`, `info`, `warn`, `error`, `critical`, `off` | `info` |
+| `spam_qu_threshold` | Min QU to index transfers (0 disables the filter) | `0` |
 
-> To use external KeyDB/Kvrocks instances, update `keydb-url` and `kvrocks-url` to point to your hosts.
+> To use external KeyDB/Kvrocks instances, update `keydb_url` and `kvrocks_url` to point to your hosts.
 
-> **All available env variables** (40 total, covering bob.json + redis.conf + kvrocks.conf) are listed in
-> [docs/DOCKER_ENV.md](../docs/DOCKER_ENV.md). Env vars override bob.json at container startup.
+> **All available env variables** (47 total, covering bob.json + redis.conf + kvrocks.conf) are listed in
+> [docs/DOCKER_ENV.md](../docs/DOCKER_ENV.md). Env vars override the image's bundled bob.json at container startup.
 
 ### P2P Node Format
 
 ```json
-"p2p-node": [
+"p2p_node": [
   "BM:IP:PORT:P0-P1-P2-P3",
   "BM:157.180.10.49:21841:0-0-0-0"
 ]
 ```
 
-- `BM:` prefix indicates a trusted node
-- `0-0-0-0` Passcode from node (relevant for full node connection)
+- Prefix is the node type: `BM` = Qubic core node, `bob` = another bob node
+- `0-0-0-0` Passcode from node; a passcode marks the peer as trusted (relevant for full node connection)
 
 ---
 

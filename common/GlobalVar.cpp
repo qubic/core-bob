@@ -10,7 +10,7 @@ GlobalState& GS() {
             std::abort();
         }
         std::memset(mem, 0, sizeof(GlobalState));
-        // Placement-new is optional since GlobalState is trivially constructible.
+        // Placement-new is required: GlobalState has non-trivial members.
         return new (mem) GlobalState();
     }();
     return *inst;

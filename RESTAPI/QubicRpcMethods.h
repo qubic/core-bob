@@ -114,7 +114,7 @@ public:
     //   - logType: log type (required)
     //   - topic1, topic2, topic3: identity filters
     //   - fromTick, toTick: tick range (required)
-    // Returns: array of log IDs
+    // Returns: array of tick numbers with matching logs
     static Json::Value findLogIds(const Json::Value& filterParams);
 
     // qubic_getLogsByIdRange - Returns logs by ID range (same as /log REST endpoint)

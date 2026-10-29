@@ -12,6 +12,7 @@ General
 - Errors are returned as JSON with fields:
   - ok: false
   - error: string message
+- Exception: some failures detected after input validation return HTTP 200 with only `{"error": "..."}` (no `ok` field), e.g. `/balance` and `/tx` not found, `/log` negative range or batch > 500000, and the transfer endpoints when `toTick < fromTick`, `toTick - fromTick >= 1000`, or identity/assetName length is invalid.
 - Numeric parameters using unsigned 32-bit range must be within 0..4294967295.
 - Hex string parameters:
   - Optional 0x or 0X prefix is accepted.
@@ -20,9 +21,9 @@ General
 
 ## Response Data Structures
 
-The following data structures are used in API responses:
+The following JSON bodies are returned by the endpoints below (field names as sent on the wire):
 
-### BalanceInfo
+### BalanceInfo (`GET /balance`)
 ```json
 {
     "incomingAmount": 0,
@@ -32,24 +33,23 @@ The following data structures are used in API responses:
     "numberOfOutgoingTransfers": 0,
     "latestIncomingTransferTick": 0,
     "latestOutgoingTransferTick": 0,
-    "currentTick": 0,
-    "isBeingProcessed": false,
-    "found": false,
-    "error": ""
+    "currentBobTick": 0,
+    "error": "null"
 }
 ```
+- `error` is the string `"null"` normally; it carries a message when the entity is still being processed (`currentBobTick` < latest transfer tick).
+- Invalid or unknown identity: HTTP 200 with `{"error": "Wrong identity format"}` or `{"error": "Identity not found in spectrum"}`.
 
-### AssetBalanceInfo
+### AssetBalanceInfo (`GET /asset`)
 ```json
 {
     "ownershipBalance": 0,
-    "possessionBalance": 0,
-    "found": false,
-    "error": ""
+    "possessionBalance": 0
 }
 ```
+- Each balance is `-1` when the matching ownership/possession record is not found.
 
-### TransactionInfo
+### TransactionInfo (`GET /tx`)
 ```json
 {
     "hash": "",
@@ -57,53 +57,54 @@ The following data structures are used in API responses:
     "to": "",
     "amount": 0,
     "tick": 0,
-    "inputSize": 0,
-    "inputType": 0,
-    "inputData": "",
-    "hasIndexedInfo": false,
-    "transactionIndex": -1,
     "logIdFrom": -1,
     "logIdTo": -1,
-    "timestamp": 0,
+    "transactionIndex": -1,
     "executed": false,
-    "found": false,
-    "error": ""
+    "status": "success",
+    "timestamp": 0,
+    "inputSize": 0,
+    "inputType": 0,
+    "inputData": ""
 }
 ```
+- `status` is `"pending"`, `"success"` or `"failed"`; `executed` is `null` while pending.
+- If the tick is not yet indexed, only `hash`, `from`, `to`, `amount`, `tick`, `inputSize`, `inputType`, `inputData` are returned.
+- Not found: HTTP 200 with `{"error": "..."}`.
 
-### EpochInfo
+### EpochInfo (`GET /epochinfo`)
 ```json
 {
     "epoch": 0,
     "initialTick": 0,
     "endTick": 0,
     "endTickStartLogId": -1,
-    "endTickEndLogId": -1,
-    "latestLogId": -1,
-    "currentTick": 0,
+    "endTickEndLogId": -3,
     "lastIndexedTick": 0,
-    "found": false,
-    "error": ""
+    "latestLogId": -1
 }
 ```
+- When the end-epoch log range is not available, `endTickStartLogId` is `-1` and `endTickEndLogId` is `-3`.
 
-### SyncStatus
+### SyncStatus (`GET /status`)
 ```json
 {
-    "epoch": 0,
-    "initialTick": 0,
+    "currentProcessingEpoch": 0,
     "currentFetchingTick": 0,
     "currentFetchingLogTick": 0,
     "currentVerifyLoggingTick": 0,
     "currentIndexingTick": 0,
-    "lastSeenNetworkTick": 0,
+    "initialTick": 0,
     "targetTickVoteSignature": 613566,
     "computorListSignature": 14237492837401234567,
     "computorPacketSignature": 14237492837401234567,
-    "isSyncing": false,
-    "progress": 0.0
+    "bobVersion": "",
+    "bobVersionGitHash": "",
+    "bobCompiler": "",
+    "extraInfo": {}
 }
 ```
+- `extraInfo` is a signed node-info object (`type`, `version`, `alias`, `uptime`, `timestamp`, `operator`, `messageHex`, `signature`); optional query `?challenge=<32 hex chars>` is included in the signed message.
 
 Signature-related fields (also returned by `GET /status` and `qubic_syncing`):
 
@@ -115,23 +116,10 @@ Signature-related fields (also returned by `GET /status` and `qubic_syncing`):
 
 > The full 64-byte arbitrator signature is available via the `qubic_getComputors` JSON-RPC method (`signature` field).
 
-### BroadcastResult
+### BroadcastResult (`POST /broadcastTransaction`)
 ```json
 {
-    "success": false,
-    "txHash": "",
-    "error": ""
-}
-```
-
-### SmartContractQueryResult
-```json
-{
-    "success": false,
-    "pending": false,
-    "nonce": 0,
-    "data": "",
-    "error": ""
+    "txHash": ""
 }
 ```
 
@@ -153,7 +141,7 @@ GET /asset/{identity}/{issuer}/{asset_name}/{manageSCIndex}
   - identity: string
   - issuer: string
   - asset_name: string
-  - manageSCIndex: [1..1024]
+  - manageSCIndex: uint32 managing contract index (0 is valid; e.g. 1 = QX)
 - Validation:
   - manageSCIndex must be an integer and within uint32 range
 - Responses:
@@ -196,7 +184,7 @@ GET /log/{epoch}/{from_id}/{to_id}
   - from_id and to_id must be integers
   - to_id must be greater than or equal to from_id
 - Responses:
-  - 200: JSON body (format depends on backend)
+  - 200: JSON array of log event objects (missing IDs appear as `{"ok":false,"error":"not_found",...}`); negative range or batch > 500000 returns 200 with `{"error": "..."}`
   - 400: error JSON for invalid input or ranges
   - 500: error JSON on internal error
 
@@ -227,30 +215,30 @@ POST /findLog
   - topic3: string (required)
 - Validation:
   - All numeric fields must be within uint32
-  - topic1, topic2, topic3 must be strings and present
+  - topic1, topic2, topic3 must be strings and present; each must be a 60-char Qubic identity (any case), a 0x-prefixed 66-char hex public key, or a 64-char hex public key (empty is rejected; use `AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFXIB` as wildcard)
   - fromTick must be less than or equal to toTick
 - Responses:
-  - 200: JSON result from the search
+  - 200: JSON array of matching tick numbers, e.g. `[51000003, 51000042]`
   - 400: error JSON for invalid or missing fields
   - 500: error JSON on internal error
 
 ----------------------------------------------------------------
 
 POST /getlogcustom
-- Description: Retrieves a custom log for a given epoch and tick.
+- Description: Retrieves logs for a given epoch and a single tick or tick range, filtered by scIndex/logType and optional topics.
 - Request body (JSON):
-  - epoch: uint32
-  - tick: uint32
-  - scIndex: uint32
-  - logType: uint32
-  - topic1: string (required)
-  - topic2: string (required)
-  - topic3: string (required)
+  - epoch: uint32 (required)
+  - scIndex: uint32 (required)
+  - logType: uint32 (required)
+  - tick: uint32 (single tick), OR
+  - startTick + endTick: uint32 (inclusive range; endTick is clamped to startTick + 1000)
+  - topic1, topic2, topic3: string (optional; omitted = wildcard)
 - Validation:
   - All numeric fields must be within uint32
-  - topic1, topic2, topic3 must be strings and present
+  - Either tick or both startTick and endTick must be present
+  - A present topic must be a 60-char Qubic identity, a 0x-prefixed hex public key, or a 64-char hex public key
 - Responses:
-  - 200: JSON result
+  - 200: JSON array of log event objects
   - 400: error JSON for invalid or missing fields
   - 500: error JSON on internal error
 
@@ -273,7 +261,7 @@ POST /querySmartContract
   - data: hex string (optional 0x/0X prefix accepted; even length; hex only)
 - Behavior:
   - The request is enqueued for processing.
-  - The server checks asynchronously for up to about 100ms for a ready response.
+  - The server polls for a ready response every 100ms, up to 20 times (about 2s), before returning 202.
 - Responses:
   - 200: JSON with fields:
     - nonce: uint32
@@ -315,7 +303,7 @@ POST /broadcastTransaction
   - Request body must be valid JSON.
   - Required fields: fromTick, toTick, identity.
 - Responses:
-  - 200: JSON result (format depends on backend)
+  - 200: `{"in": [txHash...], "out": [txHash...]}`
   - 400: error JSON for invalid JSON or missing required fields
   - 500: error JSON on internal error
 
@@ -342,7 +330,7 @@ curl -sS http://HOST:40420/getQuTransfersForIdentity \
   - Request body must be valid JSON.
   - Required fields: fromTick, toTick, identity, assetIssuer, assetName.
 - Responses:
-  - 200: JSON result (format depends on backend)
+  - 200: `{"in": [txHash...], "out": [txHash...]}`
   - 400: error JSON for invalid JSON or missing required fields
   - 500: error JSON on internal error
 
@@ -368,7 +356,7 @@ curl -sS http://HOST:40420/getAssetTransfersForIdentity \
   - Request body must be valid JSON.
   - Required fields: fromTick, toTick, assetIssuer, assetName.
 - Responses:
-  - 200: JSON result (format depends on backend)
+  - 200: JSON array of txHash strings
   - 400: error JSON for invalid JSON or missing required fields
   - 500: error JSON on internal error
 

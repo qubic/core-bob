@@ -30,7 +30,7 @@ No redis / spdlog / drogon needed — it only uses bob's header-only code.
 
 # Probe a specific (older) tick, verify the computor-list signature, full hexdumps:
 ./bob_probe 1.2.3.4 21841 --tick 55558000 \
-    --arb AFZPUAIYVPNUYGJRQVLUKOPPVLHAZQTGLYAAUUNBXFTVTAMSBKQBLEIEPCVJ --hex -1
+    --arb AFZPUAIYVPNUYGJRQVLUKOPPVLHAZQTGLYAAUUNBXFTVTAMSBKQBLEIEPCVJ --hex -1 --binary-output
 
 # Just watch the node's current tick live:
 ./bob_probe 1.2.3.4 21841 --steps tickinfo --loop-tickinfo
@@ -44,7 +44,7 @@ No redis / spdlog / drogon needed — it only uses bob's header-only code.
 | `--arb <IDENTITY>` | Arbitrator identity → verify the computor-list signature |
 | `--passcode p0-p1-p2-p3` | Passcode for the logging-event requests (the `logs` step) |
 | `--steps <list>` | Comma list: `handshake,tickinfo,computors,tickdata,votes,txs,logs` (default: all except handshake; `logs` needs `--passcode`) |
-| `--hex <N>` | Hexdump bytes per packet (default 128; `0`=off; `-1`=full) |
+| `--hex <N>` | Hexdump bytes per packet, only with `--binary-output` (default 128; `-1`=full) |
 | `--timeout <sec>` | Socket receive timeout (default 8) |
 | `--max-votes <N>` | Max votes to print (default 8; `-1`=all) |
 | `--max-txs <N>` | Max transactions to print (default 16; `-1`=all) |
@@ -56,7 +56,7 @@ No redis / spdlog / drogon needed — it only uses bob's header-only code.
 
 ## What it does (the same sequence bob does)
 
-1. **handshake** — `EXCHANGE_PUBLIC_PEERS` (type 0)
+1. **handshake** (only with `--steps handshake`; bob itself skips it) — `EXCHANGE_PUBLIC_PEERS` (type 0)
 2. **tickinfo** — `REQUEST_CURRENT_TICK_INFO` (27) → `RESPOND_CURRENT_TICK_INFO` (28)
 3. **computors** — `REQUEST_COMPUTOR_LIST` (11) → `RESPOND_COMPUTOR_LIST` (2), with optional signature check
 4. **tickdata** — `REQUEST_TICK_DATA` (16) → `TickData` (8), with canonical-vs-legacy size detection + signature check
@@ -105,14 +105,14 @@ summary of the timings.
 - `--tick <N>` sets the start tick. If omitted, it starts at `currentTick - count`
   so you catch up the most recent `count` ticks.
 - `--steps` selects which per-tick fetches to run, among `tickdata,votes,txs,logs`
-  (default: `tickdata,votes,txs`). `logs` is opt-in and needs `--passcode`.
+  (default: `tickdata,votes,txs`, plus `logs` if `--passcode` is given). `logs` needs `--passcode`.
   `tickinfo`/`computors` are not per-tick and are ignored here.
 - Each tick prints one compact line, e.g.
   `[ 12/500] tick 56000011  td 72.7ms 136 KB  votes 41ms x676  txs 95ms x312`.
 - The run ends with a **timing summary** per fetch type (ticks, empty, total, avg,
   min, max, bytes) plus overall throughput (ticks/s, MB/s, avg per tick).
 - It is **sequential** (one tick at a time), so it measures per-tick round-trip
-  latency. Real bob pipelines requests (`future-offset`) for higher throughput —
+  latency. Real bob pipelines requests (`future_offset`) for higher throughput —
   so treat these numbers as a per-tick latency baseline, not bob's max sync speed.
 - Signature verification is skipped in catch-up (it's a network-timing test).
 - `empty` in the summary = ticks where the node returned no data for that type

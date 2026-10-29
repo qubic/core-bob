@@ -66,7 +66,7 @@ void ConnectionPool::randomlyRemoveBob() {
     conns_.erase(conns_.begin() + chosen);
 }
 
-// Sends to one random valid connection. Returns bytes sent, or -1 if none could be used.
+// Sends to one random valid BM connection. Returns bytes sent, or -1 if none could be used.
 int ConnectionPool::sendToRandomBM(uint8_t* buffer, int sz, uint8_t type, bool randomDejavu) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (conns_.empty()) return -1;
@@ -86,7 +86,7 @@ int ConnectionPool::sendToRandomBM(uint8_t* buffer, int sz, uint8_t type, bool r
     return conns_[chosen]->enqueueWithHeader(buffer, sz, type, randomDejavu);
 }
 
-// Sends to one random valid connection. Returns bytes sent, or -1 if none could be used.
+// Sends to one random valid BM connection. Returns bytes sent, or -1 if none could be used.
 int ConnectionPool::sendToRandomBM(uint8_t* buffer, int sz) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (conns_.empty()) return -1;

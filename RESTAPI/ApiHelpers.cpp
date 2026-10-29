@@ -382,7 +382,7 @@ TransactionInfo getTransactionInfo(const std::string& txHash) {
 
     // Authoritative lookup: compute execution state directly from primary
     // data so the response is correct even when the itx: index was skipped
-    // (e.g. dust txs filtered by spam-qu-threshold) or has not been written
+    // (e.g. dust txs filtered by spam_qu_threshold) or has not been written
     // for this tick yet.
     TickData td;
     if (db_try_get_tick_data(tx->tick, td)) {

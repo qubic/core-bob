@@ -290,7 +290,7 @@ Returns full node status including version info (same as `/status` REST endpoint
       "uptime": 86400,
       "timestamp": 1704067200,
       "operator": "BAAAA...",
-      "signature": "0x..."
+      "signature": "a1b2c3d4..."
     }
   }
 }
@@ -378,7 +378,7 @@ Returns epoch info for any epoch (current or historical).
 | `initialTick` | number | First tick of this epoch |
 | `endTick` | number | End-of-epoch virtual tick (0 if epoch not yet closed) |
 | `endTickStartLogId` | number | First log ID in the end-epoch tick (-1 if not available) |
-| `endTickEndLogId` | number | Last log ID in the end-epoch tick (-1 if not available) |
+| `endTickEndLogId` | number | Last log ID in the end-epoch tick (-3 if not available) |
 | `lastIndexedTick` | number | Last tick that has been fully indexed |
 | `latestLogId` | number | Latest processed log ID. For the current epoch: live counter from the log processor. For past epochs: equals `endTickEndLogId`. Returns -1 if no log data exists. |
 
@@ -411,12 +411,21 @@ Returns the logs from the end-of-epoch tick. These logs contain epoch-ending pro
 {
   "result": [
     {
-      "logId": 1234567890,
+      "ok": true,
+      "epoch": 192,
       "tick": 40100000,
-      "type": 6,
-      "scIndex": 0,
-      "data": "...",
-      "extraData": "..."
+      "type": 0,
+      "logId": 1234567890,
+      "logDigest": "a1b2c3d4e5f60718",
+      "bodySize": 72,
+      "logTypename": "QU_TRANSFER",
+      "body": {
+        "from": "ANOTHERIDENTITYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "to": "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID",
+        "amount": 1000000
+      },
+      "timestamp": "25-01-11 14:30:45",
+      "txHash": "SC_END_EPOCH_TX_40100000"
     }
   ]
 }
@@ -660,9 +669,9 @@ Returns balance and transfer stats for an identity.
   "result": {
     "identity": "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID",
     "publicKeyHex": "0x...",
-    "balance": "1000000000000",
-    "incomingAmount": "1500000000000",
-    "outgoingAmount": "500000000000",
+    "balance": 1000000000000,
+    "incomingAmount": 1500000000000,
+    "outgoingAmount": 500000000000,
     "numberOfIncomingTransfers": 100,
     "numberOfOutgoingTransfers": 50,
     "latestIncomingTransferTick": 12499900,
@@ -762,7 +771,7 @@ The filter object follows the same format as the `/findLog` endpoint. See [FINDL
         "logDigest": "a1b2c3d4e5f60718",
         "bodySize": 72,
         "logTypename": "QU_TRANSFER",
-        "timestamp": "25-01-11 14:30:45",
+        "timestamp": 1736605845,
         "txHash": "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefgh",
         "body": {
           "from": "ANOTHERIDENTITYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
@@ -817,14 +826,20 @@ The filter object follows the same format as the `/findLog` endpoint. See [FINDL
     "logType": 6,
     "transfers": [
       {
-        "tick": 12495000,
+        "ok": true,
         "epoch": 150,
+        "tick": 12495000,
+        "type": 6,
         "logId": 12345680,
-        "logType": 6,
-        "logTypeName": "CONTRACT_INFO",
-        "contractIndex": 1,
-        "contractLogType": 42,
-        "rawData": "0x..."
+        "logDigest": "c3d4e5f607182930",
+        "bodySize": 40,
+        "body": {
+          "scIndex": 1,
+          "scLogType": 42,
+          "content": "0102030405060708..."
+        },
+        "timestamp": 1736605845,
+        "txHash": "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefgh"
       }
     ],
     "count": 1
@@ -852,7 +867,7 @@ Returns asset balance for an identity.
 | 0 | `identity` | string | Owner identity (60-char Qubic or 0x-hex public key) |
 | 1 | `issuer` | string | Asset issuer identity |
 | 2 | `assetName` | string | Asset name (up to 7 chars) |
-| 3 | `manageSCIndex` | uint32 | Optional. Managing smart contract index. `0` (default) for native assets where the issuer manages it directly; `1` for QX-managed assets such as **QDOGE**, **QWALLET**, etc. If you get `ownershipBalance: "-1"` and `possessionBalance: "-1"`, you most likely need to pass a non-zero `manageSCIndex`. |
+| 3 | `manageSCIndex` | uint32 | Optional. Managing smart contract index. `0` (default) for native assets where the issuer manages it directly; `1` for QX-managed assets such as **QDOGE**, **QWALLET**, etc. If you get `ownershipBalance: -1` and `possessionBalance: -1`, you most likely need to pass a non-zero `manageSCIndex`. |
 
 **Response:**
 ```json
@@ -862,8 +877,8 @@ Returns asset balance for an identity.
     "issuer": "...",
     "assetName": "QFT",
     "manageSCIndex": 0,
-    "ownershipBalance": "1000000",
-    "possessionBalance": "1000000"
+    "ownershipBalance": 1000000,
+    "possessionBalance": 1000000
   }
 }
 ```
@@ -1073,7 +1088,7 @@ See the complete log types table in [qubic_getTransfers](#qubic_gettransfers) se
       "transactionHash": "...",
       "source": "...",
       "destination": "...",
-      "amount": "1000000",
+      "amount": 1000000,
       "rawData": "0x..."
     }
   ]
@@ -1087,7 +1102,7 @@ See the complete log types table in [qubic_getTransfers](#qubic_gettransfers) se
 ---
 
 #### qubic_findLogIds
-Returns only log IDs matching filter (same as `/findLog` REST endpoint). Useful for efficiently finding logs before fetching full details.
+Returns tick numbers that contain logs matching the filter (same as `/findLog` REST endpoint). Use `qubic_getTickLogRanges` to map them to log IDs.
 
 **Parameters:**
 | Position | Type | Description |
@@ -1127,13 +1142,13 @@ Returns only log IDs matching filter (same as `/findLog` REST endpoint). Useful 
 **Response:**
 ```json
 {
-  "result": [1234567890, 1234567891, 1234567892]
+  "result": [41000012, 41000057]
 }
 ```
 
 | Ethereum Equivalent |
 |---------------------|
-| N/A (returns only IDs for efficiency) |
+| N/A (returns only tick numbers for efficiency) |
 
 ---
 
@@ -1162,15 +1177,21 @@ Returns logs by ID range (same as `/log/{epoch}/{from_id}/{to_id}` REST endpoint
 {
   "result": [
     {
-      "tick": 41000000,
+      "ok": true,
       "epoch": 192,
+      "tick": 41000000,
+      "type": 0,
       "logId": 1000000,
-      "logType": 0,
-      "source": "...",
-      "destination": "...",
-      "amount": "1000000",
-      "txId": "...",
-      "txOrderIndex": 0
+      "logDigest": "a1b2c3d4e5f60718",
+      "bodySize": 72,
+      "logTypename": "QU_TRANSFER",
+      "body": {
+        "from": "ANOTHERIDENTITYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "to": "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID",
+        "amount": 1000000
+      },
+      "timestamp": 1736605845,
+      "txHash": "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefgh"
     }
   ]
 }
@@ -1293,7 +1314,7 @@ Query a smart contract function. This is an asynchronous operation - the first c
 
 1. Send initial query with a unique nonce
 2. If response contains `pending: true`, poll again with the same nonce
-3. Results are cached for ~60 seconds, so use the same nonce to retrieve cached results
+3. Results are kept for only ~10 seconds, so poll promptly with the same nonce
 4. Use unique nonces for different queries to avoid cache collisions
 
 **Example - Query with polling:**
@@ -1533,7 +1554,7 @@ Connect to `ws://your-node:40420/ws/qubic` for real-time updates.
 
 ### Subscribe to New Ticks
 
-Subscribe to new tick notifications. This is a lightweight subscription that only sends basic tick metadata.
+Subscribe to new tick notifications. Each notification is the same tick object as `qubic_getTickByNumber` without full transactions.
 
 **Request:**
 ```json
@@ -1637,14 +1658,13 @@ Monitor QU transfers for specific identities. This is a specialized log subscrip
       "logDigest": "a1b2c3d4e5f60718",
       "bodySize": 72,
       "logTypename": "QU_TRANSFER",
-      "timestamp": "25-01-14 10:30:45",
+      "timestamp": 1736850645,
       "txHash": "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefgh",
       "body": {
-        "from": "ANOTHERIDENTITYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "from": "ANOTHERIDENTITYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
         "to": "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID",
         "amount": 5000000
-      },
-      "isCatchUp": false
+      }
     }
   }
 }
@@ -1662,10 +1682,10 @@ Monitor QU transfers for specific identities. This is a specialized log subscrip
 | `logDigest` | string | 16-char hex digest of the log |
 | `bodySize` | number | Size of log body in bytes |
 | `logTypename` | string | Human-readable log type name |
-| `timestamp` | string | Timestamp string (YY-MM-DD HH:MM:SS) |
+| `timestamp` | number | Tick time as Unix seconds |
 | `txHash` | string | Transaction hash that generated this log |
 | `body` | object | Parsed log body (from, to, amount for QU_TRANSFER) |
-| `isCatchUp` | boolean | `true` if this is historical data from catch-up |
+| `isCatchUp` | boolean | `true` for catch-up events; omitted for real-time events |
 
 > **Catch-Up:** When `startLogId` is specified, historical events are replayed with `isCatchUp: true`. Periodic `catchUpProgress` notifications report progress, and a `catchUpComplete` notification is sent when all historical data has been delivered (see [Subscribe to Logs](#subscribe-to-logs) for details).
 
@@ -1737,7 +1757,7 @@ Subscribe to log events with optional filters. Supports catch-up from a specific
       "logDigest": "b2c3d4e5f6071829",
       "bodySize": 120,
       "logTypename": "ASSET_OWNERSHIP_CHANGE",
-      "timestamp": "25-01-14 10:30:46",
+      "timestamp": 1736850646,
       "txHash": "bcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghi",
       "body": {
         "sourcePublicKey": "ANOTHERIDENTITYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
@@ -1757,9 +1777,9 @@ When `startLogId` is specified:
 1. The subscription is created immediately
 2. Historical logs from `startLogId` to current are sent with `isCatchUp: true`
 3. During catch-up, periodic `catchUpProgress` notifications report progress
-4. Real-time logs that arrive during catch-up are queued (up to 10,000 logs)
+4. Real-time logs are queued once catch-up is within 10,000 logs of the head (queue is uncapped)
 5. After catch-up completes, queued logs are delivered, then a `catchUpComplete` notification is sent
-6. All subsequent events are real-time with `isCatchUp: false`
+6. All subsequent events are real-time and omit the `isCatchUp` field
 
 **Catch-Up Progress Notification (sent periodically during catch-up):**
 ```json
@@ -1967,7 +1987,6 @@ This is ideal for:
           "amount": 100,
           "inputType": 0,
           "inputSize": 0,
-          "inputData": "",
           "executed": false,
           "logIdFrom": -1,
           "logIdLength": 0
@@ -1983,9 +2002,8 @@ This is ideal for:
           "logDigest": "a1b2c3d4e5f60718",
           "bodySize": 72,
           "logTypename": "QU_TRANSFER",
-          "timestamp": "25-01-14 10:30:45",
+          "timestamp": 1736850645,
           "txHash": "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefgh",
-          "txIndex": 0,
           "body": {
             "from": "ANOTHERIDENTITYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
             "to": "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID",
@@ -2001,9 +2019,8 @@ This is ideal for:
           "logDigest": "b2c3d4e5f6071829",
           "bodySize": 72,
           "logTypename": "QU_TRANSFER",
-          "timestamp": "25-01-14 10:30:45",
+          "timestamp": 1736850645,
           "txHash": "bcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghi",
-          "txIndex": 1,
           "body": {
             "from": "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID",
             "to": "CFBMEMZOIDEXQAUXYYSZIURADQLAPWPMNJXQSNVQJADFYLJCRRTFPBQGIM",
@@ -2201,9 +2218,10 @@ Standard JSON-RPC 2.0 error codes:
 | -32601 | Method not found | Unknown method |
 | -32602 | Invalid params | Wrong parameter types |
 | -32603 | Internal error | Server error |
-| -32001 | Resource not found | Tick/transaction not found |
-| -32002 | Resource unavailable | Node not synced |
-| -32005 | Limit exceeded | Query range too large |
+| -32000 | Server error | WebSocket rejected while node is starting up |
+| -32005 | Limit exceeded | WebSocket rate limit or subscription cap reached |
+
+Not-found lookups (tick, transaction) return `"result": null`, not an error.
 
 ---
 

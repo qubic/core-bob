@@ -197,14 +197,14 @@ public:
     void randomlyRemoveBob();
     void removeDisconnectedClient();
 
-    // Sends to one random valid connection. Returns bytes sent, or -1 if none could be used.
+    // Sends to one random valid BM connection. Returns bytes sent, or -1 if none could be used.
     int sendToRandomBM(uint8_t* buffer, int sz, uint8_t type, bool randomDejavu);
 
-    // Sends to one random valid connection. Returns bytes sent, or -1 if none could be used.
+    // Sends to one random valid BM connection. Returns bytes sent, or -1 if none could be used.
     int sendToRandomBM(uint8_t* buffer, int sz);
     // Sends to the best BM connection. Returns bytes sent, or -1 if none could be used.
     int sendToBestBM(uint8_t* buffer, int sz);
-    // Sends to the ALL BM connection. Returns bytes sent, or -1 if none could be used.
+    // Sends to ALL BM connections.
     void sendToAllBM(uint8_t* buffer, int sz);
 
     // Sends to one random valid connection. Returns bytes sent, or -1 if none could be used.
@@ -244,7 +244,7 @@ std::vector<std::string> GetPeerFromDNS(const int nLite, const int nBob, const s
 bool DownloadStateFiles(uint16_t epoch);
 void GetLatestTickFromExternalSources(uint32_t& tick, uint16_t& epoch);
 void CheckInQubicGlobal();
-// peerWatchdog runs two independent checks:
+// peerWatchdog runs these independent checks:
 //   - idle-disconnect (every 30s, ALWAYS on): for each connection idle longer
 //     than IDLE_DISCONNECT_S, call disconnect(). The IO loop reconnects to the
 //     same IP/port via QubicConnection::reconnect(). This survives silent
@@ -256,4 +256,5 @@ void CheckInQubicGlobal();
 //   - bad-peer sampling (every 30s, autoban==true): flag a discovered peer that
 //     fails most of its log requests, rotate it out first and keep its IP out
 //     of discovery for a while (short for "has no logs", long for "no answer").
+//   - keep-alive (every 1s): askForLatestTick on each valid connection.
 void peerWatchdog(ConnectionPool& conns_, bool allowDnsReplace, bool autoban);

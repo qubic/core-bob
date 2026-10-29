@@ -4,21 +4,22 @@
 # Configuration can be done in two ways:
 #   1. Environment variables (recommended).
 #   2. Mount a custom bob.json file (see commented-out volume mount below).
+#      Put all bob settings in it and don't set bob.json env vars with it.
 #
-# Env vars take precedence: the entrypoint patches bob.json / redis.conf /
-# kvrocks.conf with them at startup.
+# The entrypoint patches the bundled bob.json / redis.conf / kvrocks.conf
+# with env vars at startup.
 #
-# Full reference of all 40 supported environment variables:
+# Full reference of all 47 supported environment variables:
 #   docs/DOCKER_ENV.md  (https://github.com/qubic/core-bob/blob/master/docs/DOCKER_ENV.md)
 #
 # Most commonly tuned:
-#   NODE_SEED              - 55-char lowercase a-z seed for node identity (REQUIRED for production)
+#   NODE_SEED              - 55-char lowercase a-z seed for node identity (optional; set for a stable, unique identity)
 #   NODE_ALIAS             - Display name for this node
 #   P2P_NODES              - Comma-separated peer list (e.g. "BM:1.2.3.4:21841:0-0-0-0")
 #   ALLOW_PEER_DISCOVERY   - true|false; with P2P_NODES set, true = hybrid (static + rotated slots)
 #   AUTOBAN                - true|false; rotate out discovered peers that fail most log requests (default false)
-#   LOG_LEVEL              - trace | debug | info | warn | error | fatal
-#   REDIS_MAXMEMORY        - KeyDB memory cap (default: 2gb)
+#   LOG_LEVEL              - trace | debug | info | warn | error | critical | off
+#   REDIS_MAXMEMORY        - Redis memory cap (default: 2gb)
 #   KVROCKS_TTL            - Data retention in kvrocks, seconds (default: 1209600 = 14 days)
 
 services:
@@ -32,13 +33,13 @@ services:
     environment:
       - NODE_SEED=your_55_character_lowercase_seed_here_aaaaaaaaaaaa
       # - LOG_LEVEL=info
-      # - P2P_NODES=1:1.2.3.4:21841,2:5.6.7.8:21841
+      # - P2P_NODES=BM:1.2.3.4:21841,BM:5.6.7.8:21841
       # - ALLOW_PEER_DISCOVERY=true
       # - AUTOBAN=false
       # - RUN_SERVER=true
-      # - IS_TESTNET=false
+      # - IS_TESTNET=false  # currently ignored
     volumes:
-      # - ./bob.json:/app/bob.json:ro # custom config file (env vars still override it)
+      # - ./bob.json:/app/bob.json:ro # custom config file (don't combine with bob.json env vars)
       # - ./redis.conf:/etc/redis/redis.conf:ro # custom Redis config
       - qubic-bob-redis:/data/redis
       - qubic-bob-kvrocks:/data/kvrocks

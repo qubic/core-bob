@@ -314,7 +314,7 @@ struct RequestLogIdRange // Fetches logId range
         return 48;
     }
 };
-struct ResponseLogIdRange // Fetches logId range
+struct ResponseLogIdRange // Returns logId range
 {
     long long fromLogId;
     long long length;
@@ -456,7 +456,7 @@ struct RespondLog // Returns buffered log; clears the buffer; make sure you fetc
     }
 };
 
-// Request logid ranges of all txs from a tick
+// Request pruning of log page files for a logId range
 struct RequestPruningPageFiles
 {
     unsigned long long passcode[4];
@@ -479,7 +479,7 @@ struct ResponsePruningPageFiles
     }
 };
 
-// Request logid ranges of all txs from a tick
+// Request the log state digest at a tick
 struct RequestLogStateDigest
 {
     unsigned long long passcode[4];
@@ -491,7 +491,7 @@ struct RequestLogStateDigest
     }
 };
 
-// Response 0 if success, otherwise error code will be returned
+// Response: 32-byte log state digest
 struct ResponseLogStateDigest
 {
     unsigned char digest[32];

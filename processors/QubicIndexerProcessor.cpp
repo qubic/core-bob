@@ -31,7 +31,6 @@ static int getTransactionIndexFromLogId(const LogRangesPerTxInTick &logrange, lo
     return -1;
 }
 
-// Index a single verified tick. Extend this to build/search indexes as needed.
 static uint64_t calculateUnixTimestamp(const TickData &td) {
     std::tm timeinfo = {};
     timeinfo.tm_year = int(td.year) + 2000 - 1900;  // Convert from 2-digit year to years since 1900
@@ -47,6 +46,7 @@ static uint64_t calculateUnixTimestamp(const TickData &td) {
     return millis;
 }
 
+// Index a single verified tick. Extend this to build/search indexes as needed.
 static void indexTick(uint32_t tick, const TickData &td) {
     LogRangesPerTxInTick logrange{};
     uint64_t timestamp = td.epoch == gCurrentProcessingEpoch ? calculateUnixTimestamp(td) : 0;
@@ -337,7 +337,7 @@ void indexVerifiedTicks()
 {
     using namespace std::chrono_literals;
 
-    // Recover the last indexed tick; start from -1 if none is stored yet.
+    // Recover the last indexed tick; start from gInitialTick - 1 if none stored.
     long long lastIndexed = -1;
     lastIndexed = db_get_last_indexed_tick();
     if (lastIndexed == -1) lastIndexed = gInitialTick.load() - 1;

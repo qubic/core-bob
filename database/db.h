@@ -7,13 +7,14 @@
  - Encapsulates connection lifecycle management to Redis.
 
  Keyspace conventions (conceptual)
- - tick_vote:{tick}:{computorIndex}:{hash}        -> binary TickVote
- - tick_data:{tick}:{computorIndex}:{hash}        -> binary TickData
- - transaction:{tick}:{hash}                      -> binary Transaction (or envelope)
- - log:{epoch}:{tick}:{txHash}:{type}:{logId}:{hash} -> binary log content
- - log_range:{tick}:{txId}                        -> from/length pair (per-tx in a tick)
- - db_status                                      -> latest overall tick/epoch, latest event tick/epoch
- - db_status:epoch:{epoch}                        -> per-epoch fields such as latest_log_id, latest_verified_tick
+ - tick_vote:{tick}:{computorIndex}               -> binary TickVote
+ - tick_data:{tick}                               -> binary TickData
+ - transaction:{hash}                             -> binary Transaction
+ - log:{epoch}:{logId}                            -> binary log content
+ - log_ranges:{tick}                              -> per-tx log ranges blob
+ - tick_log_range:{tick}                          -> per-tick fromLogId/length summary
+ - db_status                                      -> latest tick/epoch, event tick/epoch, latest_verified_tick
+ - db_status:epoch:{epoch}                        -> per-epoch fields such as latest_log_id
 
  Binary layout and endianness
  - All structs are written and read as-is (host byte order, little-endian on typical targets). Consumers must
@@ -105,7 +106,7 @@ RedisMemoryInfo db_get_redis_memory_info();
  * Inserts a TickVote as a binary blob.
  *
  * Key Format
- * - tick_vote:{tick}:{computorIndex}:{hash}
+ * - tick_vote:{tick}:{computorIndex}
  *
  * Parameters
  * - vote: The TickVote to persist.
@@ -120,8 +121,7 @@ bool db_insert_tick_vote(const TickVote& vote);
  * Inserts a TickData as a binary blob.
  *
  * Key Format
- * - tick_data:{tick}:{computorIndex}:{hash}
- *   (Implementations may use simplified or deduplicated keys.)
+ * - tick_data:{tick}
  *
  * Parameters
  * - data: The TickData to persist.
@@ -136,8 +136,7 @@ bool db_insert_tick_data(const TickData& data);
  * Inserts a Transaction payload.
  *
  * Key Format
- * - transaction:{tick}:{hash}
- *   (Implementations may store by hash only.)
+ * - transaction:{hash}
  *
  * Parameters
  * - tx: Pointer to a Transaction structure in memory. The stored size commonly
@@ -160,8 +159,7 @@ bool db_insert_transaction(const Transaction* tx);
  *   followed by the body.
  *
  * Key Format
- * - log:{epoch}:{tick}:{txHash}:{type}:{logId}:{hash}
- *   (Implementations may normalize to a minimal form.)
+ * - log:{epoch}:{logId}
  *
  * Parameters
  * - epoch: Epoch of the log event
@@ -180,8 +178,8 @@ bool db_insert_log(uint16_t epoch, uint32_t tick, uint64_t logId, int logSize, c
  * Inserts the per-tx log-id range for a given tick.
  *
  * Key Format
- * - log_range:{tick}:{txId}
- *   (Implementations may also store a per-tick summary.)
+ * - log_ranges:{tick} (per-tx blob)
+ * - tick_log_range:{tick} (per-tick fromLogId/length summary)
  *
  * Parameters
  * - tick: The tick the ranges belong to
@@ -226,15 +224,14 @@ bool db_update_latest_tick_and_epoch(uint32_t tick, uint16_t epoch);
 bool db_get_latest_tick_and_epoch(uint32_t& tick, uint16_t& epoch);
 
 /**
- * Atomically updates the latest logging event tick/epoch in DB status, only if the
- * new tick is strictly greater than the stored event tick.
+ * Updates the latest logging event tick/epoch in DB status (unconditional HSET).
  *
  * Parameters
  * - tick: Candidate latest log event tick
  * - epoch: Associated epoch of that event
  *
  * Return Value
- * - true if updated or already up-to-date
+ * - true if updated
  * - false on failure
  */
 bool db_update_latest_event_tick_and_epoch(uint32_t tick, uint16_t epoch);
@@ -283,19 +280,19 @@ bool db_update_latest_log_id(uint16_t epoch, long long logId);
  */
 long long db_get_latest_log_id(uint16_t epoch);
 
-// Track latest verified tick per epoch
+// Track latest verified tick (global, not per epoch)
 
 /**
- * Update the latest verified tick for a specific epoch.
+ * Update the latest verified tick.
  *
  * Storage
- * - db_status:epoch:{epoch} field latest_verified_tick
+ * - db_status field latest_verified_tick
  *
  * Monotonicity
  * - Only updates if the new tick > stored value.
  *
  * Parameters
- * - tick: Candidate latest verified tick (implicitly associated with current epoch)
+ * - tick: Candidate latest verified tick
  *
  * Return Value
  * - true on success
@@ -304,13 +301,13 @@ long long db_get_latest_log_id(uint16_t epoch);
 bool db_update_latest_verified_tick(uint32_t tick);
 
 /**
- * Get the latest verified tick for a specific epoch.
+ * Get the latest verified tick.
  *
  * Reads
- * - db_status:epoch:{epoch} field latest_verified_tick
+ * - db_status field latest_verified_tick
  *
  * Parameters
- * - None (implementation may infer current epoch)
+ * - None
  *
  * Return Value
  * - >= 0 on success
@@ -391,7 +388,8 @@ bool db_get_tick_data(uint32_t tick, TickData& data);
  * - tick: The tick to get the quorum timestamp for
  *
  * Return Value:
- * - Unix timestamp if a date time has at least 451 votes
+ * - Unix timestamp if a date time has at least 451 votes,
+ *   or more than 225 votes when the tick is empty
  * - 0 if no quorum is reached or on error
  */
 uint64_t db_get_quorum_unixtime_from_votes(uint32_t tick);
@@ -425,7 +423,7 @@ bool db_delete_tick_data(uint32_t tick);
 
 bool db_delete_tick_vote(uint32_t tick);
 
-// New: get aggregated log range for the whole tick (from key "...:-1")
+// New: get aggregated log range for the whole tick (from key "tick_log_range:<tick>")
 // Returns true on success; outputs fromLogId and length.
 bool db_try_get_log_range_for_tick(uint32_t tick, long long& fromLogId, long long& length);
 

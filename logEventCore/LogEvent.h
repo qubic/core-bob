@@ -96,7 +96,7 @@ public:
         return v;
     }
 
-    // Validates basic invariants against expected epoch/tick and size consistency.
+    // Validates epoch, size consistency, min body size and K12 digest.
     bool selfCheck(uint16_t epoch_, bool showErrorLog=true) const
     {
         if (content.size() < 8 + PackedHeaderSize)

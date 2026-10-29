@@ -220,7 +220,7 @@ void verifyLoggingEvent()
     uint32_t lastVerifiedTick = db_get_latest_verified_tick();
     std::string spectrumFilePath;
     std::string assetFilePath;
-    // Choose default files based on lastVerifiedTick; fallback to epoch files if any is missing.
+    // Choose snapshot files from lastVerifiedTick; exit(1) if they are missing.
     if (lastVerifiedTick != -1 && lastVerifiedTick >= gInitialTick) {
         std::string tickSpectrum = "spectrum." + std::to_string(lastVerifiedTick);
         std::string tickUniverse = "universe." + std::to_string(lastVerifiedTick);
@@ -370,10 +370,7 @@ gatherAllLoggingEvents:
                     refetchFromId = fromId;
                     refetchToId = endId;
                     Logger::get()->info("Deleted malformed log, waiting for new data");
-                    // Bound the wait. 10s per attempt × 3 attempts = 30s
-                    // before the first metadata wipe; with up to 3 wipe
-                    // rounds the total ceiling before bob self-restarts is
-                    // ~90s — well below any reasonable "is bob alive" timeout.
+                    // Bound the wait: 10s per attempt; MAX_RESCUE_BUDGET (120s) caps total rescue.
                     bool received_full = false;
                     const auto waitStart = std::chrono::steady_clock::now();
                     constexpr auto WAIT_BUDGET = std::chrono::seconds(10);
@@ -552,8 +549,7 @@ gatherAllLoggingEvents:
             for (int i = 0; i < vle.size(); i++)
             {
                 auto& le  = vle[i];
-                // If self-check fails, skip this entry and reset any pairing state to avoid
-                // dereferencing invalid bodies or headers.
+                // If self-check fails, reset pairing state and abort via exit(2).
                 if (!le.selfCheck(gCurrentProcessingEpoch))
                 {
                     Logger::get()->critical("Failed selfCheck in logging event");
@@ -638,7 +634,7 @@ gatherAllLoggingEvents:
                             std::vector<LogEvent> dd;
                             while (msg != CUSTOM_MESSAGE_OP_END_DISTRIBUTE_DIVIDENDS && i < vle.size())
                             {
-                                // Skip any malformed entries inside the dividend window as well.
+                                // Malformed entries inside the dividend window also abort via exit(2).
                                 if (!vle[i].selfCheck(gCurrentProcessingEpoch))
                                 {
                                     Logger::get()->critical("Failed logEvent selfCheck in dividend window");
@@ -941,9 +937,8 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
     uint64_t stallStartMs = 0;
     uint64_t lastStallLogMs = 0;
 
-    // Per-range in-flight tracking. With gLogEventChunkSize pegged
-    // to NUMBER_OF_TRANSACTIONS_PER_TICK (4096) each response is ~4 MB
-    // and takes longer than `request_logging_cycle_ms` to arrive. A
+    // Per-range in-flight tracking. A chunk (up to BOB_LOG_EVENT_CHUNK_SIZE ids)
+    // can take longer than `request_logging_cycle_ms` to arrive. A
     // naive "fire every cycle" loop would re-issue the same range many
     // times before the first response lands, wasting BM bandwidth.
     //
@@ -959,7 +954,7 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
     // request, and after REFIRE_GUARD_MS the original (s, e) becomes
     // re-eligible — smartLogRequest's random BM pick will then route
     // to a different connection most of the time.
-    // Sizing: with a 128-id chunk, a single tick fans out into 32 chunks,
+    // Sizing: a single tick can fan out into several chunks,
     // and bob also fires for `future_offset` prefetch ticks per cycle. To
     // dedup *all* in-flight ranges (not just the most recent 16), the ring
     // has to hold the full burst — otherwise rotated-out slots cause

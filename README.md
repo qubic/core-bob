@@ -20,11 +20,11 @@ A high-performance indexer for the **Qubic blockchain network**. Bob syncs tick 
 
 ## System Requirements
 
-| Resource | Minimum |
-|----------|---------|
-| CPU | 4 cores (AVX2 support required) |
-| RAM | 12 GB |
-| Storage | 300 GB fast SSD / NVMe |
+| Resource | Minimum | Recommended |
+|----------|---------|-------------|
+| CPU | 4 cores (AVX2 support required) | 8 cores |
+| RAM | 12 GB | 16 GB |
+| Storage | 600 GB fast SSD / NVMe (stores 2 epochs of data, default) | 1 TB fast SSD / NVMe |
 
 ---
 
@@ -63,11 +63,11 @@ docker logs -f qubic-bob
 
 ### Option 2: Docker from Source
 
-If you want to build the Docker image yourself instead of pulling from Docker Hub:
+If you want to build the Docker image yourself instead of pulling from Docker Hub, first change `image: qubiccore/bob:latest` to `image: qubic-bob` in `docker/examples/docker-compose.yml` so compose uses your build:
 
 ```bash
 git clone https://github.com/qubic/core-bob.git
-cd qubicbob
+cd core-bob
 docker build -t qubic-bob -f docker/Dockerfile .
 docker compose -f docker/examples/docker-compose.yml up -d
 ```
@@ -100,7 +100,7 @@ Optionally, install KVRocks for additional disk-based persistence: [KVRocks inst
 
 ```bash
 git clone https://github.com/qubic/core-bob.git
-cd qubicbob
+cd core-bob
 mkdir build && cd build
 cmake ..
 make bob -j$(nproc)
@@ -126,22 +126,21 @@ An example configuration file, `default_config_bob.json`, ships with the reposit
 
 ```json
 {
-  "trusted-node": ["BM:157.180.10.49:21841:0-0-0-0", "BM:65.109.122.174:21841:0-0-0-0"],
-  "request-cycle-ms": 100,
-  "request-logging-cycle-ms": 30,
-  "future-offset": 10,
-  "log-level": "info",
-  "keydb-url": "tcp://127.0.0.1:6379",
-  "run-server": false,
-  "server-port": 21842,
-  "arbitrator-identity": "AFZPUAIYVPNUYGJRQVLUKOPPVLHAZQTGLYAAUUNBXFTVTAMSBKQBLEIEPCVJ",
-  "trusted-entities": ["QCTBOBEPDEZGBBCSOWGBYCAIZESDMEVRGLWVNBZAPBIZYEJFFZSPPIVGSCVL"],
-  "tick-storage-mode": "kvrocks",
-  "kvrocks-url": "tcp://127.0.0.1:6666",
-  "tx-storage-mode": "kvrocks",
+  "p2p_node": ["BM:157.180.10.49:21841:0-0-0-0", "BM:65.109.122.174:21841:0-0-0-0"],
+  "request_cycle_ms": 100,
+  "request_logging_cycle_ms": 30,
+  "future_offset": 10,
+  "log_level": "info",
+  "keydb_url": "tcp://127.0.0.1:6379",
+  "run_server": false,
+  "server_port": 21842,
+  "arbitrator_identity": "AFZPUAIYVPNUYGJRQVLUKOPPVLHAZQTGLYAAUUNBXFTVTAMSBKQBLEIEPCVJ",
+  "tick_storage_mode": "kvrocks",
+  "kvrocks_url": "tcp://127.0.0.1:6666",
+  "tx_storage_mode": "kvrocks",
   "tx_tick_to_live": 1000,
-  "max-thread": 8,
-  "spam-qu-threshold": 0
+  "max_thread": 8,
+  "spam_qu_threshold": 0
 }
 ```
 
@@ -149,16 +148,16 @@ An example configuration file, `default_config_bob.json`, ships with the reposit
 
 | Field | Description |
 |-------|-------------|
-| `trusted-node` | Nodes to sync from. Format: `BM:IP:PORT:PASSCODE` or `BM:IP:PORT` |
-| `request-cycle-ms` | Interval (ms) for tick data requests. Too low may overload the node |
-| `future-offset` | How many ticks ahead to request. Too high may overload the node |
-| `keydb-url` | Redis / KeyDB connection URL |
-| `run-server` | Set to `true` to serve data to other nodes on `server-port` |
-| `tick-storage-mode` | `"kvrocks"`, `"lastNTick"`, or `"free"` |
-| `tx-storage-mode` | `"kvrocks"` or `"free"` |
-| `log-level` | `"debug"`, `"info"`, `"warn"`, or `"error"` |
-| `max-thread` | Max worker threads (`0` = auto) |
-| `spam-qu-threshold` | Minimum QU amount to index a transfer |
+| `p2p_node` | Nodes to sync from. Format: `BM:IP:PORT[:P0-P1-P2-P3]` or `bob:IP:PORT[:P0-P1-P2-P3]`. Empty or omitted = peer discovery |
+| `request_cycle_ms` | Interval (ms) for tick data requests. Too low may overload the node |
+| `future_offset` | How many ticks ahead to request. Too high may overload the node |
+| `keydb_url` | Redis / KeyDB connection URL |
+| `run_server` | Set to `true` to serve data to other nodes on `server_port` |
+| `tick_storage_mode` | `"kvrocks"`, `"lastNTick"`, or `"free"` |
+| `tx_storage_mode` | `"lastNTick"`, `"kvrocks"`, or `"free"` |
+| `log_level` | `"trace"`, `"debug"`, `"info"`, `"warn"`, `"error"`, `"critical"`, or `"off"`. Omitted or unknown = logging off |
+| `max_thread` | Max worker threads (`0` = auto) |
+| `spam_qu_threshold` | Minimum QU amount to index a transfer |
 
 ---
 

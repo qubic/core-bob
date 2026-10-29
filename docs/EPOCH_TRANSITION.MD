@@ -20,6 +20,6 @@ Bob create the new epoch's spectrum and universe states once it has finished pro
 
 ### 4. Operational Requirements for the "Bob" Component
 
-Bob is designed to perform a graceful exit after it has successfully finalized the processing of the `END_EPOCH` event.
+After it has finalized the processing of the `END_EPOCH` event, Bob keeps serving for `wait_at_epoch_end` seconds (default `1800`, i.e. 30 minutes) and then performs a graceful exit.
 
-To ensure continuous operation and readiness for the next epoch, operators **must** manage the Bob application's lifecycle. It is mandatory to deploy the application within a persistent execution framework (e.g., a `systemd` service, a container orchestrator, or a custom wrapper script) that guarantees its automatic restart. This enables the component to initialize and begin processing the new epoch.
+To ensure continuous operation and readiness for the next epoch, Bob must be restarted after this exit. By default the `bob` binary runs a built-in watchdog parent process that relaunches the Bob child automatically, so no extra setup is needed. Only if you run Bob with `-no-watchdog` (e.g. `bob bob.json -no-watchdog`) must you deploy it within a persistent execution framework (e.g., a `systemd` service, a container orchestrator, or a custom wrapper script) that guarantees its automatic restart. This enables the component to initialize and begin processing the new epoch.

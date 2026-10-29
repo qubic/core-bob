@@ -10,11 +10,15 @@ Three configuration files are produced:
 | File | What it controls | How env vars patch it |
 |---|---|---|
 | `/app/bob.json` | bob's runtime config | `jq` rewrites the matching key |
-| `/etc/redis/redis.conf` | bundled KeyDB | `sed` replaces the matching line |
+| `/etc/redis/redis.conf` | bundled Redis | `sed` replaces the matching line |
 | `/etc/kvrocks/kvrocks.conf` | bundled Kvrocks | `sed` replaces the matching line |
 
 You can also mount your own `bob.json` and skip env vars entirely — see
-the [example compose file](../docker/examples/docker-compose.yml).
+the [example compose file](../docker/examples/docker-compose.yml). When you
+mount your own `bob.json`, put all bob settings in the file and do **not**
+set any of the bob.json env vars below (the entrypoint cannot rewrite a
+bind-mounted file and the container exits). The Redis/Kvrocks env vars are
+fine; `:ro` is fine too.
 
 ---
 
@@ -22,83 +26,82 @@ the [example compose file](../docker/examples/docker-compose.yml).
 
 | Env var | bob.json key | Default | Description |
 |---|---|---|---|
-| `NODE_SEED` | `node-seed` | (built-in default) | 55-char lowercase a–z seed used to derive the node identity. The default works for read-only indexers; set your own if you want a stable, unique identity. |
-| `NODE_ALIAS` | `node-alias` | `Big fat bob` | Human-readable name reported by `/status` and other endpoints. |
-| `ARBITRATOR_IDENTITY` | `arbitrator-identity` | (built-in) | 60-char uppercase Qubic identity used to validate the computor set. |
-| `P2P_NODES` | `p2p-node` | `[]` (auto-discover) | Comma-separated peer list. Example: `BM:157.180.10.49:21841:0-0-0-0,BM:65.109.122.174:21841:0-0-0-0`. Format per entry: `BM:IP:PORT[:P0-P1-P2-P3]` for trusted peers or `IP:PORT` for plain peers. |
-| `ALLOW_PEER_DISCOVERY` | `allow-peer-discovery` | `true` if `P2P_NODES` empty, else `false` | `true` + `P2P_NODES` = hybrid: listed peers are kept, remaining slots (6 total) are filled and rotated from discovery. `false` requires `P2P_NODES`. |
+| `NODE_SEED` | `node_seed` | (built-in default) | 55-char lowercase a–z seed used to derive the node identity. The default works for read-only indexers; set your own if you want a stable, unique identity. |
+| `NODE_ALIAS` | `node_alias` | `Big fat bob` | Human-readable name reported by `/status` and other endpoints. |
+| `ARBITRATOR_IDENTITY` | `arbitrator_identity` | (built-in) | 60-char uppercase Qubic identity used to validate the computor set. |
+| `P2P_NODES` | `p2p_node` | `[]` (auto-discover) | Comma-separated peer list. Example: `BM:157.180.10.49:21841:0-0-0-0,BM:65.109.122.174:21841:0-0-0-0`. Format per entry: `BM:IP:PORT[:P0-P1-P2-P3]` for Qubic core nodes or `bob:IP:PORT[:P0-P1-P2-P3]` for other bob nodes; the passcode part marks the peer as trusted. |
+| `ALLOW_PEER_DISCOVERY` | `allow_peer_discovery` | `true` if `P2P_NODES` empty, else `false` | `true` + `P2P_NODES` = hybrid: listed peers are kept, remaining slots (6 total) are filled and rotated from discovery. `false` requires `P2P_NODES`. |
 | `AUTOBAN` | `autoban` | `false` | Rotate out a discovered peer that fails most log requests (two bad windows in a row) and keep its IP out of discovery: 10 min if it answers but has no logs, 12 h if it does not answer. Static `P2P_NODES` peers are never judged. |
-| `RUN_SERVER` | `run-server` | `true` | If `true`, serve P2P data to other peers on `SERVER_PORT`. |
-| `SERVER_PORT` | `server-port` | `21842` | P2P listening port. |
-| `RPC_PORT` | `rpc-port` | `40420` | REST + JSON-RPC + WebSocket port. |
-| `IS_TESTNET` | `is-testnet` | `false` | Testnet vs mainnet mode. |
-| `LOG_LEVEL` | `log-level` | `info` | One of `trace`, `debug`, `info`, `warn`, `error`, `fatal`. |
+| `RUN_SERVER` | `run_server` | `true` | If `true`, serve P2P data to other peers on `SERVER_PORT`. |
+| `SERVER_PORT` | `server_port` | `21842` | P2P listening port. |
+| `RPC_PORT` | `rpc_port` | `40420` | REST + JSON-RPC + WebSocket port. |
+| `IS_TESTNET` | `is_testnet` | `false` | Currently ignored (bob always runs mainnet). |
+| `LOG_LEVEL` | `log_level` | `info` | One of `trace`, `debug`, `info`, `warn`, `error`, `critical`, `off`. |
 
 ## Storage backend connections
 
 | Env var | bob.json key | Default | Description |
 |---|---|---|---|
-| `KEYDB_URL` | `keydb-url` | `tcp://127.0.0.1:6379` | URL of the Redis/KeyDB instance. Override to point at an external server (and disable the bundled one — see [docker/README.md](../docker/README.md)). |
-| `KVROCKS_URL` | `kvrocks-url` | `tcp://127.0.0.1:6666` | URL of the Kvrocks instance. |
+| `KEYDB_URL` | `keydb_url` | `tcp://127.0.0.1:6379` | URL of the Redis/KeyDB instance. Override to point at an external server. The bundled Redis still runs; bob waits for it at startup (docker/supervisord.conf). |
+| `KVROCKS_URL` | `kvrocks_url` | `tcp://127.0.0.1:6666` | URL of the Kvrocks instance. |
 
 ## Sync pacing
 
 | Env var | bob.json key | Default | Description |
 |---|---|---|---|
-| `REQUEST_CYCLE_MS` | `request-cycle-ms` | `100` | Interval (ms) between tick-data requests to peers. Lower = more aggressive sync, higher = lighter on peers. |
-| `REQUEST_LOGGING_CYCLE_MS` | `request-logging-cycle-ms` | `100` | Interval (ms) between log-event requests. |
-| `FUTURE_OFFSET` | `future-offset` | `10` | How many ticks ahead of the current tip bob will pre-fetch. Too high overloads peers; too low slows sync recovery. |
-| `MAX_THREAD` | `max-thread` | `0` (auto) | Cap on worker threads; `0` uses the number of CPU cores. |
+| `REQUEST_CYCLE_MS` | `request_cycle_ms` | `100` | Interval (ms) between tick-data requests to peers. Lower = more aggressive sync, higher = lighter on peers. |
+| `REQUEST_LOGGING_CYCLE_MS` | `request_logging_cycle_ms` | `100` | Interval (ms) between log-event requests. |
+| `FUTURE_OFFSET` | `future_offset` | `10` | How many ticks ahead of the current tip bob will pre-fetch. Too high overloads peers; too low slows sync recovery. |
+| `MAX_THREAD` | `max_thread` | `0` (auto) | Cap on worker threads; `0` uses the number of CPU cores. |
 
 ## Storage retention & sizing
 
 | Env var | bob.json key | Default | Description |
 |---|---|---|---|
-| `TICK_STORAGE_MODE` | `tick-storage-mode` | `kvrocks` | One of `lastNTick`, `kvrocks`, `free`. `kvrocks` migrates old ticks to disk; `lastNTick` deletes them; `free` keeps everything in KeyDB. |
-| `TX_STORAGE_MODE` | `tx-storage-mode` | `kvrocks` | One of `lastNTick`, `kvrocks`, `free`. Same semantics for `transaction:*` blobs. |
-| `LAST_N_TICK_STORAGE` | `last_n_tick_storage` | `1000` | (`lastNTick` mode only) Number of recent ticks to keep in KeyDB before deletion. |
-| `TX_TICK_TO_LIVE` | `tx_tick_to_live` | `10000` (Config.h) / `3000` (docker default) | (`kvrocks` mode only) How many ticks of `transaction:*` blobs stay in KeyDB before migration to kvrocks. |
+| `TICK_STORAGE_MODE` | `tick_storage_mode` | `kvrocks` | One of `lastNTick`, `kvrocks`, `free`. `kvrocks` migrates old ticks to disk; `lastNTick` deletes them; `free` keeps everything in Redis. |
+| `TX_STORAGE_MODE` | `tx_storage_mode` | `kvrocks` | One of `lastNTick`, `kvrocks`, `free`. Same semantics for `transaction:*` blobs. |
+| `LAST_N_TICK_STORAGE` | `last_n_tick_storage` | `1000` | (`lastNTick` mode only) Number of recent ticks to keep in Redis before deletion. |
+| `TX_TICK_TO_LIVE` | `tx_tick_to_live` | `10000` (Config.h) / `1000` (docker default) | (`kvrocks` mode only) How many ticks of `transaction:*` blobs stay in Redis before migration to kvrocks. |
 | `KVROCKS_TTL` | `kvrocks_ttl` | `1209600` (14 days, ~2 epochs) | TTL applied to every key bob writes to Kvrocks: `transaction:*`, `itx:*`, `vtick:*`, `log:*`, indexed entries. Set to `0` for no expiration. |
-| `INDEXER_MAX_ACTIVITIES_PER_KEY` | `indexer-max-activities-per-key` | `100000` (Config.h) / `10000` (docker default) | Cap on entries in each `indexed:*` topic zset. Oldest entries get popped via `ZPOPMIN` when the cap is hit. |
-| `WAIT_AT_EPOCH_END` | `wait-at-epoch-end` | `1800` (seconds) | After receiving END_EPOCH, how long to keep serving slower peers before shutting down. |
+| `INDEXER_MAX_ACTIVITIES_PER_KEY` | `indexer_max_activities_per_key` | `100000` (Config.h) / `10000` (docker default) | Cap on entries in each `indexed:*` topic zset. Oldest entries get popped via `ZPOPMIN` when the cap is hit. |
+| `WAIT_AT_EPOCH_END` | `wait_at_epoch_end` | `1800` (seconds) | After receiving END_EPOCH, how long to keep serving slower peers before shutting down. |
 
 ## Indexer behavior
 
 | Env var | bob.json key | Default | Description |
 |---|---|---------|---|
-| `SPAM_QU_THRESHOLD` | `spam-qu-threshold` | `0`     | Minimum QU amount to index a transfer. `0` disables filtering. Historically used to suppress dust txs from the indexer; current default keeps everything so receipts/balances are always correct. |
-| `LOG_EVENT_CHUNK_SIZE` | `log-event-chunk-size` | `999`   | How many log IDs bob requests per RequestLog packet. Default fits a full tick's worth of logs in one round-trip. Lower (e.g. 256 or 512) on links where big responses cause TCP-level queueing or BM-side stalls; larger values are clamped to 999 at startup. Must be > 0. |
-| `DIAGNOSTIC_MODE` | `diagnostic-mode` | `false` | Master switch for expensive runtime diagnostics: per-tick `BATCH_AUDIT` log-byte hashing (K12 over every accepted log) and the per-log source-attribution sidecar key (one Redis `SETNX` per log). Both run inside the verify/insert hot path, so the cost scales with log volume. Leave off for steady-state operation. Turn on (`true` or `1`) when investigating non-deterministic verify failures — the audit lines are emitted at `trace` level, so combine with `LOG_LEVEL=trace` to see them. |
-| `PERSIST_ORACLE_TX` | `persist-oracle-tx` | `true`  | Persist oracle reply transactions (`destinationPublicKey=0`, `inputType ∈ {6,7,10}`). |
+| `SPAM_QU_THRESHOLD` | `spam_qu_threshold` | `0`     | Minimum QU amount to index a transfer. `0` disables filtering. Historically used to suppress dust txs from the indexer; current default keeps everything so receipts/balances are always correct. |
+| `LOG_EVENT_CHUNK_SIZE` | `log_event_chunk_size` | `999`   | How many log IDs bob requests per RequestLog packet. Default fits a full tick's worth of logs in one round-trip. Lower (e.g. 256 or 512) on links where big responses cause TCP-level queueing or BM-side stalls; larger values are clamped to 999 at startup. `0` means default (999). |
+| `DIAGNOSTIC_MODE` | `diagnostic_mode` | `false` | Master switch for expensive runtime diagnostics: per-tick `BATCH_AUDIT` log-byte hashing (K12 over every accepted log) and the per-log source-attribution sidecar key (one Redis `SETNX` per log). Both run inside the verify/insert hot path, so the cost scales with log volume. Leave off for steady-state operation. Turn on (`true` or `1`) when investigating non-deterministic verify failures — the audit lines are emitted at `trace` level, so combine with `LOG_LEVEL=trace` to see them. |
+| `PERSIST_ORACLE_TX` | `persist_oracle_tx` | `true`  | Persist oracle reply transactions (`destinationPublicKey=0`, `inputType ∈ {6,7,10}`). |
 
 ## API surface
 
 | Env var | bob.json key | Default | Description |
 |---|---|---|---|
-| `ENABLE_ADMIN_ENDPOINTS` | `enable-admin-endpoints` | `false` | Expose `/_admin/*` routes (e.g. `/_admin/checkTransactions`). Keep `false` in public deployments. |
-| `ALLOW_CHECK_IN_QUBIC_GLOBAL` | `allow-check-in-qubic-global` | `true` | Allow bob to register itself with the peer-discovery directory (`CHECKIN_URL`). Disable if you run isolated. |
-| `ALLOW_RECEIVE_LOG_FROM_INCOMING` | `allow-receive-log-from-incoming-connections` | `false` | Accept log-event packets from non-trusted incoming peers. Off by default since malformed payloads can pollute the local DB. |
+| `ENABLE_ADMIN_ENDPOINTS` | `enable_admin_endpoints` | `false` | Expose `/_admin/*` routes (e.g. `/_admin/checkTransactions`). Keep `false` in public deployments. |
+| `ALLOW_CHECK_IN_QUBIC_GLOBAL` | `allow_check_in_qubic_global` | `true` | Allow bob to register itself with the peer-discovery directory (`CHECKIN_URL`). Disable if you run isolated. |
+| `ALLOW_RECEIVE_LOG_FROM_INCOMING` | `allow_receive_log_from_incoming_connections` | `false` | Accept log-event packets from non-trusted incoming peers. Off by default since malformed payloads can pollute the local DB. |
 
 ## External service URLs
 
 These let you redirect bob's outbound HTTP calls to alternative endpoints
-(e.g. a private mirror or a sealed network). All defaults point at
-`*.qubic.global`.
+(e.g. a private mirror or a sealed network).
 
 | Env var | bob.json key | Default | Description |
 |---|---|---|---|
-| `PEER_DISCOVERY_URLS` | `peer-discovery-urls` | `["https://api.qubic.global"]` | Comma-separated list of base URLs that serve `/random-peers?...`. Bob tries each in order until one returns a non-empty peer list (failover). |
-| `CURRENT_TICK_ENDPOINTS` | `current-tick-endpoints` | three built-in entries (qubic.global, qubic.li, rpc.qubic.org) | Semicolon-separated `url\|path\|shape` triples for the "current network tick" lookup. `shape` is `flat` (`{tick, epoch}` at root) or `nested` (`{tickInfo: {tick, epoch}}`). Example: `https://api.qubic.global\|/currenttick\|flat;https://rpc.qubic.org\|/live/v1/tick-info\|nested` |
-| `STATE_FILES_URLS` | `state-files-urls` | `["https://dl.qubic.global/ep{EPOCH}.zip", "https://bobapi.qubic.li/public/{EPOCH}/ep{EPOCH}.zip"]` | Comma-separated list of **URL templates** (failover order) for per-epoch state snapshots. Each entry may use the placeholder `{EPOCH}`, which is substituted with the actual epoch number. Two layouts are common: `https://dl.qubic.global/ep{EPOCH}.zip` and `https://storage.example.com/{EPOCH}/ep{EPOCH}.zip`. Entries without `{EPOCH}` are treated as a base URL and get `/ep<epoch>.zip` appended (back-compat). Bob tries entries in order until a download+unzip succeeds. `STATE_FILES_URL` (singular) is still accepted and promotes to a 1-element list. |
-| `CHECKIN_URL` | `checkin-url` | `https://api.qubic.global` | Base URL for the `/checkin` registration POST. Set empty to disable, or pair with `ALLOW_CHECK_IN_QUBIC_GLOBAL=false`. |
+| `PEER_DISCOVERY_URLS` | `peer_discovery_urls` | `["https://api.qubic.global", "https://api.qubic.li/public"]` | Comma-separated list of base URLs that serve `/random-peers?...`. Bob tries each in order until one returns a non-empty peer list (failover). |
+| `CURRENT_TICK_ENDPOINTS` | `current_tick_endpoints` | three built-in entries (qubic.global, qubic.li, rpc.qubic.org) | Semicolon-separated `url\|path\|shape` triples for the "current network tick" lookup. `shape` is `flat` (`{tick, epoch}` at root) or `nested` (`{tickInfo: {tick, epoch}}`). Example: `https://api.qubic.global\|/currenttick\|flat;https://rpc.qubic.org\|/live/v1/tick-info\|nested` |
+| `STATE_FILES_URLS` | `state_files_urls` | `["https://dl.qubic.global/ep{EPOCH}.zip", "https://storage.qubic.li/network/{EPOCH}/ep{EPOCH}.zip"]` | Comma-separated list of **URL templates** (failover order) for per-epoch state snapshots. Each entry may use the placeholder `{EPOCH}`, which is substituted with the actual epoch number. Two layouts are common: `https://dl.qubic.global/ep{EPOCH}.zip` and `https://storage.example.com/{EPOCH}/ep{EPOCH}.zip`. Entries without `{EPOCH}` are treated as a base URL and get `/ep<epoch>.zip` appended (back-compat). Bob tries entries in order until a download+unzip succeeds. `STATE_FILES_URL` (singular) is still accepted and promotes to a 1-element list. |
+| `CHECKIN_URL` | `checkin_url` | `https://api.qubic.global` | Base URL for the `/checkin` registration POST. Set empty to disable, or pair with `ALLOW_CHECK_IN_QUBIC_GLOBAL=false`. |
 
-## Bundled KeyDB (`/etc/redis/redis.conf`)
+## Bundled Redis (`/etc/redis/redis.conf`)
 
 These do **not** apply if you point `KEYDB_URL` at an external server.
 
 | Env var | redis.conf line | Default | Description |
 |---|---|---|---|
-| `REDIS_PORT` | `port` | `6379` | KeyDB listening port. |
+| `REDIS_PORT` | `port` | `6379` | Redis listening port. Changing it also requires `KEYDB_URL` and the hardcoded `6379` in `docker/supervisord.conf`. |
 | `REDIS_MAXMEMORY` | `maxmemory` | `2gb` | Memory cap. Increase for high-throughput nodes; OOM on writes (`Failed to add log ... OOM command not allowed`) usually means the cleaner is falling behind — raise this or lower `n_tickdata_to_store` / `TX_TICK_TO_LIVE`. |
 | `REDIS_MAXMEMORY_POLICY` | `maxmemory-policy` | `noeviction` | **Keep `noeviction`**. Any eviction policy will silently drop keys bob needs and corrupt the index. |
 | `REDIS_LOGLEVEL` | `loglevel` | `notice` | One of `debug`, `verbose`, `notice`, `warning`. |
@@ -109,9 +112,9 @@ These do **not** apply if you point `KVROCKS_URL` at an external server.
 
 | Env var | kvrocks.conf line | Default | Description |
 |---|---|---|---|
-| `KVROCKS_PORT` | `port` | `6666` | Kvrocks listening port. |
+| `KVROCKS_PORT` | `port` | `6666` | Kvrocks listening port. Changing it also requires `KVROCKS_URL` and the hardcoded `6666` in `docker/supervisord.conf`. |
 | `KVROCKS_WORKERS` | `workers` | `4` | Number of worker threads. |
-| `KVROCKS_LOGLEVEL` | `log-level` | `info` | One of `debug`, `info`, `notice`, `warning`, `error`, `fatal`. |
+| `KVROCKS_LOGLEVEL` | `log-level` | `info` | One of `debug`, `info`, `warning`, `error`, `fatal`. |
 | `KVROCKS_BLOCK_CACHE_SIZE` | `rocksdb.block_cache_size` | `4096` (MB) | RocksDB block cache, in MB. Bigger speeds reads, costs RAM. Rule of thumb: leave ~2 GB for redis and ~2 GB for OS/app overhead; give the rest to this. |
 | `KVROCKS_WRITE_BUFFER_SIZE` | `rocksdb.write_buffer_size` | `256` (MB) | Per-memtable size, in MB. Larger = fewer L0 flushes. |
 | `KVROCKS_MAX_WRITE_BUFFER_NUMBER` | `rocksdb.max_write_buffer_number` | `4` | Max in-memory memtables. |
@@ -124,8 +127,8 @@ These do **not** apply if you point `KVROCKS_URL` at an external server.
 
 - **Start with defaults**, override only what you need. The image ships with a sensible bob.json + redis.conf + kvrocks.conf.
 - **`NODE_SEED`** is optional but recommended if you want a stable, unique node identity (e.g. for guardian setups or peer-reputation tracking).
-- **High-load tuning**: when KeyDB OOMs under high load, raise `REDIS_MAXMEMORY`; if migration to kvrocks lags, lower `last_n_tick_storage` (LastNTick mode) or `n_tickdata_to_store` (Kvrocks mode).
+- **High-load tuning**: when Redis OOMs under high load, raise `REDIS_MAXMEMORY`; if migration to kvrocks lags, lower `last_n_tick_storage` (LastNTick mode) or `n_tickdata_to_store` (Kvrocks mode).
 - **Mount a custom config file** if you outgrow env vars — see the `volumes:` block in [docker/examples/docker-compose.yml](../docker/examples/docker-compose.yml).
-- **Inspect the effective config** at container start: the entrypoint logs `=== Bob configuration ===`, `=== Redis configuration ===`, and `=== Kvrocks configuration ===` (with `node-seed` redacted) so you can verify your overrides took effect.
+- **Inspect the effective config** at container start: the entrypoint logs `=== Bob configuration ===`, `=== Redis configuration ===`, and `=== Kvrocks configuration ===` (with `node_seed` redacted) so you can verify your overrides took effect.
 
 For the bob.json reference (every config key, including ones not exposed via env), see [CONFIG_FILE.MD](CONFIG_FILE.MD).

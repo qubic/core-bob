@@ -12,7 +12,7 @@ The 2D log index provides this structure.
 
 ### Dimension 1: The "Drawer" (Event Signature)
 
-The first dimension is a map, structured as a **Merkle tree**. The "key" for this map (the label on the drawer) is a unique combination of the following event parameters:
+The first dimension is a key-value map stored in kvrocks. The "key" for this map (the label on the drawer) is a unique combination of the following event parameters, formatted as `indexed:<scIndex>:<logType>:<topic1|ANY>:<topic2|ANY>:<topic3|ANY>`:
 
 * SC Index
 * Log Type
@@ -22,7 +22,7 @@ The first dimension is a map, structured as a **Merkle tree**. The "key" for thi
 
 ### Dimension 2: The "Cards" (Tick Numbers)
 
-Inside each "drawer" (i.e., for each unique event signature) is the second dimension: a simple, verifiable list (an **accumulator**) of all the tick numbers where that specific event occurred.
+Inside each "drawer" (i.e., for each unique event signature) is the second dimension: a **sorted set** (score = tick number) of the tick numbers where that specific event occurred. Each set is capped at `indexer_max_activities_per_key` entries (default 100000); when the cap is exceeded, the oldest ticks are evicted (`ZPOPMIN`).
 
 ---
 
@@ -35,7 +35,7 @@ Let's use a real-world example: Alice makes a market buy at **tick 2025**.
 The log event has the following parameters:
 
 * **SC index:** `1`
-* **Log type:** `100001` (Note: Bob only indexes `logType >= 100000`)
+* **Log type:** `100001` (Note: for smart-contract messages, Bob only indexes `logType >= 100000`)
 * **topic1 (maker):** `Alice`
 * **topic2 (taker):** `Charlie`
 * **topic3 (asset):** `RANDOM`

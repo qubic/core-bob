@@ -1,4 +1,4 @@
-// tests/test_LoggingEventProcessor.cpp
+// tests/test_log_processor.cpp
 #include <gtest/gtest.h>
 #include <cstring>
 #include <vector>
@@ -684,9 +684,9 @@ struct QUTILSendToManyBenchmarkLog {
     int64_t  numTransfersEach;
 };
 
-// CONTRACT_INFORMATION_MESSAGE = 12 (adjust if your enum differs)
+// Test-local values; production uses 6 (GlobalVar.h CONTRACT_INFORMATION_MESSAGE)
 static constexpr uint8_t CONTRACT_INFORMATION_MESSAGE_TYPE = 12;
-static constexpr uint32_t QUTIL_STMB_LOG_TYPE_VALUE = 2; // value used in production code
+static constexpr uint32_t QUTIL_STMB_LOG_TYPE_VALUE = 2; // production QUTIL_STMB_LOG_TYPE is 100001
 
 static LogEvent makeStmbEvent(uint16_t epoch, uint32_t tick,
                               const m256i& startId,

@@ -154,7 +154,6 @@ bool verifyQuorum(uint32_t tick, TickData& td, std::vector<TickVote>& votes)
 }
 
 // Requester thread: periodically evaluates what to request next and sends requests over the connection.
-// Placeholders (TODO) are included where the request conditions and payloads will be implemented.
 void IORequestThread(ConnectionPool& conn_pool, std::chrono::milliseconds requestCycle, uint32_t futureOffset)
 {
     // Optional: pacing/tuning knobs

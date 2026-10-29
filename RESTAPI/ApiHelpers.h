@@ -192,7 +192,7 @@ SyncStatus getSyncStatus();
 // @return BroadcastResult with txHash on success, error message on failure
 BroadcastResult broadcastTransaction(const std::string& signedTxHex);
 
-// Query a smart contract (synchronous - checks cache only)
+// Query a smart contract (non-blocking: cached result, or enqueue and return pending)
 // @param nonce: unique identifier for this query (used for caching)
 // @param scIndex: smart contract index
 // @param funcNumber: function number to call

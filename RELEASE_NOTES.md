@@ -30,7 +30,7 @@ For exact commit boundaries, see `git log v<a>..v<b>`.
 
 **END_EPOCH events now reach WebSocket subscribers automatically.** The end-epoch log batch lives on a virtual tick (`lastQuorumTick+1`) that never gets quorum tick data or votes; previously it was silently dropped on every live path.
 
-- **Live `logs`/`transfers` subscriptions**: verified logs on ticks without tick data (the END_EPOCH virtual tick, quorum-empty ticks with logs) are now delivered instead of dropped. Their `timestamp` is backfilled from the previous tick (matching the REST `/epochLogs` convention) instead of `0`.
+- **Live `logs`/`transfers` subscriptions**: verified logs on ticks without tick data (the END_EPOCH virtual tick, quorum-empty ticks with logs) are now delivered instead of dropped. Their `timestamp` is backfilled from the previous tick (matching the REST `/getEndEpochLog/{epoch}` convention) instead of `0`.
 - **Live `tickStream` subscriptions**: the indexer now pushes the virtual end-epoch tick's log batch (zeroed tick data, `hasNoTickData: true`, real `timestamp`) before exiting at epoch end. The batch carries the ending epoch's number; the same tick number later re-appears as the next epoch's init tick with the new epoch's number — clients deduplicating across the boundary should key on `(epoch, tick)`, not `tick` alone.
 - **`tickStream` catch-up**: recovered end-epoch logs (backup keys) are now actually merged into the boundary tick's message (previously collected but never emitted), deduplicated against live keys, with `timestamp` backfilled. Catch-up during the 30-minute end-epoch serving window no longer hangs waiting on the exited indexer and now covers the virtual end-epoch tick.
 - **`logs`/`transfers` catch-up**: END_EPOCH events crossing an epoch boundary now resolve `txHash` to `SC_END_EPOCH_TX_<tick>` via the backed-up end-epoch log ranges instead of misattributing them to an unrelated transaction of the reused tick number.
@@ -49,8 +49,8 @@ For exact commit boundaries, see `git log v<a>..v<b>`.
 ---
 ## 1.5.11
 
-- **Faster catch-up**: `future-offset` default raised to **10**. The docker image previously shipped `3`, which throttled sync to ~3 ticks of look-ahead pipelining; it is now consistent across the code default, [docker/bob.json](docker/bob.json), [default_config_bob.json](default_config_bob.json), and docs. Raise via `FUTURE_OFFSET` to accelerate large initial syncs.
-- **Configurable log-event chunk size**: `LOG_EVENT_CHUNK_SIZE` / `log-event-chunk-size` controls how many log IDs are requested per `RequestLog` (default and hard ceiling **999**).
+- **Faster catch-up**: `future_offset` default raised to **10**. The docker image previously shipped `3`, which throttled sync to ~3 ticks of look-ahead pipelining; it is now consistent across the code default, [docker/bob.json](docker/bob.json), [default_config_bob.json](default_config_bob.json), and docs. Raise via `FUTURE_OFFSET` to accelerate large initial syncs.
+- **Configurable log-event chunk size**: `LOG_EVENT_CHUNK_SIZE` / `log_event_chunk_size` controls how many log IDs are requested per `RequestLog` (default and hard ceiling **999**).
 - **Log-range integrity (misalignment fix)**: `db_insert_log_range` now writes the range blob and its summary **atomically** (SETNX blob + conditional summary), and corrupt/garbage summaries are rejected and refetched. This eliminates the non-deterministic state-digest **misalignment crashes / restart loops** caused by inconsistent (start, length) reads across restarts.
 - **Connection resilience**: an always-on peer watchdog disconnects peers idle for 30s; bootstrap and rescue waits are now bounded so an unresponsive peer can't stall startup indefinitely; the redundant `EXCHANGE_PUBLIC_PEERS` handshake was dropped from the bootstrap sequence.
 - **Diagnostics**: per-cycle request/response traffic counters and a "Blocked-on" snapshot in the periodic state line; an optional `DIAGNOSTIC_MODE` for deeper per-tick / per-log auditing; per-log source attribution to investigate "wrong tick" reports.
@@ -361,7 +361,7 @@ Parameter / shape parity:
   `/asset/{identity}/{issuer}/{name}/{manageSCIndex}` was already correct.
 
 **Oracle**
-- New `PERSIST_ORACLE_TX` env-var / `persist-oracle-tx` config flag for the
+- New `PERSIST_ORACLE_TX` env-var / `persist_oracle_tx` config flag for the
   docker image. Enables persisting the raw oracle reply transactions
   (`destinationPublicKey=0`, `inputType ∈ {6,7,10}`) so they can be inspected
   via the standard tx endpoints. Disabled by default.
@@ -426,7 +426,7 @@ Parameter / shape parity:
   receipts are correct regardless of indexer state or spam-filter settings,
   but they need a way to express "we don't know yet for this tick" instead
   of returning a wrong "failed".
-- `spam-qu-threshold` default flipped from `100` → `0`. Dust QU transfers
+- `spam_qu_threshold` default flipped from `100` → `0`. Dust QU transfers
   are indexed like any other tx; receipts reflect their actual execution
   state. Estimated extra kvrocks disk for a 150M-tx-per-epoch workload:
   ~0.5–1 GB.
@@ -464,7 +464,7 @@ Parameter / shape parity:
   REST `bobGetTransaction`). Returns correct `executed`/`status` regardless of
   whether the `itx:` index has the row — fixes the long-standing
   "low-value tx reported as failed" bug.
-- `spam-qu-threshold` default lowered from `100` → `0` in
+- `spam_qu_threshold` default lowered from `100` → `0` in
   `default_config_bob.json`, `docker/bob.json`, and the docs. The threshold
   was originally a RAM-saving measure when indexer data lived in keydb; now
   that it lives in kvrocks, the cost is ~3% extra disk per epoch and worth

@@ -13,7 +13,7 @@ Create `kvrocks` working folder, and copy the built binary. Then copy the config
 mkdir /var/lib/kvrocks/;
 cd /var/lib/kvrocks/;
 cp ~/kvrocks/build/kvrocks .;
-cp ~/qubicbob/exampleConfigFile/kvrocks.conf .;
+cp ~/core-bob/exampleConfigFile/kvrocks.conf .;
 ~~~
 
 Create DB folder:

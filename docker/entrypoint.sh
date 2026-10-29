@@ -8,68 +8,68 @@ CONFIG_FILE="/app/bob.json"
 
 # --- String parameters ---
 if [ -n "$NODE_SEED" ]; then
-    jq --arg v "$NODE_SEED" '.["node-seed"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --arg v "$NODE_SEED" '.["node_seed"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$LOG_LEVEL" ]; then
-    jq --arg v "$LOG_LEVEL" '.["log-level"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --arg v "$LOG_LEVEL" '.["log_level"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$ARBITRATOR_IDENTITY" ]; then
-    jq --arg v "$ARBITRATOR_IDENTITY" '.["arbitrator-identity"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --arg v "$ARBITRATOR_IDENTITY" '.["arbitrator_identity"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$NODE_ALIAS" ]; then
-    jq --arg v "$NODE_ALIAS" '.["node-alias"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --arg v "$NODE_ALIAS" '.["node_alias"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$TICK_STORAGE_MODE" ]; then
-    jq --arg v "$TICK_STORAGE_MODE" '.["tick-storage-mode"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --arg v "$TICK_STORAGE_MODE" '.["tick_storage_mode"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$TX_STORAGE_MODE" ]; then
-    jq --arg v "$TX_STORAGE_MODE" '.["tx-storage-mode"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --arg v "$TX_STORAGE_MODE" '.["tx_storage_mode"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$KEYDB_URL" ]; then
-    jq --arg v "$KEYDB_URL" '.["keydb-url"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --arg v "$KEYDB_URL" '.["keydb_url"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$KVROCKS_URL" ]; then
-    jq --arg v "$KVROCKS_URL" '.["kvrocks-url"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --arg v "$KVROCKS_URL" '.["kvrocks_url"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 # --- Unsigned integer parameters ---
 if [ -n "$RPC_PORT" ]; then
-    jq --argjson v "$RPC_PORT" '.["rpc-port"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --argjson v "$RPC_PORT" '.["rpc_port"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$SERVER_PORT" ]; then
-    jq --argjson v "$SERVER_PORT" '.["server-port"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --argjson v "$SERVER_PORT" '.["server_port"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$REQUEST_CYCLE_MS" ]; then
-    jq --argjson v "$REQUEST_CYCLE_MS" '.["request-cycle-ms"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --argjson v "$REQUEST_CYCLE_MS" '.["request_cycle_ms"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$REQUEST_LOGGING_CYCLE_MS" ]; then
-    jq --argjson v "$REQUEST_LOGGING_CYCLE_MS" '.["request-logging-cycle-ms"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --argjson v "$REQUEST_LOGGING_CYCLE_MS" '.["request_logging_cycle_ms"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$FUTURE_OFFSET" ]; then
-    jq --argjson v "$FUTURE_OFFSET" '.["future-offset"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --argjson v "$FUTURE_OFFSET" '.["future_offset"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$MAX_THREAD" ]; then
-    jq --argjson v "$MAX_THREAD" '.["max-thread"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --argjson v "$MAX_THREAD" '.["max_thread"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$SPAM_QU_THRESHOLD" ]; then
-    jq --argjson v "$SPAM_QU_THRESHOLD" '.["spam-qu-threshold"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --argjson v "$SPAM_QU_THRESHOLD" '.["spam_qu_threshold"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$LOG_EVENT_CHUNK_SIZE" ]; then
-    jq --argjson v "$LOG_EVENT_CHUNK_SIZE" '.["log-event-chunk-size"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --argjson v "$LOG_EVENT_CHUNK_SIZE" '.["log_event_chunk_size"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$DIAGNOSTIC_MODE" ]; then
@@ -78,7 +78,7 @@ if [ -n "$DIAGNOSTIC_MODE" ]; then
         true|TRUE|1|yes|YES) dm_v=true ;;
         *) dm_v=false ;;
     esac
-    jq --argjson v "$dm_v" '.["diagnostic-mode"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --argjson v "$dm_v" '.["diagnostic_mode"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$TX_TICK_TO_LIVE" ]; then
@@ -94,36 +94,36 @@ if [ -n "$KVROCKS_TTL" ]; then
 fi
 
 if [ -n "$INDEXER_MAX_ACTIVITIES_PER_KEY" ]; then
-    jq --argjson v "$INDEXER_MAX_ACTIVITIES_PER_KEY" '.["indexer-max-activities-per-key"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --argjson v "$INDEXER_MAX_ACTIVITIES_PER_KEY" '.["indexer_max_activities_per_key"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$WAIT_AT_EPOCH_END" ]; then
-    jq --argjson v "$WAIT_AT_EPOCH_END" '.["wait-at-epoch-end"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --argjson v "$WAIT_AT_EPOCH_END" '.["wait_at_epoch_end"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 # --- Boolean parameters ---
 if [ -n "$RUN_SERVER" ]; then
-    jq --argjson v "$RUN_SERVER" '.["run-server"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --argjson v "$RUN_SERVER" '.["run_server"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$IS_TESTNET" ]; then
-    jq --argjson v "$IS_TESTNET" '.["is-testnet"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --argjson v "$IS_TESTNET" '.["is_testnet"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$ENABLE_ADMIN_ENDPOINTS" ]; then
-    jq --argjson v "$ENABLE_ADMIN_ENDPOINTS" '.["enable-admin-endpoints"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --argjson v "$ENABLE_ADMIN_ENDPOINTS" '.["enable_admin_endpoints"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$ALLOW_CHECK_IN_QUBIC_GLOBAL" ]; then
-    jq --argjson v "$ALLOW_CHECK_IN_QUBIC_GLOBAL" '.["allow-check-in-qubic-global"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --argjson v "$ALLOW_CHECK_IN_QUBIC_GLOBAL" '.["allow_check_in_qubic_global"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$ALLOW_RECEIVE_LOG_FROM_INCOMING" ]; then
-    jq --argjson v "$ALLOW_RECEIVE_LOG_FROM_INCOMING" '.["allow-receive-log-from-incoming-connections"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --argjson v "$ALLOW_RECEIVE_LOG_FROM_INCOMING" '.["allow_receive_log_from_incoming_connections"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$ALLOW_PEER_DISCOVERY" ]; then
-    jq --argjson v "$ALLOW_PEER_DISCOVERY" '.["allow-peer-discovery"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --argjson v "$ALLOW_PEER_DISCOVERY" '.["allow_peer_discovery"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$AUTOBAN" ]; then
@@ -131,26 +131,26 @@ if [ -n "$AUTOBAN" ]; then
 fi
 
 if [ -n "$PERSIST_ORACLE_TX" ]; then
-    jq --argjson v "$PERSIST_ORACLE_TX" '.["persist-oracle-tx"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --argjson v "$PERSIST_ORACLE_TX" '.["persist_oracle_tx"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 # --- Array parameters ---
-# P2P_NODES: comma-separated list, e.g. "1:1.2.3.4:21841,2:5.6.7.8:21841"
+# P2P_NODES: comma-separated list, e.g. "BM:1.2.3.4:21841,BM:5.6.7.8:21841"
 if [ -n "$P2P_NODES" ]; then
-    jq --arg v "$P2P_NODES" '.["p2p-node"] = ($v | split(",") | map(. | ltrimstr(" ") | rtrimstr(" ")))' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --arg v "$P2P_NODES" '.["p2p_node"] = ($v | split(",") | map(. | ltrimstr(" ") | rtrimstr(" ")))' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 # --- External service URLs ---
 # PEER_DISCOVERY_URLS: comma-separated list of base URLs (failover order).
 if [ -n "$PEER_DISCOVERY_URLS" ]; then
-    jq --arg v "$PEER_DISCOVERY_URLS" '.["peer-discovery-urls"] = ($v | split(",") | map(. | ltrimstr(" ") | rtrimstr(" ")))' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --arg v "$PEER_DISCOVERY_URLS" '.["peer_discovery_urls"] = ($v | split(",") | map(. | ltrimstr(" ") | rtrimstr(" ")))' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 # CURRENT_TICK_ENDPOINTS: semicolon-separated list of url|path|shape triples.
 # Example: "https://api.qubic.global|/currenttick|flat;https://rpc.qubic.org|/live/v1/tick-info|nested"
 if [ -n "$CURRENT_TICK_ENDPOINTS" ]; then
     jq --arg v "$CURRENT_TICK_ENDPOINTS" '
-      .["current-tick-endpoints"] = ($v
+      .["current_tick_endpoints"] = ($v
         | split(";")
         | map(split("|"))
         | map({
@@ -164,13 +164,13 @@ fi
 # STATE_FILES_URLS: comma-separated list of base URLs (failover order).
 # STATE_FILES_URL (singular) is also accepted for back-compat.
 if [ -n "$STATE_FILES_URLS" ]; then
-    jq --arg v "$STATE_FILES_URLS" '.["state-files-urls"] = ($v | split(",") | map(. | ltrimstr(" ") | rtrimstr(" ")))' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --arg v "$STATE_FILES_URLS" '.["state_files_urls"] = ($v | split(",") | map(. | ltrimstr(" ") | rtrimstr(" ")))' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 elif [ -n "$STATE_FILES_URL" ]; then
-    jq --arg v "$STATE_FILES_URL" '.["state-files-urls"] = [$v]' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --arg v "$STATE_FILES_URL" '.["state_files_urls"] = [$v]' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 if [ -n "$CHECKIN_URL" ]; then
-    jq --arg v "$CHECKIN_URL" '.["checkin-url"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    jq --arg v "$CHECKIN_URL" '.["checkin_url"] = $v' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 
 # --- Redis/KeyDB settings ---
@@ -228,8 +228,9 @@ if [ -n "$KVROCKS_LOGLEVEL" ]; then
 fi
 
 echo "=== Bob configuration ==="
-# Print config but redact the node-seed for security
-jq 'if .["node-seed"] then .["node-seed"] = "***REDACTED***" else . end' "$CONFIG_FILE"
+# Print config but redact the node_seed for security
+jq 'if .["node_seed"] then .["node_seed"] = "***REDACTED***" else . end
+  | if .["node-seed"] then .["node-seed"] = "***REDACTED***" else . end' "$CONFIG_FILE"
 echo "=== Redis configuration ==="
 grep -E "^(maxmemory|maxmemory-policy|port|loglevel) " "$REDIS_CONF"
 echo "=== Kvrocks configuration ==="

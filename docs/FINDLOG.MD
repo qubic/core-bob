@@ -2,7 +2,7 @@
 
 ### Overview
 
-The `GET /findLog` endpoint is a powerful search feature that allows you to find all ticks within a specified range that contain log entries matching a specific filter.
+The `POST /findLog` endpoint is a powerful search feature that allows you to find all ticks within a specified range that contain log entries matching a specific filter.
 
 Instead of iterating through every tick, you provide a tick range and filter criteria. The API returns a list of only the tick numbers that satisfy your filter, which you can then query individually for full details. This dramatically reduces server overhead and improves efficiency.
 
@@ -78,5 +78,5 @@ This response indicates that only ticks `35917462` and `35917541` (within the sp
 #### Use Cases
 This method is ideal for backend services that need to build user-specific data logs on the fly. For example, QX or QSWAP can use this endpoint to find all relevant trading events for a specific user and then cache that data, rather than scanning the entire chain history.
 
-- [Finding asset transfer (EASY)](FIND_LOG_ASSET_ADVANCED.MD)
+- [Finding asset transfer (EASY)](FIND_LOG_ASSET_EASY.MD)
 - [Finding asset transfer (ADVANCED)](FIND_LOG_ASSET_ADVANCED.MD)
