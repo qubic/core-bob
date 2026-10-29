@@ -20,11 +20,11 @@ A high-performance indexer for the **Qubic blockchain network**. Bob syncs tick 
 
 ## System Requirements
 
-| Resource | Minimum |
-|----------|---------|
-| CPU | 4 cores (AVX2 support required) |
-| RAM | 12 GB |
-| Storage | 300 GB fast SSD / NVMe |
+| Resource | Minimum | Recommended |
+|----------|---------|-------------|
+| CPU | 4 cores (AVX2 support required) | 8 cores |
+| RAM | 12 GB | 16 GB |
+| Storage | 600 GB fast SSD / NVMe (stores 2 epochs of data, default) | 1 TB fast SSD / NVMe |
 
 ---
 

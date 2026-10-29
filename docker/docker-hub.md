@@ -86,7 +86,7 @@ See the [release notes](https://github.com/qubic/core-bob/blob/master/RELEASE_NO
 |---|---|---|
 | CPU | 4 cores (AVX2 required) | 8+ cores |
 | RAM | 12 GB | 32 GB |
-| Storage | 300 GB SSD/NVMe | 500 GB+ NVMe |
+| Storage | 600 GB SSD/NVMe (stores 2 epochs of data, default) | 1 TB NVMe |
 | Network | 100 Mbps | 1 Gbps |
 
 Bob is memory-hungry on busy networks. KeyDB holds recent ticks in RAM
