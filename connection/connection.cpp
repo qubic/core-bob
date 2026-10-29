@@ -34,7 +34,7 @@ static int do_connect(const char* nodeIp, int nodePort)
         }
     }
 
-    // Configure timeouts for fast init (1s)
+    // Configure timeouts for fast init (3s)
     struct timeval tv;
     tv.tv_sec = 3;
     tv.tv_usec = 0;
@@ -168,7 +168,7 @@ void QubicConnection::receiveAFullPacket(RequestResponseHeader& header, std::vec
     if (recvByte < 0)
     {
         // errno was preserved by the failing recv(). Most common cause is
-        // SO_RCVTIMEO firing (no bytes for 30s) — that's EAGAIN/EWOULDBLOCK.
+        // SO_RCVTIMEO firing (10s outgoing, 30s incoming) — that's EAGAIN/EWOULDBLOCK.
         // Anything else is a real socket error (ECONNRESET, EPIPE, etc.).
         if (errno == EAGAIN || errno == EWOULDBLOCK)
             throw std::logic_error("recv timeout (no data for SO_RCVTIMEO seconds)");
@@ -356,7 +356,7 @@ void QubicConnection::getBootstrapTickInfo(uint32_t& tick, uint16_t& epoch)
     socklen_t oldTvLen = sizeof(oldTv);
     getsockopt(mSocket, SOL_SOCKET, SO_RCVTIMEO, &oldTv, &oldTvLen);
 
-    // Set 1-second timeout for bootstrap
+    // Set 100ms timeout for bootstrap
     struct timeval tv;
     tv.tv_sec = 0;
     tv.tv_usec = 100000;
@@ -466,7 +466,7 @@ QubicConnection::QubicConnection(int existingSocket)
     mSocket = existingSocket;
     mReconnectable = false;
     if (mSocket >= 0) {
-        // Configure timeouts (best-effort) — kept in sync with do_connect.
+        // Configure timeouts (best-effort); 30s, longer than do_connect's 10s.
         struct timeval tv;
         tv.tv_sec = 30;
         tv.tv_usec = 0;

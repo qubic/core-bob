@@ -23,7 +23,7 @@ The core of BOB consists of four main processors dedicated to syncing and verify
 
 ## Additional Modules
 
-Beside the core processors, BOB also features two optional modules that can be disabled without halting its functionality.
+Beside the core processors, BOB also features two additional modules. The REST API server is always on; the TCP server is optional (`run_server`, off by default) and can be disabled without halting BOB's functionality.
 
 * **TCP Server**
     * This server mimics the behavior of a core baremetal for critical request/response cycles (e.g., requests for `tickData`, `votes`, `transactions`).

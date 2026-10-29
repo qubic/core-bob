@@ -22,7 +22,7 @@
 //   --arb <IDENTITY>   Arbitrator identity → verify the computor-list signature
 //   --passcode p0-p1-p2-p3  Passcode for the logging-event requests (the 'logs' step)
 //   --steps <list>     Comma list of steps to run. Default (no flag): runs
-//                      tickinfo,computors,tickdata,votes,txs — the peer-exchange
+//                      tickinfo,computors,tickdata,votes,txs (+logs if --passcode) — the peer-exchange
 //                      handshake is NOT sent. Pass --steps handshake to opt in.
 //   --binary-output    Print raw packet hexdumps (OFF by default)
 //   --hex <N>          Bytes of hexdump per packet when --binary-output is set (default 128; -1=full)
@@ -36,7 +36,7 @@
 //                      sequentially. Prints only per-tick timings + a final summary.
 //   --count <N>        Number of ticks to walk (default 100)
 //   --tick <N>         Start tick (default: node's current tick - count)
-//   --steps <list>     Per-tick fetches among tickdata,votes,txs (default: all three)
+//   --steps <list>     Per-tick fetches among tickdata,votes,txs (default: all three, +logs if --passcode)
 //   e.g.  ./bob_probe 1.2.3.4 21841 --catchup --tick 56000000 --count 500
 //
 // Examples:
@@ -886,7 +886,7 @@ static void printUsage(const char* argv0) {
     printf("  --count <N>       number of ticks to walk (default 100)\n");
     printf("  --tick <N>        start tick (default: node current tick - count)\n");
     printf("  --steps <list>    in catch-up, picks per-tick fetches among tickdata,votes,txs,logs\n");
-    printf("                    (default: tickdata,votes,txs; 'logs' needs --passcode)\n");
+    printf("                    (default: tickdata,votes,txs, +logs if --passcode given)\n");
     printf("  e.g. ./bob_probe <ip> 21841 --catchup --tick 56000000 --count 500 --steps tickdata\n");
     printf("  e.g. ./bob_probe <ip> 21841 --catchup --count 200 --steps logs --passcode 1-2-3-4\n");
 }
@@ -1011,7 +1011,7 @@ int main(int argc, char** argv) {
     }
     // ====================================================================
 
-    // ---- Step: handshake (EXCHANGE_PUBLIC_PEERS, type 0), as bob does for BM ----
+    // ---- Step: handshake (EXCHANGE_PUBLIC_PEERS, type 0); bob itself skips it ----
     if (wantHandshake()) {
         STEP("STEP handshake — EXCHANGE_PUBLIC_PEERS (type 0)");
         struct { uint8_t ip[4][4]; } peers{};

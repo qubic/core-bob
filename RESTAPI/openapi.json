@@ -56,21 +56,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Balance information",
+            "description": "Balance information. Invalid or unknown identity also returns HTTP 200, with body `{\"error\": \"...\"}` only.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BalanceResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid identity format",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -206,21 +196,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Transaction details",
+            "description": "Transaction details. Not found also returns HTTP 200, with body `{\"error\": \"...\"}` only.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TransactionResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Transaction not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -374,11 +354,16 @@
         },
         "responses": {
           "200": {
-            "description": "Matching log events",
+            "description": "Tick numbers containing matching log events",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LogsResponse"
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "uint32"
+                  },
+                  "example": [51000003, 51000042]
                 }
               }
             }
@@ -504,11 +489,14 @@
         },
         "responses": {
           "200": {
-            "description": "Asset transfer events",
+            "description": "Transaction hashes of matching asset transfers",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TransfersResponse"
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -639,7 +627,7 @@
                   }
                 },
                 "qubic_syncing": {
-                  "summary": "qubic_syncing - returns false when fully synced, otherwise sync progress object",
+                  "summary": "qubic_syncing - sync status object; `syncing` is false when fully synced, otherwise true with `progress`",
                   "value": {
                     "jsonrpc": "2.0",
                     "id": 1,
@@ -657,7 +645,7 @@
                   }
                 },
                 "qubic_getCurrentEpoch": {
-                  "summary": "qubic_getCurrentEpoch - current processing epoch number",
+                  "summary": "qubic_getCurrentEpoch - current epoch info object (epoch, currentTick, initialTick, endTick, log IDs)",
                   "value": {
                     "jsonrpc": "2.0",
                     "id": 1,
@@ -830,7 +818,7 @@
                   }
                 },
                 "qubic_getAssets": {
-                  "summary": "qubic_getAssets - list all assets owned by an identity",
+                  "summary": "qubic_getAssets - not implemented; result is an object with `error`",
                   "value": {
                     "jsonrpc": "2.0",
                     "id": 1,
@@ -839,7 +827,7 @@
                   }
                 },
                 "qubic_getLogs": {
-                  "summary": "qubic_getLogs - filter logs by tick range, identity, logType, etc.",
+                  "summary": "qubic_getLogs - filter logs by fromTick/toTick (max 1000 ticks), identity, logType, epoch",
                   "value": {
                     "jsonrpc": "2.0",
                     "id": 1,
@@ -847,14 +835,13 @@
                     "params": [{
                       "fromTick": 51000000,
                       "toTick": 51000100,
-                      "scIndex": 1,
-                      "logType": 6,
-                      "topic1": "BZBQFLLBNCXEMGLOBHUVFTLUPLVCPQUASSILFABOFFBCADQSSUPNWLZBQEXK"
+                      "identity": "BZBQFLLBNCXEMGLOBHUVFTLUPLVCPQUASSILFABOFFBCADQSSUPNWLZBQEXK",
+                      "logType": [0]
                     }]
                   }
                 },
                 "qubic_findLogIds": {
-                  "summary": "qubic_findLogIds - efficient ID-only filter (required: scIndex, logType, fromTick, toTick)",
+                  "summary": "qubic_findLogIds - returns matching tick numbers (required: scIndex, logType, fromTick, toTick)",
                   "value": {
                     "jsonrpc": "2.0",
                     "id": 1,
@@ -957,11 +944,11 @@
             }
           },
           "400": {
-            "description": "Malformed JSON or non-JSON-RPC body.",
+            "description": "Empty request body. Malformed JSON instead returns HTTP 200 with JSON-RPC error -32700.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonRpcResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1004,33 +991,61 @@
       "StatusResponse": {
         "type": "object",
         "properties": {
-          "currentTick": {
-            "type": "integer",
-            "format": "uint32"
-          },
-          "currentEpoch": {
+          "currentProcessingEpoch": {
             "type": "integer",
             "format": "uint16"
           },
-          "verifiedTick": {
+          "currentFetchingTick": {
             "type": "integer",
             "format": "uint32"
           },
-          "bmConnections": {
-            "type": "integer"
+          "currentFetchingLogTick": {
+            "type": "integer",
+            "format": "uint32"
+          },
+          "currentVerifyLoggingTick": {
+            "type": "integer",
+            "format": "uint32"
+          },
+          "currentIndexingTick": {
+            "type": "integer",
+            "format": "uint32"
+          },
+          "initialTick": {
+            "type": "integer",
+            "format": "uint32"
+          },
+          "targetTickVoteSignature": {
+            "type": "integer",
+            "format": "uint32"
+          },
+          "computorListSignature": {
+            "type": "integer",
+            "format": "uint64"
+          },
+          "computorPacketSignature": {
+            "type": "integer",
+            "format": "uint64",
+            "description": "Alias of computorListSignature"
+          },
+          "bobVersion": {
+            "type": "string"
+          },
+          "bobVersionGitHash": {
+            "type": "string"
+          },
+          "bobCompiler": {
+            "type": "string"
+          },
+          "extraInfo": {
+            "type": "object",
+            "description": "Signed node info: type, version, alias, uptime, timestamp, operator, messageHex, signature"
           }
         }
       },
       "BalanceResponse": {
         "type": "object",
         "properties": {
-          "identity": {
-            "type": "string"
-          },
-          "balance": {
-            "type": "integer",
-            "format": "int64"
-          },
           "incomingAmount": {
             "type": "integer",
             "format": "int64"
@@ -1039,29 +1054,46 @@
             "type": "integer",
             "format": "int64"
           },
+          "balance": {
+            "type": "integer",
+            "format": "int64"
+          },
           "numberOfIncomingTransfers": {
             "type": "integer"
           },
           "numberOfOutgoingTransfers": {
             "type": "integer"
+          },
+          "latestIncomingTransferTick": {
+            "type": "integer",
+            "format": "uint32"
+          },
+          "latestOutgoingTransferTick": {
+            "type": "integer",
+            "format": "uint32"
+          },
+          "currentBobTick": {
+            "type": "integer",
+            "format": "uint32"
+          },
+          "error": {
+            "type": "string",
+            "description": "The string \"null\" normally; a message if the entity is still being processed"
           }
         }
       },
       "AssetResponse": {
         "type": "object",
         "properties": {
-          "identity": {
-            "type": "string"
-          },
-          "issuer": {
-            "type": "string"
-          },
-          "assetName": {
-            "type": "string"
-          },
-          "amount": {
+          "ownershipBalance": {
             "type": "integer",
-            "format": "int64"
+            "format": "int64",
+            "description": "-1 if not found"
+          },
+          "possessionBalance": {
+            "type": "integer",
+            "format": "int64",
+            "description": "-1 if not found"
           }
         }
       },
@@ -1089,7 +1121,7 @@
           "endTickEndLogId": {
             "type": "integer",
             "format": "int64",
-            "description": "Last log ID in the end-epoch tick (-1 if not available)"
+            "description": "Last log ID in the end-epoch tick (-3 if not available, computed as start + length - 1 with both -1)"
           },
           "lastIndexedTick": {
             "type": "integer",
@@ -1105,14 +1137,15 @@
       },
       "TransactionResponse": {
         "type": "object",
+        "description": "If the tick is not yet indexed, only hash, from, to, amount, tick, inputSize, inputType, inputData are returned.",
         "properties": {
-          "txHash": {
+          "hash": {
             "type": "string"
           },
-          "sourceId": {
+          "from": {
             "type": "string"
           },
-          "destId": {
+          "to": {
             "type": "string"
           },
           "amount": {
@@ -1123,11 +1156,42 @@
             "type": "integer",
             "format": "uint32"
           },
+          "logIdFrom": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "logIdTo": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "transactionIndex": {
+            "type": "integer"
+          },
+          "executed": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "null while pending"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "success",
+              "failed"
+            ]
+          },
+          "timestamp": {
+            "type": "integer",
+            "format": "uint64"
+          },
           "inputType": {
             "type": "integer"
           },
           "inputSize": {
             "type": "integer"
+          },
+          "inputData": {
+            "type": "string"
           }
         }
       },
@@ -1138,58 +1202,144 @@
             "type": "integer",
             "format": "uint32"
           },
-          "epoch": {
-            "type": "integer",
-            "format": "uint16"
+          "tickdata": {
+            "type": "object",
+            "properties": {
+              "computorIndex": {
+                "type": "integer"
+              },
+              "epoch": {
+                "type": "integer",
+                "format": "uint16"
+              },
+              "tick": {
+                "type": "integer",
+                "format": "uint32"
+              },
+              "isSkipped": {
+                "type": "boolean"
+              },
+              "millisecond": {
+                "type": "integer"
+              },
+              "second": {
+                "type": "integer"
+              },
+              "minute": {
+                "type": "integer"
+              },
+              "hour": {
+                "type": "integer"
+              },
+              "day": {
+                "type": "integer"
+              },
+              "month": {
+                "type": "integer"
+              },
+              "year": {
+                "type": "integer"
+              },
+              "logIdStart": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "logIdEnd": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "timelock": {
+                "type": "string"
+              },
+              "transactionDigests": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "contractFees": {
+                "description": "Array of per-contract fees, or 0 if all fees are zero",
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "format": "int64"
+                    }
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ]
+              },
+              "signature": {
+                "type": "string",
+                "description": "Hex"
+              }
+            }
           },
-          "transactions": {
+          "votes": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/TransactionResponse"
+              "type": "object",
+              "description": "Computor tick vote (computorIndex, epoch, tick, time fields, digests, signature)"
             }
           }
         }
       },
       "LogsResponse": {
-        "type": "object",
-        "properties": {
-          "logs": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/LogEvent"
-            }
-          }
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/LogEvent"
         }
       },
       "LogEvent": {
         "type": "object",
         "properties": {
-          "logId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "tick": {
-            "type": "integer",
-            "format": "uint32"
+          "ok": {
+            "type": "boolean",
+            "description": "false for error entries, which carry error, epoch and logId only"
           },
           "epoch": {
             "type": "integer",
             "format": "uint16"
           },
+          "tick": {
+            "type": "integer",
+            "format": "uint32"
+          },
           "type": {
             "type": "integer"
           },
-          "scIndex": {
+          "logId": {
             "type": "integer",
-            "format": "uint32"
+            "format": "uint64"
           },
-          "logType": {
-            "type": "integer",
-            "format": "uint32"
+          "logDigest": {
+            "type": "string",
+            "description": "Hex"
           },
-          "message": {
+          "bodySize": {
+            "type": "integer"
+          },
+          "logTypename": {
+            "type": "string",
+            "description": "Present for recognized log types"
+          },
+          "body": {
             "type": "object",
-            "description": "Parsed log message content"
+            "description": "Parsed log body, or {hex} for unrecognized types"
+          },
+          "timestamp": {
+            "type": "integer",
+            "format": "uint64",
+            "description": "Unix seconds"
+          },
+          "txHash": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
           }
         }
       },
@@ -1215,13 +1365,15 @@
           },
           "topic1": {
             "type": "string",
-            "description": "60-character identity or empty"
+            "description": "60-character Qubic identity (any case), 0x-prefixed 66-char hex public key, or 64-char hex public key. Empty is rejected; use AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFXIB as wildcard."
           },
           "topic2": {
-            "type": "string"
+            "type": "string",
+            "description": "Same format as topic1"
           },
           "topic3": {
-            "type": "string"
+            "type": "string",
+            "description": "Same format as topic1"
           }
         }
       },
@@ -1334,10 +1486,18 @@
       "TransfersResponse": {
         "type": "object",
         "properties": {
-          "transfers": {
+          "in": {
             "type": "array",
+            "description": "Transaction hashes of incoming transfers",
             "items": {
-              "$ref": "#/components/schemas/LogEvent"
+              "type": "string"
+            }
+          },
+          "out": {
+            "type": "array",
+            "description": "Transaction hashes of outgoing transfers",
+            "items": {
+              "type": "string"
             }
           }
         }
@@ -1410,9 +1570,6 @@
       "BroadcastResponse": {
         "type": "object",
         "properties": {
-          "success": {
-            "type": "boolean"
-          },
           "txHash": {
             "type": "string"
           }

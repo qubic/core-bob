@@ -38,7 +38,7 @@ Consider a transaction where Alice sends 1000 QUs to an exchange (QX) to buy 11 
 This single, complex transaction can be broken down into the following sequence of primitive events:
 
 1.  **`QU_TRANSFER`** from Alice to QX (Amount: 1000)
-2.  **`ASSET_TRANSFER`** from QX to Alice (AssetName: B, Amount: 11)
+2.  **`ASSET_OWNERSHIP_CHANGE`** and **`ASSET_POSSESSION_CHANGE`** from QX to Alice (AssetName: B, Amount: 11)
 3.  **`QU_TRANSFER`** from QX to Alice (Amount: 50)
 4.  **`QU_TRANSFER`** from QX to Bob (Amount: 950)
 
@@ -59,10 +59,10 @@ In a decentralized exchange smart contract, a developer might log a custom event
 if (matchingOrder)
 {
     // Populate the custom log structure
-    matchingLog.src = qpi.invocator();
-    matchingLog.dst = order.id;
-    matchingLog.amount = order.amount;
-    matchingLog.asset = order.asset;
+    locals.matchingLog.src = qpi.invocator();
+    locals.matchingLog.dst = order.id;
+    locals.matchingLog.amount = order.amount;
+    locals.matchingLog.asset = order.asset;
 
     // Emit the custom event to be logged and indexed
     LOG_INFO(locals.matchingLog);

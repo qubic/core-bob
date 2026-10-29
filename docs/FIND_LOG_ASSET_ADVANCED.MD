@@ -5,13 +5,13 @@
 - topic3: Asset ID (derived from issuer public key and asset name): K12(issuer public key with asset name)
 
 Notes:
-- To match any value for a topic, use the wildcard “null” identity: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib
+- To match any value for a topic, use the wildcard “null” identity: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib
 - The asset identifier (topic3) is a 32-byte value derived from the issuer’s public key and the 7-byte asset name; use the canonical 32-byte identifier recognized by your client tooling.
 
 
 ### Example Queries
 #### Find all ASSET_OWNERSHIP_CHANGE events for GARTH from `37830000` to `37842856`
-Since we want to find ALL, `topic1` and `topic2` will be a wildcard `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib`
+Since we want to find ALL, `topic1` and `topic2` will be a wildcard `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib`
 topic3 is K12 of GARTH issuer and the "GARTH" name. Below is the example code how to get topic3 hash:
 ``` C/C++
     uint8_t assetHash[39];

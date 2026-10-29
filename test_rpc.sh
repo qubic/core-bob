@@ -191,7 +191,7 @@ check_error_code() {
 test_http() {
     print_header "HTTP RPC Tests ($HTTP_URL)"
 
-    # Check if server is reachable (POST with empty body should return 400, GET returns 405)
+    # Check if server is reachable (POST {} returns 200 with -32600 error)
     print_test "Server connectivity"
     local http_code
     http_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$HTTP_URL" -H "Content-Type: application/json" -d '{}' 2>/dev/null || echo "000")

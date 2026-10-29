@@ -35,7 +35,7 @@ public:
     }
 
     void addSample(const char* name, uint64_t ns) {
-        // Fast path with double-checked lookup
+        // Single locked update of the named stats entry
         {
             std::lock_guard<std::mutex> lock(mutex_);
             auto& s = stats_[name];

@@ -268,7 +268,7 @@ namespace {
                 sockaddr_in cli{};
                 socklen_t len = sizeof(cli);
 
-                // Set accept timeout for periodic cleanup
+                // Accept timeout so the loop can re-check running_
                 struct timeval tv;
                 tv.tv_sec = 10;
                 tv.tv_usec = 0;

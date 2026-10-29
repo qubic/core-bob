@@ -248,7 +248,7 @@ TEST_F(DbTest, DeleteTransaction_NoRedis_ReturnsFalse) {
 }
 
 // ---------------------------------------------------------------------------
-// db_delete_many
+// db_delete_many_from_redis
 // ---------------------------------------------------------------------------
 
 TEST_F(DbTest, DeleteMany_EmptyKeys_ReturnsTrue) {
@@ -266,7 +266,7 @@ TEST_F(DbTest, DeleteMany_NoRedis_ReturnsFalse) {
 }
 
 // ---------------------------------------------------------------------------
-// db_delete_logs
+// db_delete_logs_from_redis
 // ---------------------------------------------------------------------------
 
 TEST_F(DbTest, DeleteLogs_Success) {

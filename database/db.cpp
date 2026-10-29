@@ -320,7 +320,7 @@ bool db_check_log_range(uint32_t tick)
 }
 
 // Internal helper: fetch a LogRangesPerTxInTick blob by its full Redis key.
-// Handles the legacy "oracle machine" struct layout (16-byte size delta).
+// Also accepts the legacy 1024+6 slot layout and upcasts it.
 static bool _db_get_log_ranges_by_key(const std::string& key, LogRangesPerTxInTick& logRange) {
     if (!g_redis) return false;
     try {
@@ -774,7 +774,7 @@ std::vector<LogEvent> db_get_logs_by_tick_range(uint16_t epoch, uint32_t start_t
             long long fromLogId = -1;
             long long length = -1;
             if (!db_try_get_log_range_for_tick(tick, fromLogId, length)) {
-                // On parsing/redis error: skip this tick.
+                // On parsing/redis error: abort the whole range (success=false).
                 return out;
             }
             if (fromLogId == -1 || length == -1 || length == 0) {
@@ -782,7 +782,7 @@ std::vector<LogEvent> db_get_logs_by_tick_range(uint16_t epoch, uint32_t start_t
                 continue;
             }
 
-            // Fetch in chunks to avoid oversized commands.
+            // Fetch each log id with its own GET.
             const uint64_t startId = static_cast<uint64_t>(fromLogId);
             const uint64_t endId = static_cast<uint64_t>(fromLogId + length - 1);
             auto logs = db_try_get_logs(epoch, startId, endId);
@@ -832,7 +832,7 @@ std::vector<LogEvent> db_get_logs_by_tick_range(uint16_t epoch, uint32_t start_t
                     return out;
                 }
 
-                // Optional strict self-check against expected tick
+                // Self-check: epoch, size, min body size, K12 digest.
                 if (!le.selfCheck(epoch))
                 {
                     Logger::get()->critical("Log event {} failed the selfcheck", startId + i);

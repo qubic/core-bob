@@ -1,8 +1,6 @@
-# How to Install KeyDB and Configure FLASH Storage
+# How to Install KeyDB
 
-This tutorial guides you through installing KeyDB and configuring its **FLASH** feature. The FLASH feature enables KeyDB to use a combination of RAM and a persistent SSD (like an NVMe drive) as a single, large data store. This allows you to store datasets much larger than your available RAM, offering a massive cost saving.
-
-KeyDB treats RAM as a cache for your "hot" (frequently accessed) data, while "cold" (less-used) data is automatically moved to the faster persistent storage (SSD).
+This tutorial guides you through installing KeyDB.
 
 ---
 

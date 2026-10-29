@@ -89,7 +89,7 @@ int runBob(int argc, char *argv[])
         printf("Failed to load config '%s': %s\n", config_path.c_str(), cfg_error.c_str());
         return -1;
     }
-    // trace - debug - info - warn - error - fatal
+    // trace - debug - info - warn - error - critical - off
     std::string log_level = cfg.log_level;
     Logger::init(log_level);
     printVersionInfo();
@@ -635,7 +635,7 @@ int runBob(int argc, char *argv[])
     if (run_server)
     {
         StopQubicServer();
-        Logger::get()->info("Closed Qubic server at port 21842");
+        Logger::get()->info("Closed Qubic server at port {}", server_port_u);
     }
 
     // Wake any recv thread parked in MRB EnqueuePacket so join() cannot deadlock.

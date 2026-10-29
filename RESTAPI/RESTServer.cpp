@@ -418,7 +418,7 @@ namespace {
                             endTick = startTick + MAX_RANGE;
                         }
 
-                        // Reuse the existing find API with a single-tick window
+                        // Reuse the existing find API with the clamped tick window
                         std::string result = getCustomLog(scIndex, logType, topics[0], topics[1], topics[2], epoch, startTick, endTick);
                         callback(makeJsonResponse(result));
                     } catch (const std::exception& ex) {
@@ -428,7 +428,7 @@ namespace {
                 {Post}
         );
 
-        // POST /getQuTransferForIdentity
+        // POST /getQuTransfersForIdentity
         app().registerHandler(
             "/getQuTransfersForIdentity",
             [](const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& callback) {
@@ -457,7 +457,7 @@ namespace {
             {Post}
         );
 
-        // POST /getAssetTransferForIdentity
+        // POST /getAssetTransfersForIdentity
         app().registerHandler(
             "/getAssetTransfersForIdentity",
             [](const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& callback) {
@@ -490,7 +490,7 @@ namespace {
             {Post}
         );
 
-        // POST /getAllAssetTransfer
+        // POST /getAllAssetTransfers
         app().registerHandler(
             "/getAllAssetTransfers",
             [](const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& callback) {
@@ -1192,7 +1192,7 @@ namespace {
                 .setMaxConnectionNum(128)          // Limit max concurrent connections
                 .setMaxConnectionNumPerIP(25)      // Limit per-IP connections (prevents single client abuse)
                 .disableSigtermHandling()
-                .reusePort()                        // Enable SO_REUSEADDR to avoid "Address already in use" errors
+                .reusePort()                        // Getter only, no effect; drogon sets SO_REUSEADDR by default
                 ;
 
             // Run Drogon in a background thread so it doesn't block the main program

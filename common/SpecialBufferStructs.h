@@ -147,10 +147,6 @@ public:
         return true;
     }
 
-    /**
-     * @brief Returns a string containing the current buffer usage information.
-     * @return String with buffer size, capacity, and usage percentage.
-     */
     void notifyStop() {
         {
             std::unique_lock<std::mutex> lock(mtx_);
@@ -160,6 +156,10 @@ public:
         cv_not_empty_.notify_all();
     }
 
+    /**
+     * @brief Returns a string containing the current buffer usage information.
+     * @return String with buffer size, capacity, and usage percentage.
+     */
     std::string GetBufferUsageString() {
         std::lock_guard<std::mutex> lock(mtx_);
         double usage_percent = (static_cast<double>(size_) / capacity_) * 100.0;

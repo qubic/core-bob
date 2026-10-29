@@ -135,7 +135,7 @@ if [ -n "$PERSIST_ORACLE_TX" ]; then
 fi
 
 # --- Array parameters ---
-# P2P_NODES: comma-separated list, e.g. "1:1.2.3.4:21841,2:5.6.7.8:21841"
+# P2P_NODES: comma-separated list, e.g. "BM:1.2.3.4:21841,BM:5.6.7.8:21841"
 if [ -n "$P2P_NODES" ]; then
     jq --arg v "$P2P_NODES" '.["p2p_node"] = ($v | split(",") | map(. | ltrimstr(" ") | rtrimstr(" ")))' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi

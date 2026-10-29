@@ -1,18 +1,18 @@
 ### Easy Asset / QU Transfer Queries (REST)
 
-This document describes three convenience endpoints that return transfer activity over a tick range, without requiring you to manually compute log topics or call \`/findLog\`.
+This document describes three convenience endpoints that return transfer activity over a tick range, without requiring you to manually compute log topics or call `/findLog`.
 
 ---
 
-## 1) POST \`/getAllAssetTransfers\`
+## 1) POST `/getAllAssetTransfers`
 
 Fetch **all transfers for a specific asset** (any sender/receiver) within a tick range.
 
 ### Request body
-- \`fromTick\` (uint32) — start tick (inclusive)
-- \`toTick\` (uint32) — end tick (inclusive)
-- \`assetIssuer\` (string) — issuer identity/public identifier for the asset
-- \`assetName\` (string) — asset name
+- `fromTick` (uint32) — start tick (inclusive)
+- `toTick` (uint32) — end tick (inclusive)
+- `assetIssuer` (string) — issuer identity/public identifier for the asset
+- `assetName` (string) — asset name
 
 ### Example
     curl -s -X POST '23.88.1.189:40420/getAllAssetTransfers' \
@@ -31,16 +31,16 @@ expected returns:
 
 ---
 
-## 2) POST \`/getAssetTransfersForIdentity\`
+## 2) POST `/getAssetTransfersForIdentity`
 
 Fetch **asset transfers involving a specific identity** (as sender and/or receiver) for a given asset within a tick range.
 
 ### Request body
-- \`fromTick\` (uint32) — start tick (inclusive)
-- \`toTick\` (uint32) — end tick (inclusive)
-- \`identity\` (string) — identity to filter by
-- \`assetIssuer\` (string) — issuer identity/public identifier for the asset
-- \`assetName\` (string) — asset name
+- `fromTick` (uint32) — start tick (inclusive)
+- `toTick` (uint32) — end tick (inclusive)
+- `identity` (string) — identity to filter by
+- `assetIssuer` (string) — issuer identity/public identifier for the asset
+- `assetName` (string) — asset name
 
 ### Example
     curl -s -X POST '23.88.1.189:40420/getAssetTransfersForIdentity' \
@@ -59,14 +59,14 @@ expected return:
 
 ---
 
-## 3) POST \`/getQuTransfersForIdentity\`
+## 3) POST `/getQuTransfersForIdentity`
 
 Fetch **QU transfers involving a specific identity** within a tick range.
 
 ### Request body
-- \`fromTick\` (uint32) — start tick (inclusive)
-- \`toTick\` (uint32) — end tick (inclusive)
-- \`identity\` (string) — identity to filter by
+- `fromTick` (uint32) — start tick (inclusive)
+- `toTick` (uint32) — end tick (inclusive)
+- `identity` (string) — identity to filter by
 
 ### Example
     curl -s -X POST '23.88.1.189:40420/getQuTransfersForIdentity' \
@@ -84,6 +84,7 @@ expected return:
 ---
 
 ## Notes
-- All endpoints require a JSON body (\`Content-Type: application/json\`).
-- \`fromTick\` must be \`<= toTick\`.
-- Use these endpoints when you want “just the transfers” without building \`/findLog\` queries and topic hashes manually.
+- All endpoints require a JSON body (`Content-Type: application/json`).
+- `fromTick` must be `<= toTick`.
+- `toTick - fromTick` must be `< 1000`.
+- Use these endpoints when you want “just the transfers” without building `/findLog` queries and topic hashes manually.

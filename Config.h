@@ -43,12 +43,12 @@ struct AppConfig {
     unsigned n_tickdata_to_store = 5;
 
     unsigned max_thread = 0;
-    // Spam/Junk detection threshold for QU transfers (amount <= threshold and no input)
+    // Spam/Junk detection threshold for QU transfers (amount < threshold and no input)
     unsigned spam_qu_threshold = 0;
     // How many log IDs to request per RequestLog packet. Larger values are
     // clamped to BOB_LOG_EVENT_CHUNK_SIZE at startup. Lower it (e.g. 256 or
     // 512) on links where big responses cause queueing/stalls.
-    // Per-range dedup (verifyLoggingEvent's REFIRE_GUARD_MS) is unaffected.
+    // Per-range dedup (EventRequestFromTrustedNode's REFIRE_GUARD_MS) is unaffected.
     unsigned log_event_chunk_size = BOB_LOG_EVENT_CHUNK_SIZE;
     // Master switch for expensive diagnostic instrumentation (BATCH_AUDIT
     // hashing, per-log source attribution). Default off; turn on while
@@ -59,7 +59,7 @@ struct AppConfig {
     // For "kvrocks" tx_storage_mode: how long transactions stay in RAM (in ticks)
     unsigned tx_tick_to_live = 10000;
 
-    // time to live (data expiration) for records in kvrocks engine (default 3 weeks - 1209600 seconds) (0 => no expiration)
+    // time to live (data expiration) for records in kvrocks engine (default 2 weeks - 1209600 seconds) (0 => no expiration)
     long long kvrocks_ttl = 1209600;
 
     long long wait_at_epoch_end = 1800; // time to wait at epoch end before switching to new epoch- 30mins (1800s) by default
