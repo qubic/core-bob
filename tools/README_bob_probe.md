@@ -112,7 +112,7 @@ summary of the timings.
 - The run ends with a **timing summary** per fetch type (ticks, empty, total, avg,
   min, max, bytes) plus overall throughput (ticks/s, MB/s, avg per tick).
 - It is **sequential** (one tick at a time), so it measures per-tick round-trip
-  latency. Real bob pipelines requests (`future-offset`) for higher throughput —
+  latency. Real bob pipelines requests (`future_offset`) for higher throughput —
   so treat these numbers as a per-tick latency baseline, not bob's max sync speed.
 - Signature verification is skipped in catch-up (it's a network-timing test).
 - `empty` in the summary = ticks where the node returned no data for that type

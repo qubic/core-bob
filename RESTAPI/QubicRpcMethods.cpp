@@ -308,7 +308,7 @@ Json::Value QubicRpcMethods::getTransactionReceipt(const std::string& txHashInpu
     // Authoritative lookup: compute execution state and fetch logs directly
     // from primary data (tick digests + log ranges + logs) without relying
     // on the itx: index. This guarantees correct status for every tx,
-    // including those skipped by spam-qu-threshold or not yet indexed.
+    // including those skipped by spam_qu_threshold or not yet indexed.
     auto details = ApiHelpers::computeTxExecutionDetails(qubicHash, *tx, td);
 
     return QubicRpc::transactionToQubicReceipt(tx, qubicHash, tx->tick,

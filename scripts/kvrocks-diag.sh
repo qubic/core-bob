@@ -92,7 +92,7 @@ hr "Config (kvrocks.conf — selected)"
 docker exec "$CONTAINER" sh -c "grep -nE 'compression|ttl|compact|write_buffer|max_open_files|block_cache' /etc/kvrocks/kvrocks.conf 2>/dev/null || true"
 
 hr "Config (bob.json — TTL/retention knobs)"
-docker exec "$CONTAINER" sh -c "grep -nE 'kvrocks_ttl|tx_tick_to_live|tick-storage-mode|indexer-max-activities-per-key|spam-qu-threshold|n_tickdata_to_store' /app/bob.json 2>/dev/null || true"
+docker exec "$CONTAINER" sh -c "grep -nE 'kvrocks_ttl|tx_tick_to_live|tick_storage_mode|indexer_max_activities_per_key|spam_qu_threshold|n_tickdata_to_store' /app/bob.json 2>/dev/null || true"
 
 hr "Done"
 echo "Tip: re-run after the next compaction cycle to see whether pending_compaction_bytes and total_sst_files_size are shrinking."

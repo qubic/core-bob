@@ -104,7 +104,7 @@ struct GlobalState {
     // cost: BATCH_AUDIT per-tick hashing of log bytes and the per-log source
     // attribution sidecar key (one Redis SETNX per log). Read-mostly bool;
     // the branch check is negligible when off. Configurable via bob.json
-    // "diagnostic-mode" / env var DIAGNOSTIC_MODE. Default OFF.
+    // "diagnostic_mode" / env var DIAGNOSTIC_MODE. Default OFF.
     std::atomic<bool> gDiagnosticMode{false};
 
     long long gKvrocksTTL = 1209600;

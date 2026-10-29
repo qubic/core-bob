@@ -145,7 +145,7 @@ static std::string renderStateFilesUrl(const std::string& tmpl, uint16_t epoch)
 bool DownloadStateFiles(uint16_t epoch)
 {
     if (gStateFilesUrls.empty()) {
-        Logger::get()->info("state-files-urls is empty; skipping spectrum/universe download for epoch {}", epoch);
+        Logger::get()->info("state_files_urls is empty; skipping spectrum/universe download for epoch {}", epoch);
         return false;
     }
     const std::string zipFile  = "ep" + std::to_string(epoch) + ".zip";

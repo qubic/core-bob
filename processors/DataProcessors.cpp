@@ -289,7 +289,7 @@ void processLogRanges(RequestResponseHeader& header, const uint8_t* ptr)
     else
     {
         std::string peer = conn ? std::string(conn->getNodeIp()) + ":" + std::to_string(conn->getNodePort()) : "unknown, see connReceiver warning";
-        Logger::get()->warn("Cannot find suitable tick to map the log range (peer {}). Please increase request-logging-cycle-ms. Your internet is not fast enough for tight request cycle", peer);
+        Logger::get()->warn("Cannot find suitable tick to map the log range (peer {}). Please increase request_logging_cycle_ms. Your internet is not fast enough for tight request cycle", peer);
     }
 }
 
