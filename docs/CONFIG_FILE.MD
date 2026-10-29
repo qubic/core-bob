@@ -45,7 +45,7 @@ If you want to use a different configuration file, you can specify its path when
 - **Example:** `["bob:192.168.1.100:21842", "bob:10.0.0.50:21842"]`
 
 **`is_testnet`**
-- **What it does:** Currently ignored (Bob always runs on main network). The key is parsed but has no effect
+- **What it does:** Currently ignored. The key is parsed but has no effect. Currently, it's auto selected based on the computorlists.
 - **Default value:** `false`
 
 ### Logging and Debugging
