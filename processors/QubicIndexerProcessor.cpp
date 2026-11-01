@@ -31,6 +31,13 @@ static int getTransactionIndexFromLogId(const LogRangesPerTxInTick &logrange, lo
     return -1;
 }
 
+// Empty ticks have no TickData (epoch == 0) but can still carry logs, e.g. from
+// SC BEGIN_TICK/END_TICK procedures. Logs are stored per epoch, so fall back to
+// the epoch being processed; the indexer never runs across an epoch boundary.
+static uint16_t getLogEpoch(const TickData &td) {
+    return td.epoch != 0 ? td.epoch : gCurrentProcessingEpoch.load();
+}
+
 static uint64_t calculateUnixTimestamp(const TickData &td) {
     std::tm timeinfo = {};
     timeinfo.tm_year = int(td.year) + 2000 - 1900;  // Convert from 2-digit year to years since 1900
@@ -138,7 +145,7 @@ static void indexTick(uint32_t tick, const TickData &td) {
 
     // now handling all log events
     bool success;
-    auto vle = db_get_logs_by_tick_range(td.epoch, tick, tick, success);
+    auto vle = db_get_logs_by_tick_range(getLogEpoch(td), tick, tick, success);
     uint32_t SC_index = 0;
     uint32_t logType = 0;
     m256i topic1, topic2, topic3;
@@ -488,8 +495,9 @@ void indexVerifiedTicks()
             try {
                 // Get logs for this tick
                 bool success = false;
-                std::vector<LogEvent> logs = db_get_logs_by_tick_range(td.epoch, nextTick, nextTick, success);
-                QubicSubscriptionManager::instance().onVerifiedTick(nextTick, td.epoch, logs, td);
+                uint16_t epoch = getLogEpoch(td);
+                std::vector<LogEvent> logs = db_get_logs_by_tick_range(epoch, nextTick, nextTick, success);
+                QubicSubscriptionManager::instance().onVerifiedTick(nextTick, epoch, logs, td);
             } catch (const std::exception& e) {
                 Logger::get()->warn("QubicIndexer: tickStream notification failed for tick {}: {}", nextTick, e.what());
             } catch (...) {
