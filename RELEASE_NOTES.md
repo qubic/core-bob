@@ -7,6 +7,10 @@ behavior.
 
 For exact commit boundaries, see `git log v<a>..v<b>`.
 ---
+## 1.5.20
+- Fix bug: logs of empty ticks not being indexed or streamed
+- Update documents and comments
+
 ## 1.5.19
 - New config `autoban` (default `false`): rotate out discovered peers that fail most log requests (no logs: 10 min cooldown, no answer: 12 h ban).
 - Peer discovery sends `exclude=<banned + connected IPs>` to the first `peer_discovery_urls` entry.
