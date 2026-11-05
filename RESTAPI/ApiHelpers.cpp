@@ -65,8 +65,8 @@ BalanceInfo getBalanceInfo(const std::string& identity) {
     info.currentTick = gCurrentVerifyLoggingTick.load() - 1;
 
     // Check if entity is being processed
-    if (e.numberOfIncomingTransfers > info.currentTick ||
-        e.numberOfOutgoingTransfers > info.currentTick) {
+    if (e.latestIncomingTransferTick > info.currentTick ||
+        e.latestOutgoingTransferTick > info.currentTick) {
         info.isBeingProcessed = true;
     }
 
