@@ -94,7 +94,10 @@ int runBob(int argc, char *argv[])
     Logger::init(log_level);
     printVersionInfo();
     {
-        getSubseedFromSeed((uint8_t *) cfg.node_seed.c_str(), nodeSubseed.m256i_u8);
+        if (cfg.node_seed.size() != 55 || !getSubseedFromSeed((uint8_t *) cfg.node_seed.c_str(), nodeSubseed.m256i_u8)) {
+            printf("Invalid node_seed: it must be exactly 55 lowercase letters (a-z)\n");
+            return -1;
+        }
         getPrivateKeyFromSubSeed(nodeSubseed.m256i_u8, nodePrivatekey.m256i_u8);
         getPublicKeyFromPrivateKey(nodePrivatekey.m256i_u8, nodePublickey.m256i_u8);
         char identity[64] = {0};
