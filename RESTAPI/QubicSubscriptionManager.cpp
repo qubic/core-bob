@@ -316,16 +316,17 @@ bool QubicSubscriptionManager::matchesFilter(
         if (!match) return false;
     }
 
-    // Check identity filter
+    // Check identity filter.
+    // identities is an unordered_set, so each check is O(1) regardless of how
+    // many identities are watched. This matters because this matcher runs for
+    // every log event against every subscription: a linear scan here made the
+    // dispatch cost O(transfers x identities), which becomes a hotspot as the
+    // watched set grows (tens of thousands of deposit addresses, peak tx load).
     if (!filter.identities.empty()) {
-        bool match = false;
-        for (const auto& id : filter.identities) {
-            if (sourceIdentity == id || destIdentity == id) {
-                match = true;
-                break;
-            }
+        if (filter.identities.count(sourceIdentity) == 0 &&
+            filter.identities.count(destIdentity) == 0) {
+            return false;
         }
-        if (!match) return false;
     }
 
     return true;

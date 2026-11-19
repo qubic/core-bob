@@ -27,7 +27,7 @@ enum class QubicSubscriptionType {
 struct LogFilter {
     std::optional<uint32_t> fromTick;
     std::optional<uint32_t> toTick;
-    std::vector<std::string> identities;  // Filter by source or destination identity
+    std::unordered_set<std::string> identities;  // Filter by source or destination identity (O(1) lookup)
     std::vector<uint32_t> logTypes;       // Filter by log type
     // Catch-up parameters
     std::optional<int64_t> startLogId;    // Start from this log ID for catch-up
