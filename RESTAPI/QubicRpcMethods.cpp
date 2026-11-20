@@ -834,13 +834,13 @@ std::string QubicRpcMethods::subscribe(
                     for (const auto& id : filterParams["identity"]) {
                         std::string normalized = normalizeIdentity(id.asString());
                         if (!normalized.empty()) {
-                            filter.identities.push_back(normalized);
+                            filter.identities.insert(normalized);
                         }
                     }
                 } else if (filterParams["identity"].isString()) {
                     std::string normalized = normalizeIdentity(filterParams["identity"].asString());
                     if (!normalized.empty()) {
-                        filter.identities.push_back(normalized);
+                        filter.identities.insert(normalized);
                     }
                 }
             }
@@ -888,13 +888,13 @@ std::string QubicRpcMethods::subscribe(
                     for (const auto& id : filterParams["identity"]) {
                         std::string normalized = normalizeIdentity(id.asString());
                         if (!normalized.empty()) {
-                            filter.identities.push_back(normalized);
+                            filter.identities.insert(normalized);
                         }
                     }
                 } else if (filterParams["identity"].isString()) {
                     std::string normalized = normalizeIdentity(filterParams["identity"].asString());
                     if (!normalized.empty()) {
-                        filter.identities.push_back(normalized);
+                        filter.identities.insert(normalized);
                     }
                 }
             }
