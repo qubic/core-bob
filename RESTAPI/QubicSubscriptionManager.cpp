@@ -443,6 +443,7 @@ std::string QubicSubscriptionManager::subscribeTickStream(
     sub.id = subId;
     sub.type = QubicSubscriptionType::TickStream;
     sub.tickStreamFilter = filter;
+    sub.tickStreamFilter.buildIndex();  // O(1) tx matching; copies for catch-up carry the index
     sub.conn = conn;
     sub.lastTick = startTick > 0 ? startTick - 1 : 0;
     sub.catchUpInProgress = startTick > 0;
@@ -529,6 +530,22 @@ bool QubicSubscriptionManager::matchesLogFilter(
     return true;
 }
 
+// Partition txFilters into O(1)-matchable indexes (built once per subscription).
+void TickStreamFilter::buildIndex()
+{
+    fromOnlyIndex.clear();
+    toOnlyIndex.clear();
+    complexTxFilters.clear();
+    for (const auto& f : txFilters) {
+        const bool onlyFrom = !f.from.empty() && f.to.empty() && f.minAmount <= 0 && f.inputType < 0;
+        const bool onlyTo   = f.from.empty() && !f.to.empty() && f.minAmount <= 0 && f.inputType < 0;
+        if (onlyFrom)      fromOnlyIndex.insert(f.from);
+        else if (onlyTo)   toOnlyIndex.insert(f.to);
+        else               complexTxFilters.push_back(f);  // from+to, amount, inputType, or catch-all {}
+    }
+    txIndexBuilt = true;
+}
+
 bool QubicSubscriptionManager::matchesAnyTxFilter(
     const std::string& from,
     const std::string& to,
@@ -546,6 +563,19 @@ bool QubicSubscriptionManager::matchesAnyTxFilter(
         return true;
     }
 
+    // Fast path: O(1) lookups for single-field (address-watch) filters, then a
+    // linear scan only over the (typically small) richer remainder. Same result
+    // as scanning every txFilter: a tx matches if ANY filter matches.
+    if (sub.txIndexBuilt) {
+        if (!sub.fromOnlyIndex.empty() && sub.fromOnlyIndex.count(from)) return true;
+        if (!sub.toOnlyIndex.empty() && sub.toOnlyIndex.count(to)) return true;
+        for (const auto& filter : sub.complexTxFilters) {
+            if (matchesTxFilter(from, to, amount, inputType, filter)) return true;
+        }
+        return false;
+    }
+
+    // Fallback (index not built for this filter copy): original linear scan.
     for (const auto& filter : sub.txFilters) {
         if (matchesTxFilter(from, to, amount, inputType, filter)) {
             return true;

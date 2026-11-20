@@ -64,6 +64,19 @@ struct TickStreamFilter {
     bool includeInputData{true};  // Include full inputData in transactions
     bool excludeTxs{false};       // If true, exclude all transactions from output
     bool excludeLogs{false};      // If true, exclude all logs from output
+
+    // Derived indexes over txFilters, built once by buildIndex() when the
+    // subscription is created. A client watching many addresses supplies many
+    // txFilters; matching them with a linear scan for every transaction in
+    // every tick is O(txs x filters). The dominant case is a filter that
+    // constrains only `from` OR only `to` (watch an address), which we hash
+    // for O(1) membership; anything richer (from+to, amount, inputType) stays
+    // in a small linear remainder.
+    std::unordered_set<std::string> fromOnlyIndex;
+    std::unordered_set<std::string> toOnlyIndex;
+    std::vector<TxFilter> complexTxFilters;
+    bool txIndexBuilt{false};
+    void buildIndex();
 };
 
 // Transaction data for streaming

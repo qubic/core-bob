@@ -1,11 +1,64 @@
 #include <sstream>
 #include <iomanip>
 #include <cassert>
+#include <unordered_set>
+#include <map>
+#include <mutex>
+#include <memory>
+#include <cstring>
 #include "database/db.h"
 #include "GlobalVar.h"
 #include "spdlogDriver/Logger.h"
 #include "K12AndKeyUtil.h"
 #include "shim.h"
+
+namespace {
+// Per-tick set of a tick's non-zero transaction digests.
+//
+// Every incoming BROADCAST_TRANSACTION must check whether its digest belongs to
+// the referenced tick. That was a linear scan over all 4096 TickData digest
+// slots, per incoming tx — O(txsPerTick^2) within a tick, plus a TickData DB
+// read on every tx. TickData is stored write-once (UpdateType::NOT_EXIST), so a
+// tick's digest set is immutable; we build it once per tick and cache it, making
+// the per-tx check an O(1) hash lookup and skipping the repeat DB reads.
+struct M256Hash {
+    size_t operator()(const m256i& d) const {
+        size_t h; std::memcpy(&h, d.m256i_u8, sizeof(h)); return h;
+    }
+};
+using DigestSet = std::unordered_set<m256i, M256Hash>;
+
+std::mutex gTickDigestMtx;
+std::map<uint32_t, std::shared_ptr<const DigestSet>> gTickDigestCache;  // keyed by tick
+constexpr size_t TICK_DIGEST_CACHE_MAX = 8;  // only the few in-flight ticks are hot
+
+std::shared_ptr<const DigestSet> getTickDigestSet(uint32_t tick)
+{
+    {
+        std::lock_guard<std::mutex> lk(gTickDigestMtx);
+        auto it = gTickDigestCache.find(tick);
+        if (it != gTickDigestCache.end()) return it->second;
+    }
+    // Build outside the lock: read the (immutable) tick data once.
+    TickData td{};
+    if (!db_try_get_tick_data(tick, td)) return nullptr;  // not available yet; don't cache
+    auto set = std::make_shared<DigestSet>();
+    for (int i = 0; i < NUMBER_OF_TRANSACTIONS_PER_TICK; i++) {
+        if (td.transactionDigests[i] != m256i::zero()) set->insert(td.transactionDigests[i]);
+    }
+    std::shared_ptr<const DigestSet> cset = set;
+    {
+        std::lock_guard<std::mutex> lk(gTickDigestMtx);
+        auto it = gTickDigestCache.find(tick);
+        if (it != gTickDigestCache.end()) return it->second;  // another thread won the race
+        gTickDigestCache.emplace(tick, cset);
+        while (gTickDigestCache.size() > TICK_DIGEST_CACHE_MAX) {
+            gTickDigestCache.erase(gTickDigestCache.begin());  // evict oldest tick
+        }
+    }
+    return cset;
+}
+} // namespace
 
 bool verifySignature(void* ptr, uint8_t* pubkey, int structSize) // structSize include sig 64 bytes
 {
@@ -149,27 +202,20 @@ void processTransaction(const uint8_t* ptr)
     {
         return; // already verified
     }
-    TickData td{};
-    if (!db_try_get_tick_data(tx->tick, td))
+    // O(1) membership check against the tick's cached, immutable digest set
+    // (replaces a 4096-slot linear scan + per-tx TickData DB read).
+    auto tickDigests = getTickDigestSet(tx->tick);
+    if (!tickDigests)
     {
-        return;
+        return;  // tick data not available yet
     }
 
     memcpy(buffer+sizeof(Transaction),ptr+sizeof(Transaction), tx->inputSize + SIGNATURE_SIZE);
     m256i tx_digest;
     KangarooTwelve(buffer, sizeof(Transaction) + tx->inputSize + SIGNATURE_SIZE, tx_digest.m256i_u8, 32);
-    bool found = false;
-    for (int i = 0; i < NUMBER_OF_TRANSACTIONS_PER_TICK; i++)
+    if (tickDigests->count(tx_digest) == 0)
     {
-        if (td.transactionDigests[i] != m256i::zero() && td.transactionDigests[i] == tx_digest)
-        {
-            found = true;
-            break;
-        }
-    }
-    if (!found)
-    {
-        return;
+        return;  // not part of this tick
     }
     auto* pubkey = (uint8_t*)tx->sourcePublicKey;
     if (verifySignature((void *) buffer, pubkey, sizeof(Transaction) + tx->inputSize + SIGNATURE_SIZE))
