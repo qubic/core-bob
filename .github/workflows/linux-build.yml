@@ -24,7 +24,10 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Pinned to 24.04: ubuntu-latest now resolves to 26.04 ("resolute"),
+    # for which apt.llvm.org has no repo yet, so llvm.sh's apt source 404s
+    # and the job fails before building. 24.04 (noble) has working clang-20.
+    runs-on: ubuntu-24.04
     outputs:
       artifact-path: ${{ steps.build.outputs.path }}
     steps:
