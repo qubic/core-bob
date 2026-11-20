@@ -746,16 +746,90 @@ bool db_try_get_log(uint16_t epoch, uint64_t logId, LogEvent &log)
     }
 }
 
+// Validate a raw log value against its expected (epoch, logId) and, if good,
+// emit it into `out`. Mirrors the per-id checks db_try_get_log applied, so the
+// batched path below keeps the exact same accept/skip semantics.
+static void _append_validated_log(uint16_t epoch, long long logId,
+                                  const sw::redis::OptionalString& val,
+                                  std::vector<LogEvent>& out)
+{
+    if (!val) return; // missing id: skip (same as db_try_get_log returning false)
+    LogEvent le;
+    le.clear();
+    le.updateContent(reinterpret_cast<const uint8_t*>(val->data()), static_cast<int>(val->size()));
+    if (!le.hasPackedHeader()) {
+        Logger::get()->warn("db_try_get_logs: value too small for header at log {}:{}", epoch, logId);
+        return;
+    }
+    if (le.getEpoch() != epoch || le.getLogId() != static_cast<uint64_t>(logId)) {
+        Logger::get()->warn("db_try_get_logs: header mismatch for log {}:{}, got epoch {}, logId {}",
+                            epoch, logId, le.getEpoch(), le.getLogId());
+        return;
+    }
+    out.push_back(std::move(le));
+}
+
+// Batched read of a contiguous log-id range [logIdStart, logIdEnd].
+//
+// Previously this did one blocking GET per id (plus a kvrocks GET on each
+// redis miss), i.e. up to 2*N serial round-trips. For a tick that holds
+// thousands of logs that is thousands of sequential RTTs. We now issue a
+// single MGET to redis for the whole range and a single MGET to kvrocks for
+// only the ids that missed, collapsing it to at most 2 round-trips. Accept/skip
+// semantics (missing or header-mismatched ids are skipped) are unchanged.
 std::vector<LogEvent> db_try_get_logs(uint16_t epoch, long long logIdStart, long long logIdEnd)
 {
     std::vector<LogEvent> results;
-    for (long long l = logIdStart; l <= logIdEnd; l++)
-    {
-        LogEvent le;
-        if (db_try_get_log(epoch, l, le))
-        {
-            results.push_back(le);
+    if (logIdEnd < logIdStart) return results;
+
+    const size_t count = static_cast<size_t>(logIdEnd - logIdStart + 1);
+    std::vector<std::string> keys;
+    keys.reserve(count);
+    for (long long l = logIdStart; l <= logIdEnd; l++) {
+        keys.push_back("log:" + std::to_string(epoch) + ":" + std::to_string(l));
+    }
+
+    // 1) One MGET from redis for the whole range.
+    std::vector<sw::redis::OptionalString> vals;
+    if (g_redis) {
+        try {
+            vals.reserve(count);
+            g_redis->mget(keys.begin(), keys.end(), std::back_inserter(vals));
+        } catch (const sw::redis::Error& e) {
+            Logger::get()->error("Redis error in db_try_get_logs mget: {}", e.what());
+            vals.clear();
         }
+    }
+    if (vals.size() != count) {
+        // redis absent or errored: treat all as misses, let kvrocks fallback fill.
+        vals.assign(count, sw::redis::OptionalString{});
+    }
+
+    // 2) One MGET to kvrocks for only the ids that missed in redis.
+    if (g_kvrocks) {
+        std::vector<std::string> missKeys;
+        std::vector<size_t> missIdx;
+        for (size_t i = 0; i < count; i++) {
+            if (!vals[i]) { missKeys.push_back(keys[i]); missIdx.push_back(i); }
+        }
+        if (!missKeys.empty()) {
+            try {
+                std::vector<sw::redis::OptionalString> kvVals;
+                kvVals.reserve(missKeys.size());
+                g_kvrocks->mget(missKeys.begin(), missKeys.end(), std::back_inserter(kvVals));
+                if (kvVals.size() == missIdx.size()) {
+                    for (size_t j = 0; j < missIdx.size(); j++) vals[missIdx[j]] = std::move(kvVals[j]);
+                }
+            } catch (const sw::redis::Error& e) {
+                Logger::get()->error("Kvrocks error in db_try_get_logs mget: {}", e.what());
+            }
+        }
+    }
+
+    // 3) Validate + collect in ascending id order.
+    results.reserve(count);
+    for (size_t i = 0; i < count; i++) {
+        _append_validated_log(epoch, logIdStart + static_cast<long long>(i), vals[i], results);
     }
     return results;
 }
@@ -767,9 +841,14 @@ std::vector<LogEvent> db_get_logs_by_tick_range(uint16_t epoch, uint32_t start_t
 
     try {
         // We rely on the aggregated range for each tick in [start_tick, end_tick].
-        // For each tick, read tick_log_range:<tick> which stores (fromLogId, length) in the new compact format,
-        // then fetch logs "log:<epoch>:<logId>" for that contiguous id range.
+        // Each tick's tick_log_range:<tick> stores (fromLogId, length); the logs of
+        // consecutive ticks occupy one contiguous, increasing id space. So instead
+        // of fetching each tick's logs separately (one MGET per tick, previously one
+        // GET per id), we first read every tick's range, union them into a single
+        // [minLogId, maxLogId] span, and fetch the whole span in one MGET.
 
+        long long minLogId = -1;
+        long long maxLogId = -1;  // exclusive upper bound
         for (uint32_t tick = start_tick; tick <= end_tick; ++tick) {
             long long fromLogId = -1;
             long long length = -1;
@@ -778,27 +857,29 @@ std::vector<LogEvent> db_get_logs_by_tick_range(uint16_t epoch, uint32_t start_t
                 return out;
             }
             if (fromLogId == -1 || length == -1 || length == 0) {
-                // No logs for this tick; continue.
+                // No logs for this tick; skip.
                 continue;
             }
+            if (minLogId == -1 || fromLogId < minLogId) minLogId = fromLogId;
+            if (fromLogId + length > maxLogId) maxLogId = fromLogId + length;
+        }
 
-            // Fetch each log id with its own GET.
-            const uint64_t startId = static_cast<uint64_t>(fromLogId);
-            const uint64_t endId = static_cast<uint64_t>(fromLogId + length - 1);
-            auto logs = db_try_get_logs(epoch, startId, endId);
-            // Convert to LogEvent and filter by header
-            int i = 0;
-            for (const auto& le: logs) {
-                // Basic header validation and range filter
+        if (minLogId != -1 && maxLogId > minLogId) {
+            // Single batched fetch of the whole contiguous id span.
+            auto logs = db_try_get_logs(epoch, minLogId, maxLogId - 1);
+            out.reserve(logs.size());
+            for (auto& le : logs) {
+                // Each log is validated against the [start_tick, end_tick] window.
+                const long long lid = static_cast<long long>(le.getLogId());
                 if (!le.hasPackedHeader())
                 {
-                    Logger::get()->critical("Log event {} has broken header", startId + i);
+                    Logger::get()->critical("Log event {} has broken header", lid);
                     out.clear();
                     return out;
                 }
                 if (le.getEpoch() != epoch)
                 {
-                    Logger::get()->critical("Log event {} has broken epoch {}", startId + i, le.getEpoch());
+                    Logger::get()->critical("Log event {} has broken epoch {}", lid, le.getEpoch());
                     out.clear();
                     return out;
                 }
@@ -811,12 +892,11 @@ std::vector<LogEvent> db_get_logs_by_tick_range(uint16_t epoch, uint32_t start_t
                     // of the packed header (epoch, tick, size, logId) to
                     // distinguish "BM lied about tick" from "we read the
                     // wrong bytes from keydb".
-                    std::string src = db_get_log_source(epoch, startId + i);
+                    std::string src = db_get_log_source(epoch, lid);
                     // Access the raw packed header (first 16 bytes) for the
                     // hex dump so we can confirm we're not reading garbage
                     // from keydb vs the BM really sent these bytes.
-                    LogEvent& mutle = const_cast<LogEvent&>(le);
-                    const uint8_t* p = mutle.getRawPtr();
+                    const uint8_t* p = le.getRawPtr();
                     char hex[33] = {0};
                     if (p) {
                         for (int b = 0; b < 16; ++b) {
@@ -825,7 +905,7 @@ std::vector<LogEvent> db_get_logs_by_tick_range(uint16_t epoch, uint32_t start_t
                     }
                     Logger::get()->critical(
                         "Log event {} has wrong tick {} (batch=[{},{}]) source={} header16={}",
-                        startId + i, le.getTick(), start_tick, end_tick,
+                        lid, le.getTick(), start_tick, end_tick,
                         src.empty() ? "<unknown>" : src,
                         hex[0] ? hex : "<no-data>");
                     out.clear();
@@ -835,11 +915,10 @@ std::vector<LogEvent> db_get_logs_by_tick_range(uint16_t epoch, uint32_t start_t
                 // Self-check: epoch, size, min body size, K12 digest.
                 if (!le.selfCheck(epoch))
                 {
-                    Logger::get()->critical("Log event {} failed the selfcheck", startId + i);
+                    Logger::get()->critical("Log event {} failed the selfcheck", lid);
                     out.clear();
                     return out;
                 }
-                i++;
                 out.emplace_back(std::move(le));
             }
         }
